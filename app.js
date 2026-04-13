@@ -1,10 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
     
+    // Master Config
     const API_URL = 'https://script.google.com/macros/s/AKfycbx_fku9O9Ljbul6DIYuattXyjtu2fH9U_Reb24irImb1vU60jxDJWExv4yy9s1k0w3Q/exec';
+    const BATCH_BOTTLE_SIZE_ML = 700; 
     
     let recipeVault = {};
     let pendingNewSpec = []; 
-    const BATCH_BOTTLE_SIZE_ML = 700; 
 
     const triggerHaptic = (type = 'light') => {
         if (!navigator.vibrate) return;
@@ -40,20 +41,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
 
+            // Populate Modal
             const modalList = document.getElementById('modal-list');
             modalList.innerHTML = '';
+            
+            // Populate Managed Vault UI
+            const managedList = document.getElementById('managed-vault-list');
+            managedList.innerHTML = '';
+            
             const specNames = Object.keys(recipeVault);
 
             if (specNames.length === 0) {
                 modalList.innerHTML = `
                     <div style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
                         <p style="font-size: 1.2rem; margin-bottom: 10px;">Vault is empty.</p>
-                        <p style="font-size: 0.9rem;">Unlock <span style="color: var(--nodee-gold); font-weight: bold;">EDIT MODE</span> to add your first spec.</p>
+                        <p style="font-size: 0.9rem;">Unlock <span style="color: var(--nodee-gold); font-weight: bold;">EDIT MODE</span> to add your first cocktail.</p>
                     </div>
                 `;
                 document.getElementById('open-spec-modal').innerText = "Vault Empty...";
+                managedList.innerHTML = '<p style="color:var(--text-muted); font-size:0.9rem; padding: 10px 0;">No cocktails saved yet.</p>';
             } else {
                 specNames.forEach(cocktail => {
+                    // Inject Modal Item
                     const item = document.createElement('div');
                     item.className = 'modal-item';
                     item.innerText = cocktail;
@@ -65,6 +74,18 @@ document.addEventListener('DOMContentLoaded', () => {
                         triggerHaptic('light');
                     });
                     modalList.appendChild(item);
+
+                    // Inject Managed Vault Item
+                    const mItem = document.createElement('div');
+                    mItem.className = 'managed-item';
+                    mItem.innerHTML = `
+                        <span class="cocktail-title">${cocktail}</span>
+                        <div class="action-links" style="margin:0;">
+                            <button class="action-btn edit" onclick="loadSpecToEdit('${cocktail}')">EDIT</button>
+                            <button class="action-btn delete" onclick="alertDeleteLimitation()">DEL</button>
+                        </div>
+                    `;
+                    managedList.appendChild(mItem);
                 });
             }
 
@@ -79,30 +100,73 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadVault();
 
-    // --- YIELD STEPPER UI & PLURAL LOGIC ---
-    const yieldInput = document.getElementById('target-yield');
-    const yieldUnit = document.getElementById('yield-unit');
+    // Global Functions for Managed Vault
+    window.loadSpecToEdit = (cocktailName) => {
+        triggerHaptic('heavy');
+        pendingNewSpec = [];
+        document.getElementById('new-spec-name').value = cocktailName;
+        
+        recipeVault[cocktailName].forEach(ing => {
+            pendingNewSpec.push({
+                cocktailName: cocktailName,
+                ingredientName: ing.name,
+                amount: ing.amount,
+                bottleSize: ing.bottleSize,
+                categoryTag: ing.color
+            });
+        });
+        
+        renderNewSpecPreview();
+        document.getElementById('scroll-area').scrollTop = 0;
+        
+        // Let them know this creates a duplicate unless they clear the sheet
+        alert("Cocktail loaded into builder. \n\nNote: Saving this will add new rows to your Google Sheet. You must manually clear the old rows to prevent duplicates.");
+    };
 
-    const updateYieldGrammar = () => {
+    window.alertDeleteLimitation = () => {
+        triggerHaptic('error');
+        alert("Database Protected. \n\nPlease open your Google Sheet manually and delete the rows for this cocktail. (A future Apps Script update will automate this).");
+    };
+
+    // UI: Target Yield Stepper & Smart Labels
+    const yieldInput = document.getElementById('target-yield');
+    const yieldLabel = document.getElementById('yield-label');
+
+    const updateYieldLabel = () => {
         let val = parseInt(yieldInput.value) || 1;
-        yieldUnit.innerText = val === 1 ? 'BOTTLE' : 'BOTTLES';
+        if (val === 1) {
+            yieldLabel.innerText = 'Target Yield (700ml BOTTLE)';
+        } else {
+            yieldLabel.innerText = 'Target Yield (700ml BOTTLES)';
+        }
     };
 
     document.getElementById('yield-minus').addEventListener('click', () => {
         triggerHaptic('light');
         let val = parseInt(yieldInput.value) || 1;
-        if (val > 1) yieldInput.value = val - 1;
-        updateYieldGrammar();
+        if (val > 1) {
+            yieldInput.value = val - 1;
+            updateYieldLabel();
+        }
     });
 
     document.getElementById('yield-plus').addEventListener('click', () => {
         triggerHaptic('light');
         let val = parseInt(yieldInput.value) || 0;
         yieldInput.value = val + 1;
-        updateYieldGrammar();
+        updateYieldLabel();
     });
 
-    // --- MODAL CONTROLS ---
+    // UI: Quick Pills for Bottle Size
+    document.querySelectorAll('.quick-pill-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            triggerHaptic('light');
+            document.getElementById('new-ing-btl').value = e.target.getAttribute('data-val');
+        });
+    });
+
+    // UI: Modal Controls
     document.getElementById('open-spec-modal').addEventListener('click', () => {
         triggerHaptic('light');
         document.getElementById('spec-modal').classList.remove('hidden');
@@ -120,22 +184,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- DYNAMIC RATIO BINDING ---
-    const bindRatioPills = () => {
-        const ratioPills = document.querySelectorAll('.ratio-pill');
-        ratioPills.forEach(pill => {
-            pill.addEventListener('click', (e) => {
-                triggerHaptic('light');
-                ratioPills.forEach(p => p.classList.remove('active'));
-                e.target.classList.add('active');
-                document.getElementById('syrup-ratio').value = e.target.getAttribute('data-val');
-            });
+    // UI: Syrup Ratio Controls (Prep Module)
+    const ratioPills = document.querySelectorAll('.ratio-pill');
+    ratioPills.forEach(pill => {
+        pill.addEventListener('click', (e) => {
+            triggerHaptic('light');
+            ratioPills.forEach(p => p.classList.remove('active'));
+            e.target.classList.add('active');
+            document.getElementById('syrup-ratio').value = e.target.getAttribute('data-val');
         });
-    };
-    bindRatioPills(); // Bind initial
+    });
 
-    // --- SWEETENER TOGGLE (THE HONEY ENGINE) ---
     const sweetenerPills = document.querySelectorAll('.sweetener-pill');
+    const ratioGroupContainer = document.getElementById('ratio-group-container');
+    const honeyFeedback = document.getElementById('honey-feedback');
+
     sweetenerPills.forEach(pill => {
         pill.addEventListener('click', (e) => {
             triggerHaptic('light');
@@ -144,42 +207,21 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const type = e.target.getAttribute('data-val');
             document.getElementById('sweetener-type').value = type;
-            const ratioContainer = document.getElementById('dynamic-ratio-pills');
 
+            // Smart Brix Default Logic
             if (type === 'honey') {
-                ratioContainer.innerHTML = `
-                    <button class="ratio-pill" data-val="1">50 BRIX</button>
-                    <button class="ratio-pill" data-val="3">60 BRIX</button>
-                    <button class="ratio-pill active" data-val="5">66 BRIX</button>
-                `;
-                document.getElementById('syrup-ratio').value = '5';
+                ratioGroupContainer.classList.add('hidden');
+                honeyFeedback.classList.remove('hidden');
             } else {
-                ratioContainer.innerHTML = `
-                    <button class="ratio-pill active" data-val="1">1:1</button>
-                    <button class="ratio-pill" data-val="1.5">1.5:1</button>
-                    <button class="ratio-pill" data-val="2">2:1</button>
-                    <button class="ratio-pill" data-val="3">3:1</button>
-                `;
-                document.getElementById('syrup-ratio').value = '1';
+                ratioGroupContainer.classList.remove('hidden');
+                honeyFeedback.classList.add('hidden');
             }
-            bindRatioPills();
         });
     });
 
-    // --- QUICK BOTTLE SIZE PILLS ---
-    const quickBtlBtns = document.querySelectorAll('.quick-btl-btn');
-    const btlInputEl = document.getElementById('new-ing-btl');
-    
-    quickBtlBtns.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            triggerHaptic('light');
-            btlInputEl.value = e.target.getAttribute('data-val');
-        });
-    });
-
-    // --- CATEGORY TOGGLE ---
+    // UI: Category Select (Edit Module)
     const categoryBtns = document.querySelectorAll('.category-btn');
-    const quickPillsDiv = document.getElementById('quick-btl-pills');
+    const btlInputContainer = document.getElementById('btl-size-container');
     
     categoryBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -189,18 +231,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const selectedColor = e.target.getAttribute('data-val');
             document.getElementById('new-ing-color').value = selectedColor;
 
+            // Hide the entire bottle size block (including quick pills) if not Spirit
             if (selectedColor === 'amber-glow') {
-                btlInputEl.classList.remove('hidden');
-                quickPillsDiv.classList.remove('hidden');
+                btlInputContainer.classList.remove('hidden');
             } else {
-                btlInputEl.classList.add('hidden');
-                quickPillsDiv.classList.add('hidden');
-                btlInputEl.value = ''; 
+                btlInputContainer.classList.add('hidden');
+                document.getElementById('new-ing-btl').value = ''; 
             }
         });
     });
 
-    // --- PULL TO REFRESH ---
+    // Core Interaction: Pull To Sync
     let touchStartY = 0;
     const scrollArea = document.getElementById('scroll-area');
     const ptrIndicator = document.getElementById('ptr-indicator');
@@ -234,6 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
         touchStartY = 0;
     }, {passive: true});
 
+    // Core Interaction: Tab Navigation
     const tabs = document.querySelectorAll('.nav-tab');
     const modules = document.querySelectorAll('.module');
 
@@ -245,11 +287,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const targetId = e.target.getAttribute('data-target');
             e.target.classList.add('active');
             document.getElementById(targetId).classList.add('active');
-            
             scrollArea.scrollTop = 0;
         });
     });
 
+    // Core Interaction: Edit Mode Toggle
     const lockBtn = document.getElementById('edit-toggle');
     const serviceUI = document.getElementById('service-ui');
     const editUI = document.getElementById('edit-ui');
@@ -273,7 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- BATCH CALCULATOR (THE SYRUP BAN IMPLEMENTED) ---
+    // MATH: Calculate Batch
     document.getElementById('calc-batch-btn').addEventListener('click', () => {
         triggerHaptic('heavy');
         const recipeName = document.getElementById('recipe-select').value;
@@ -293,32 +335,32 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalBatchVolume = targetYieldBottles * BATCH_BOTTLE_SIZE_ML;
         const multiplier = totalBatchVolume / singleCocktailVolume;
 
-        let htmlOutput = `<h3 class="zone-header">BATCH BUILD (${targetYieldBottles} BOTTLE${targetYieldBottles !== 1 ? 'S' : ''})</h3>`;
-        let hasLiquor = false;
+        let htmlOutput = '<h3 class="zone-header">BATCH BUILD</h3>';
+        let hasSpirits = false;
 
         spec.forEach(ing => {
-            // THE SYRUP BAN: Ignore anything tagged as Magenta (Syrup)
+            // THE SYRUP BAN: Ignore magenta-glow entirely for the build.
             if (ing.color === 'magenta-glow') return; 
 
             const totalRequiredMl = Math.round(ing.amount * multiplier);
             
             let amountText = '';
-
-            // If it's a Spirit, calculate by the bottle
+            
+            // Format strictly for Amber-Glow (Spirits with Bottle Sizes)
             if (ing.color === 'amber-glow' && ing.bottleSize > 0) {
                 const bottlesToGrab = Math.floor(totalRequiredMl / ing.bottleSize);
                 const remainderMl = totalRequiredMl % ing.bottleSize;
 
-                if (bottlesToGrab > 0) amountText += `${bottlesToGrab} Btl${bottlesToGrab > 1 ? 's' : ''}`;
+                if (bottlesToGrab > 0) amountText += `${bottlesToGrab} Btl`; // Simplified
                 if (remainderMl > 0) {
                     if (amountText !== '') amountText += ' + ';
                     amountText += `${remainderMl}ml`;
                 }
             } else {
-                // If it's Juice (or Spirit with no bottle size), just show raw ml
+                // Format for Juices or missing bottle sizes
                 amountText = `${totalRequiredMl}ml`;
             }
-            
+
             if (totalRequiredMl === 0) amountText = '0ml';
 
             htmlOutput += `
@@ -327,25 +369,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="ing-amount">${amountText}</span>
                 </div>`;
             
-            hasLiquor = true;
+            hasSpirits = true;
         });
 
-        if (!hasLiquor) {
-            htmlOutput += `<div class="result-row"><span class="ing-name" style="margin-top:10px;">No pullable ingredients in this spec.</span></div>`;
+        if (!hasSpirits) {
+            htmlOutput += `<div class="result-row"><span class="ing-name" style="margin-top:10px;">No build ingredients required.</span></div>`;
         }
 
         resultsContainer.innerHTML = htmlOutput;
     });
 
+    // MATH: Calculate Syrup
     document.getElementById('calc-syrup-btn').addEventListener('click', () => {
         triggerHaptic('heavy');
         const base = parseFloat(document.getElementById('syrup-base').value) || 0;
-        const ratio = parseFloat(document.getElementById('syrup-ratio').value) || 1;
+        const sweetenerType = document.getElementById('sweetener-type').value;
 
         if(!base) return;
 
-        // With physical ratio values locked in, the math is perfectly simple
-        let waterWeight = Math.max(0, Math.round(base / ratio));
+        let waterWeight = 0;
+
+        // 66 BRIX MATH: 80 Brix Honey reduced to 66 Brix mathematically.
+        if (sweetenerType === 'honey') {
+            waterWeight = base * 0.212; 
+        } else {
+            const ratio = parseFloat(document.getElementById('syrup-ratio').value) || 1;
+            waterWeight = base / ratio;
+        }
+
+        waterWeight = Math.max(0, Math.round(waterWeight));
         const totalYield = Math.round(base + waterWeight);
 
         document.getElementById('syrup-results').innerHTML = `
@@ -360,6 +412,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     });
 
+    // MATH: Calculate Brix Adjustment
     document.getElementById('calc-brix-btn').addEventListener('click', () => {
         triggerHaptic('heavy');
         const weight = parseFloat(document.getElementById('brix-weight').value) || 0;
@@ -377,6 +430,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     });
 
+    // UI: Edit Mode Preview Renderer
     const renderNewSpecPreview = () => {
         const preview = document.getElementById('new-spec-preview');
         preview.innerHTML = '';
@@ -404,6 +458,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('new-ing-name').value = item.ingredientName;
         document.getElementById('new-ing-ml').value = item.amount;
         
+        const btlInputEl = document.getElementById('new-ing-btl');
+        const btlInputContainerEl = document.getElementById('btl-size-container');
+
         if (item.bottleSize > 0) {
             btlInputEl.value = item.bottleSize;
         } else {
@@ -413,11 +470,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('new-ing-color').value = item.categoryTag;
         
         if (item.categoryTag === 'amber-glow') {
-            btlInputEl.classList.remove('hidden');
-            quickPillsDiv.classList.remove('hidden');
+            btlInputContainerEl.classList.remove('hidden');
         } else {
-            btlInputEl.classList.add('hidden');
-            quickPillsDiv.classList.add('hidden');
+            btlInputContainerEl.classList.add('hidden');
         }
 
         const catBtns = document.querySelectorAll('.category-btn');
@@ -440,8 +495,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const cNameEl = document.getElementById('new-spec-name');
         const iNameEl = document.getElementById('new-ing-name');
         const amtEl = document.getElementById('new-ing-ml');
+        const btlEl = document.getElementById('new-ing-btl');
         
-        [cNameEl, iNameEl, amtEl, btlInputEl].forEach(el => el.classList.remove('input-error'));
+        [cNameEl, iNameEl, amtEl, btlEl].forEach(el => el.classList.remove('input-error'));
 
         const cName = capitalizeText(cNameEl.value.trim());
         const iName = capitalizeText(iNameEl.value.trim());
@@ -452,8 +508,8 @@ document.addEventListener('DOMContentLoaded', () => {
         let hasError = false;
 
         if (col === 'amber-glow') {
-            btl = parseFloat(btlInputEl.value);
-            if (!btl) { btlInputEl.classList.add('input-error'); hasError = true; }
+            btl = parseFloat(btlEl.value);
+            if (!btl) { btlEl.classList.add('input-error'); hasError = true; }
         }
 
         if(!cName) { cNameEl.classList.add('input-error'); hasError = true; }
@@ -470,7 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         iNameEl.value = '';
         amtEl.value = '';
-        if (col === 'amber-glow') btlInputEl.value = '';
+        if (col === 'amber-glow') btlEl.value = '';
         iNameEl.focus(); 
         
         renderNewSpecPreview();
