@@ -8,21 +8,18 @@
     <link rel="icon" type="image/png" href="icon-512.png">
     <link rel="apple-touch-icon" href="icon-512.png">
     
-    <link rel="stylesheet" href="styles.css?v=21">
+    <link rel="stylesheet" href="styles.css?v=14">
     <link rel="manifest" href="manifest.json">
 </head>
 <body>
     <div id="loader" class="loader-overlay">
-        <div style="text-align: center;">
-            <span id="loader-status" class="loader-text" style="color: var(--nodee-gold)">SYNCING VAULT...</span>
-            <button id="emergency-exit" class="hidden" style="display:block; margin-top:20px; background:none; border:1px solid #444; color:#666; padding:5px 10px; border-radius:20px; font-size:10px;">FORCE ENTER</button>
-        </div>
+        <span class="loader-text" style="color: var(--nodee-gold)">SYNCING VAULT...</span>
     </div>
 
     <div id="spec-modal" class="custom-modal hidden">
         <div class="modal-content glass-panel">
             <div class="modal-header">
-                <h3 style="color: var(--nodee-gold); letter-spacing: 2px;">SELECT SPEC</h3>
+                <h3 style="color: var(--nodee-gold); letter-spacing: 2px;">SELECT COCKTAIL</h3>
                 <button id="close-modal" class="action-btn">CLOSE</button>
             </div>
             <div id="modal-list" class="modal-list"></div>
@@ -39,7 +36,7 @@
         <button class="nav-tab" data-target="prep-module">PREP</button>
     </nav>
 
-    <div id="ptr-indicator" class="ptr-indicator">↓ PULL TO REFRESH ↓</div>
+    <div id="ptr-indicator" class="ptr-indicator">↓ PULL TO SYNC ↓</div>
 
     <main class="content-area" id="scroll-area">
         
@@ -47,41 +44,20 @@
             
             <div id="service-ui">
                 <div class="card spec-card glass-panel">
-                    
-                    <div class="pill-group" style="margin-bottom: 25px;">
-                        <button id="mode-yield" class="mode-pill active">YIELD MODE</button>
-                        <button id="mode-reverse" class="mode-pill">REVERSE MODE</button>
-                    </div>
-
-                    <button id="open-spec-modal" class="premium-text-input" style="text-align: left; padding: 15px 0;">Select Spec...</button>
+                    <button id="open-spec-modal" class="premium-text-input" style="text-align: left; padding: 15px 0;">Select Cocktail...</button>
                     <input type="hidden" id="recipe-select" value="">
                     
-                    <div id="yield-controls" class="input-group">
-                        <label>Target Yield (700ml BTL)</label>
+                    <div class="input-group">
+                        <label>Target Yield (700ml)</label>
                         <div class="yield-stepper">
                             <button id="yield-minus" class="stepper-btn">−</button>
                             <div class="massive-input" style="margin-bottom: 0;">
                                 <input type="number" id="target-yield" value="5" min="1" step="1">
+                                <span class="unit" id="yield-unit">BOTTLES</span>
                             </div>
                             <button id="yield-plus" class="stepper-btn">+</button>
                         </div>
                     </div>
-
-                    <div id="reverse-controls" class="hidden">
-                        <div class="input-group" style="margin-bottom: 20px;">
-                            <label>1. Select Anchor Ingredient</label>
-                            <div id="anchor-list" class="speed-pour-row">
-                                <span style="color: var(--text-muted); font-size: 0.9rem;">Select a spec first...</span>
-                            </div>
-                        </div>
-                        <div class="input-group">
-                            <label>2. Available Amount (ml)</label>
-                            <div class="massive-input">
-                                <input type="number" id="anchor-amount" placeholder="0">
-                            </div>
-                        </div>
-                    </div>
-
                     <button id="calc-batch-btn" class="btn-primary">CALCULATE BATCH</button>
                 </div>
                 <div id="batch-results" class="output-container"></div>
@@ -101,35 +77,20 @@
                             <label>Category</label>
                             <div class="category-group">
                                 <button class="category-btn active" data-val="amber-glow">SPIRIT</button>
+                                <button class="category-btn" data-val="neon-green">JUICE</button>
                                 <button class="category-btn" data-val="magenta-glow">SYRUP</button>
                             </div>
                             <input type="hidden" id="new-ing-color" value="amber-glow">
                         </div>
 
-                        <div id="quick-syrups-panel" class="speed-rail-group hidden" style="margin-bottom: 25px;">
-                            <label style="color: var(--text-muted); font-size: 0.75rem; letter-spacing: 1px; margin-bottom: 8px; display: block;">QUICK SYRUPS</label>
-                            <div class="pill-group" style="margin-bottom: 0;">
-                                <button class="speed-syrup-btn" data-name="Simple Syrup">SIMPLE</button>
-                                <button class="speed-syrup-btn" data-name="Honey Syrup">HONEY</button>
-                            </div>
-                        </div>
-
-                        <div class="speed-rail-group" style="margin-bottom: 10px;">
-                            <label style="color: var(--text-muted); font-size: 0.75rem; letter-spacing: 1px; margin-bottom: 8px; display: block;">QUICK POUR (ML)</label>
-                            <div class="speed-pour-row">
-                                <button class="speed-pour-btn" data-ml="10">10</button>
-                                <button class="speed-pour-btn" data-ml="15">15</button>
-                                <button class="speed-pour-btn" data-ml="20">20</button>
-                                <button class="speed-pour-btn" data-ml="25">25</button>
-                                <button class="speed-pour-btn" data-ml="30">30</button>
-                                <button class="speed-pour-btn" data-ml="35">35</button>
-                                <button class="speed-pour-btn" data-ml="40">40</button>
-                            </div>
-                        </div>
-
-                        <div class="flex-row">
+                        <div class="flex-row" style="margin-bottom: 10px;">
                             <input type="number" id="new-ing-ml" class="premium-basic-input half-width" placeholder="ml">
                             <input type="number" id="new-ing-btl" class="premium-basic-input half-width" placeholder="Btl Size (ml)">
+                        </div>
+
+                        <div id="quick-btl-pills" class="pill-group" style="margin-bottom: 25px; gap: 15px;">
+                            <button class="quick-btl-btn btn-secondary" style="padding: 10px;" data-val="500">500ml</button>
+                            <button class="quick-btl-btn btn-secondary" style="padding: 10px;" data-val="700">700ml</button>
                         </div>
 
                         <button id="add-ing-btn" class="btn-secondary" style="margin-top: 10px;">+ ADD INGREDIENT</button>
@@ -161,8 +122,8 @@
                 </div>
                 
                 <div class="input-group">
-                    <label>Target Ratio (Base : Water)</label>
-                    <div class="pill-group">
+                    <label>Target Ratio / Brix</label>
+                    <div class="pill-group" id="dynamic-ratio-pills">
                         <button class="ratio-pill active" data-val="1">1:1</button>
                         <button class="ratio-pill" data-val="1.5">1.5:1</button>
                         <button class="ratio-pill" data-val="2">2:1</button>
@@ -188,7 +149,7 @@
                     </div>
                     <div class="input-group">
                         <label>Target Brix</label>
-                        <div class="massive-input"><input type="number" id="brix-target" value="50"></div>
+                        <div class="massive-input"><input type="number" id="brix-target" value="66"></div>
                     </div>
                 </div>
                 <button id="calc-brix-btn" class="btn-primary burgundy-btn">CALCULATE SUGAR</button>
@@ -199,6 +160,6 @@
 
     </main>
 
-    <script src="app.js?v=21"></script>
+    <script src="app.js?v=14"></script>
 </body>
 </html>
