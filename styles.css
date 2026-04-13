@@ -12,7 +12,6 @@
     --neon-cyan: #7EAAC8;
 }
 
-/* ANTI-NATIVE OVERRIDE: Forbids Chrome from changing our buttons to white */
 * {
     box-sizing: border-box;
     margin: 0;
@@ -129,10 +128,10 @@ body {
 /* Premium Inputs */
 .input-group label { display: block; color: var(--text-muted); font-size: 0.8rem; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 2px; }
 
-/* ANTI-SQUISH YIELD STEPPER UI */
+/* YIELD STEPPER UI */
 .yield-stepper { display: flex; align-items: center; justify-content: space-between; margin-bottom: 35px; background: rgba(0,0,0,0.4); padding: 15px 15px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.05); }
 .stepper-btn { 
-    flex-shrink: 0; /* Stops the button from squishing into an oval */
+    flex-shrink: 0; 
     background: transparent; 
     border: 1px solid var(--nodee-gold); 
     color: var(--nodee-gold); 
@@ -152,13 +151,12 @@ body {
     background: transparent; 
     border: none; border-bottom: 1px solid #444; 
     color: var(--text-main); font-size: 3rem; font-weight: 300; 
-    width: 90px; /* Fixed width stops it from bullying the buttons */
+    width: 90px; 
     outline: none; border-radius: 0; transition: border-color 0.3s; text-align: center; 
 }
 .massive-input input:focus { border-color: var(--nodee-gold); }
 .massive-input .unit { font-size: 1.2rem; color: var(--text-muted); font-weight: 600; letter-spacing: 1px; }
 
-/* Only the standard massive inputs (like syrup base) should take 100% width */
 #prep-module .massive-input input { width: 100%; }
 
 .premium-text-input {
