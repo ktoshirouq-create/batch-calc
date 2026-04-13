@@ -1,7 +1,7 @@
 {
   "name": "Batching Calculator",
   "short_name": "Batcher",
-  "start_url": ".",
+  "start_url": "https://ktoshirouq-create.github.io/batch-calc/",
   "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#000000",
