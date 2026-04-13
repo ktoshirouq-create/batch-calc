@@ -8,7 +8,7 @@
     <link rel="icon" type="image/jpeg" href="icon-512.jpg">
     <link rel="apple-touch-icon" href="icon-512.jpg">
     
-    <link rel="stylesheet" href="styles.css?v=4">
+    <link rel="stylesheet" href="styles.css?v=6">
     <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -74,12 +74,12 @@
                             <input type="number" id="new-ing-btl" class="premium-basic-input" placeholder="Btl Size (ml)">
                         </div>
                         
-                        <div class="input-group" style="margin-bottom: 25px;">
+                        <div class="input-group" style="margin-bottom: 35px;">
                             <label>Category</label>
                             <div class="category-group">
-                                <button class="category-btn active" data-val="amber-glow">Spirit / Liqueur</button>
-                                <button class="category-btn" data-val="neon-green">Juice / Acid</button>
-                                <button class="category-btn" data-val="magenta-glow">Syrup / Sugar</button>
+                                <button class="category-btn active" data-val="amber-glow">SPIRIT</button>
+                                <button class="category-btn" data-val="neon-green">JUICE</button>
+                                <button class="category-btn" data-val="magenta-glow">SYRUP</button>
                             </div>
                             <input type="hidden" id="new-ing-color" value="amber-glow">
                         </div>
@@ -97,6 +97,16 @@
             
             <div class="card spec-card glass-panel">
                 <h2 class="card-title">SYRUP RATIO</h2>
+                
+                <div class="input-group">
+                    <label>Sweetener Type</label>
+                    <div class="pill-group">
+                        <button class="sweetener-pill active" data-val="demerara">DEMERARA</button>
+                        <button class="sweetener-pill" data-val="honey">HONEY</button>
+                    </div>
+                    <input type="hidden" id="sweetener-type" value="demerara">
+                </div>
+
                 <div class="input-group">
                     <label>Base Weight (g)</label>
                     <div class="massive-input"><input type="number" id="syrup-base" value="500"></div>
@@ -141,6 +151,6 @@
 
     </main>
 
-    <script src="app.js?v=4"></script>
+    <script src="app.js?v=6"></script>
 </body>
 </html>
