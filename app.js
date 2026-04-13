@@ -87,7 +87,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 triggerHaptic('heavy');
                 await loadVault();
             }
-            // Reset visually
             ptrIndicator.style.transform = `translateY(-20px)`;
             ptrIndicator.style.opacity = 0;
             setTimeout(() => ptrIndicator.innerText = "↓ PULL TO SYNC ↓", 300);
@@ -120,8 +119,8 @@ document.addEventListener('DOMContentLoaded', () => {
         triggerHaptic('light');
         if (lockBtn.innerText === 'LOCKED') {
             lockBtn.innerText = 'EDIT MODE';
-            lockBtn.style.color = 'var(--nodee-burgundy)';
-            lockBtn.style.borderColor = 'var(--nodee-burgundy)';
+            lockBtn.style.color = 'var(--nodee-gold)'; /* Contrast Fix */
+            lockBtn.style.borderColor = 'var(--nodee-gold)'; /* Contrast Fix */
             serviceUI.classList.add('hidden');
             editUI.classList.remove('hidden');
         } else {
@@ -263,7 +262,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const amtEl = document.getElementById('new-ing-ml');
         const btlEl = document.getElementById('new-ing-btl');
         
-        // Validation styling reset
         [cNameEl, iNameEl, amtEl, btlEl].forEach(el => el.classList.remove('input-error'));
 
         const cName = cNameEl.value.trim();
@@ -272,7 +270,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const btl = parseFloat(btlEl.value);
         const col = document.getElementById('new-ing-color').value;
 
-        // Visual Validation Failure
         let hasError = false;
         if(!cName) { cNameEl.classList.add('input-error'); hasError = true; }
         if(!iName) { iNameEl.classList.add('input-error'); hasError = true; }
