@@ -83,11 +83,9 @@ body {
     padding: 15px 0; border-radius: 12px; font-size: 0.85rem; font-weight: 800; text-align: center; transition: all 0.2s;
 }
 .category-btn[data-val="amber-glow"] { border-color: var(--amber-glow); color: var(--amber-glow); }
-.category-btn[data-val="neon-green"] { border-color: var(--neon-green); color: var(--neon-green); }
 .category-btn[data-val="magenta-glow"] { border-color: var(--magenta-glow); color: var(--magenta-glow); }
 
 .category-btn[data-val="amber-glow"].active { background: var(--amber-glow); color: var(--bg-oled); }
-.category-btn[data-val="neon-green"].active { background: var(--neon-green); color: var(--bg-oled); }
 .category-btn[data-val="magenta-glow"].active { background: var(--magenta-glow); color: var(--bg-oled); }
 
 /* Ratio & Sweetener Pills */
@@ -192,7 +190,13 @@ body {
     color: var(--text-main); padding: 12px 18px; border-radius: 12px; font-size: 1rem; 
     font-weight: 700; transition: all 0.2s; cursor: pointer; 
 }
-.speed-pour-btn:active { background: var(--nodee-gold); color: var(--bg-oled); border-color: var(--nodee-gold); transform: scale(0.95); }
+/* ADDED: Active state lock for the Quick Pour buttons */
+.speed-pour-btn.active {
+    background: var(--nodee-gold); 
+    color: var(--bg-oled); 
+    border-color: var(--nodee-gold); 
+}
+.speed-pour-btn:active { transform: scale(0.95); }
 
 /* Error State */
 .input-error { border-bottom: 1px solid #ff4444 !important; animation: shake 0.3s; }
@@ -218,7 +222,6 @@ body {
 .result-row:last-child { border-bottom: none; }
 .result-row.amber-glow .ing-amount { color: var(--amber-glow); }
 .result-row.magenta-glow .ing-amount { color: var(--magenta-glow); }
-.result-row.neon-green .ing-amount { color: var(--neon-green); }
 .result-row.cyan-glow .ing-amount { color: var(--neon-cyan); }
 
 .ing-name { font-size: 1rem; color: var(--text-muted); margin-bottom: 4px; font-weight: 500; }
