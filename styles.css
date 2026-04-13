@@ -69,18 +69,16 @@ body {
     opacity: 0; transform: translateY(-20px); transition: opacity 0.2s, transform 0.2s;
 }
 
-/* Category Pills (Single Row Color-Coded) */
+/* Category Pills */
 .category-group { display: flex; flex-direction: row; gap: 10px; margin-bottom: 10px; width: 100%; }
 .category-btn {
     flex: 1; background: transparent; border: 1px solid; 
     padding: 15px 0; border-radius: 12px; font-size: 0.85rem; font-weight: 800; text-align: center; transition: all 0.2s;
 }
-/* Always-On Color Outlines */
 .category-btn[data-val="amber-glow"] { border-color: var(--amber-glow); color: var(--amber-glow); }
 .category-btn[data-val="neon-green"] { border-color: var(--neon-green); color: var(--neon-green); }
 .category-btn[data-val="magenta-glow"] { border-color: var(--magenta-glow); color: var(--magenta-glow); }
 
-/* Active Solid Fills */
 .category-btn[data-val="amber-glow"].active { background: var(--amber-glow); color: var(--bg-oled); }
 .category-btn[data-val="neon-green"].active { background: var(--neon-green); color: var(--bg-oled); }
 .category-btn[data-val="magenta-glow"].active { background: var(--magenta-glow); color: var(--bg-oled); }
@@ -131,14 +129,17 @@ body {
     font-size: 1.8rem; font-weight: 600; margin-bottom: 35px; padding-bottom: 10px; outline: none; border-radius: 0; transition: border-color 0.3s;
 }
 .premium-text-input:focus { border-color: var(--nodee-gold); }
-.premium-text-input::placeholder { color: var(--text-muted); font-weight: 400; }
+.premium-text-input::placeholder { color: var(--text-muted); font-weight: 400; text-transform: none; }
+
+/* AUTO-CAPITALIZATION CSS */
+#new-spec-name, #new-ing-name { text-transform: capitalize; }
 
 .flex-row { display: flex; gap: 25px; width: 100%; }
 .premium-basic-input { 
-    width: 100%; background: transparent; border: none; border-bottom: 1px solid #444; color: var(--text-main); 
+    background: transparent; border: none; border-bottom: 1px solid #444; color: var(--text-main); 
     font-size: 1.1rem; padding: 10px 0; margin-bottom: 25px; outline: none; border-radius: 0; transition: all 0.3s;
 }
-.premium-basic-input::placeholder { color: var(--text-muted); }
+.premium-basic-input::placeholder { color: var(--text-muted); text-transform: none; }
 .premium-basic-input:focus { border-color: var(--nodee-gold); }
 
 /* Error State */
