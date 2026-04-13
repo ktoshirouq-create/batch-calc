@@ -4,8 +4,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     let recipeVault = {};
     let pendingNewSpec = []; 
-    
-    // UPDATED: Core Engine now explicitly targets 700ml bottles.
     const BATCH_BOTTLE_SIZE_ML = 700; 
 
     const triggerHaptic = (type = 'light') => {
@@ -81,7 +79,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadVault();
 
-    // --- TARGET YIELD STEPPER LOGIC ---
     const yieldInput = document.getElementById('target-yield');
     
     document.getElementById('yield-minus').addEventListener('click', () => {
@@ -242,7 +239,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const spec = recipeVault[recipeName];
         const singleCocktailVolume = spec.reduce((sum, ing) => sum + ing.amount, 0);
         
-        // This math is now flawless for both single drinks and full batches.
         const totalBatchVolume = targetYieldBottles * BATCH_BOTTLE_SIZE_ML;
         const multiplier = totalBatchVolume / singleCocktailVolume;
 
