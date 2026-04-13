@@ -1,1 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Service Mode Batcher</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+</head>
+<body>
+    <header class="top-bar">
+        <h1 class="brand">SERVICE MODE</h1>
+        <button id="edit-toggle" class="lock-btn">LOCKED</button>
+    </header>
 
+    <nav class="module-nav">
+        <button class="nav-tab active" data-target="batch-module">BATCH</button>
+        <button class="nav-tab" data-target="prep-module">PREP</button>
+    </nav>
+
+    <main class="content-area">
+        <section id="batch-module" class="module active">
+            <div class="card spec-card">
+                <h2 class="card-title">House Negroni</h2>
+                <div class="input-group">
+                    <label>Target Yield</label>
+                    <div class="massive-input">
+                        <span class="value">5</span>
+                        <span class="unit">BTL</span>
+                    </div>
+                </div>
+                <button class="btn-primary action-calc">CALCULATE BATCH</button>
+            </div>
+            
+            <div class="output-container">
+                <div class="result-row amber-glow">
+                    <span class="ing-name">Campari</span>
+                    <span class="ing-amount">1 Bottle + 500ml</span>
+                </div>
+            </div>
+        </section>
+
+        <section id="prep-module" class="module">
+            <div class="card spec-card">
+                <h2 class="card-title">Brix Adjuster</h2>
+                <div class="input-group">
+                    <label>Juice Weight (g)</label>
+                    <div class="massive-input">
+                        <span class="value">500</span>
+                    </div>
+                </div>
+                <button class="btn-primary magenta-glow action-calc">CALCULATE SUGAR</button>
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
