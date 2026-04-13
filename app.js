@@ -16,41 +16,42 @@ document.addEventListener('DOMContentLoaded', () => {
         if (type === 'error') navigator.vibrate([50, 50, 50, 50]);
     };
 
-    const capitalizeText = (str) => {
-        return str.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
+    const hideLoader = () => {
+        const loader = document.getElementById('loader');
+        loader.style.opacity = '0';
+        setTimeout(() => loader.style.display = 'none', 400);
     };
 
-    // --- BULLETPROOF SYNC ENGINE ---
+    // --- NUCLEAR SYNC ENGINE (v21) ---
     async function loadVault() {
-        const loader = document.getElementById('loader');
         const status = document.getElementById('loader-status');
+        const loader = document.getElementById('loader');
+        const emergencyExit = document.getElementById('emergency-exit');
+        
         loader.style.display = 'flex';
         loader.style.opacity = '1';
         status.innerText = "SYNCING VAULT...";
-        
-        // Safety Valve: Fail-safe to hide loader after 8 seconds
-        const safetyValve = setTimeout(() => {
-            status.innerText = "SYNC TIMED OUT.";
-            setTimeout(() => {
-                loader.style.opacity = '0';
-                setTimeout(() => loader.style.display = 'none', 400);
-            }, 1500);
-        }, 8000);
+        emergencyExit.classList.add('hidden');
+
+        // Nuclear Timer: Force exit after 6 seconds if hang persists
+        const safetyExit = setTimeout(() => {
+            status.innerText = "TIMEOUT. ENTERING...";
+            emergencyExit.classList.remove('hidden');
+            setTimeout(hideLoader, 1500);
+        }, 6000);
         
         try {
             const res = await fetch(API_URL);
+            if (!res.ok) throw new Error("Network Response Fail");
             const data = await res.json();
             
             recipeVault = {}; 
             
-            // Scrub Data: Ignore blank/invalid rows
+            // Scrub data carefully
             if (Array.isArray(data)) {
                 data.forEach(row => {
                     if(!row.cocktailName || row.cocktailName.trim() === "") return;
-                    
-                    if(!recipeVault[row.cocktailName]) {
-                        recipeVault[row.cocktailName] = [];
-                    }
+                    if(!recipeVault[row.cocktailName]) recipeVault[row.cocktailName] = [];
                     recipeVault[row.cocktailName].push({
                         name: row.ingredientName,
                         amount: row.amount,
@@ -75,21 +76,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     modalList.appendChild(item);
                 });
             }
-
-            clearTimeout(safetyValve);
-            loader.style.opacity = '0';
-            setTimeout(() => loader.style.display = 'none', 400);
-
+            clearTimeout(safetyExit);
         } catch (error) {
-            console.error("Vault Sync Error:", error);
-            clearTimeout(safetyValve);
+            console.error("Sync Error:", error);
             status.innerText = "SYNC FAILED.";
-            setTimeout(() => {
-                loader.style.opacity = '0';
-                setTimeout(() => loader.style.display = 'none', 400);
-            }, 2000);
+        } finally {
+            // Absolute command to hide the loader regardless of status
+            setTimeout(hideLoader, 1000);
         }
     }
+
+    document.getElementById('emergency-exit').addEventListener('click', hideLoader);
 
     function selectSpec(cocktail) {
         document.getElementById('recipe-select').value = cocktail;
@@ -120,31 +117,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadVault();
 
-    // MODE TOGGLES
-    const modeYieldBtn = document.getElementById('mode-yield');
-    const modeReverseBtn = document.getElementById('mode-reverse');
-    const yieldControls = document.getElementById('yield-controls');
-    const reverseControls = document.getElementById('reverse-controls');
+    // UI LOGIC (Modes, Rails, Steppers)
+    const yieldBtn = document.getElementById('mode-yield');
+    const reverseBtn = document.getElementById('mode-reverse');
+    yieldBtn.addEventListener('click', () => { triggerHaptic('light'); currentBatchMode = 'yield'; yieldBtn.classList.add('active'); reverseBtn.classList.remove('active'); document.getElementById('yield-controls').classList.remove('hidden'); document.getElementById('reverse-controls').classList.add('hidden'); });
+    reverseBtn.addEventListener('click', () => { triggerHaptic('light'); currentBatchMode = 'reverse'; reverseBtn.classList.add('active'); yieldBtn.classList.remove('active'); document.getElementById('reverse-controls').classList.remove('hidden'); document.getElementById('yield-controls').classList.add('hidden'); });
 
-    modeYieldBtn.addEventListener('click', () => {
-        triggerHaptic('light');
-        currentBatchMode = 'yield';
-        modeYieldBtn.classList.add('active');
-        modeReverseBtn.classList.remove('active');
-        yieldControls.classList.remove('hidden');
-        reverseControls.classList.add('hidden');
-    });
-
-    modeReverseBtn.addEventListener('click', () => {
-        triggerHaptic('light');
-        currentBatchMode = 'reverse';
-        modeReverseBtn.classList.add('active');
-        modeYieldBtn.classList.remove('active');
-        reverseControls.classList.remove('hidden');
-        yieldControls.classList.add('hidden');
-    });
-
-    // EDIT UI SHORTCUTS
     const speedSyrupBtns = document.querySelectorAll('.speed-syrup-btn');
     const newIngNameInput = document.getElementById('new-ing-name');
     speedSyrupBtns.forEach(btn => {
@@ -169,15 +147,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     customMlInput.addEventListener('input', () => speedPourBtns.forEach(b => b.classList.remove('active')));
 
-    // STEPPER
     const yieldInput = document.getElementById('target-yield');
     document.getElementById('yield-minus').addEventListener('click', () => { triggerHaptic('light'); let val = parseInt(yieldInput.value) || 1; if (val > 1) yieldInput.value = val - 1; });
     document.getElementById('yield-plus').addEventListener('click', () => { triggerHaptic('light'); let val = parseInt(yieldInput.value) || 0; yieldInput.value = val + 1; });
 
     document.getElementById('open-spec-modal').addEventListener('click', () => { triggerHaptic('light'); document.getElementById('spec-modal').classList.remove('hidden'); });
-    document.getElementById('close-modal').addEventListener('click', () => { document.getElementById('spec-modal').classList.add('hidden'); });
+    document.getElementById('close-modal').addEventListener('click', () => document.getElementById('spec-modal').classList.add('hidden'));
 
-    // CATEGORY SWITCHING
     const categoryBtns = document.querySelectorAll('.category-btn');
     const btlInput = document.getElementById('new-ing-btl');
     const quickSyrupsPanel = document.getElementById('quick-syrups-panel');
@@ -188,17 +164,11 @@ document.addEventListener('DOMContentLoaded', () => {
             e.target.classList.add('active');
             const color = e.target.getAttribute('data-val');
             document.getElementById('new-ing-color').value = color;
-            if (color === 'magenta-glow') {
-                quickSyrupsPanel.classList.remove('hidden');
-                btlInput.classList.add('hidden');
-            } else {
-                quickSyrupsPanel.classList.add('hidden');
-                btlInput.classList.remove('hidden');
-            }
+            if (color === 'magenta-glow') { quickSyrupsPanel.classList.remove('hidden'); btlInput.classList.add('hidden'); }
+            else { quickSyrupsPanel.classList.add('hidden'); btlInput.classList.remove('hidden'); speedSyrupBtns.forEach(b => b.classList.remove('active')); }
         });
     });
 
-    // REFRESH & CLEAR
     const scrollArea = document.getElementById('scroll-area');
     const ptrIndicator = document.getElementById('ptr-indicator');
     let touchStartY = 0;
@@ -206,16 +176,13 @@ document.addEventListener('DOMContentLoaded', () => {
     scrollArea.addEventListener('touchmove', e => { if (scrollArea.scrollTop === 0 && touchStartY > 0) { let pull = e.touches[0].clientY - touchStartY; if (pull > 0 && pull < 120) { ptrIndicator.style.transform = `translateY(${pull*0.5}px)`; ptrIndicator.style.opacity = pull/100; } } }, {passive:true});
     scrollArea.addEventListener('touchend', async e => {
         if (scrollArea.scrollTop === 0 && touchStartY > 0) {
-            let pull = e.changedTouches[0].clientY - touchStartY;
-            if (pull > 70) {
+            if (e.changedTouches[0].clientY - touchStartY > 70) {
                 triggerHaptic('heavy');
                 document.getElementById('batch-results').innerHTML = '';
-                document.getElementById('syrup-results').innerHTML = '';
-                document.getElementById('brix-results').innerHTML = '';
                 document.getElementById('target-yield').value = '5';
                 document.getElementById('recipe-select').value = '';
                 document.getElementById('open-spec-modal').innerText = 'Select Spec...';
-                modeYieldBtn.click();
+                yieldBtn.click();
                 await loadVault();
             }
             ptrIndicator.style.transform = `translateY(-20px)`; ptrIndicator.style.opacity = 0;
@@ -250,7 +217,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // CALC BATCH (Standard + Reverse)
     document.getElementById('calc-batch-btn').addEventListener('click', () => {
         triggerHaptic('heavy');
         const recipeName = document.getElementById('recipe-select').value;
@@ -290,11 +256,10 @@ document.addEventListener('DOMContentLoaded', () => {
         results.innerHTML = html;
     });
 
-    // PREP CALCS (Syrup + Brix)
     document.getElementById('calc-syrup-btn').addEventListener('click', () => {
         triggerHaptic('heavy');
         const base = parseFloat(document.getElementById('syrup-base').value) || 0;
-        const rat = parseFloat(document.getElementById('syrup-ratio').value) || 1;
+        const rat = parseFloat(document.querySelector('.ratio-pill.active').getAttribute('data-val')) || 1;
         const type = document.getElementById('sweetener-type').value;
         let wat = (type === 'honey') ? (base / rat) - (base * 0.20) : base / rat;
         wat = Math.max(0, Math.round(wat));
@@ -309,16 +274,21 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('brix-results').innerHTML = `<div class="result-row magenta-glow"><span class="ing-name">Add White Sugar</span><span class="ing-amount">${s}g</span></div>`;
     });
 
-    // VAULT SYNC
     document.getElementById('sync-vault-btn').addEventListener('click', async () => {
         if(pendingNewSpec.length === 0) return;
         triggerHaptic('heavy');
-        const loader = document.getElementById('loader'), status = document.getElementById('loader-status');
-        status.innerText = "PUSHING TO VAULT..."; loader.style.display = 'flex'; loader.style.opacity = '1';
+        const loader = document.getElementById('loader');
+        const status = document.getElementById('loader-status');
+        status.innerText = "PUSHING TO VAULT..."; 
+        loader.style.display = 'flex'; loader.style.opacity = '1';
         try {
-            await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(pendingNewSpec) });
-            pendingNewSpec = []; document.getElementById('new-spec-name').value = ''; renderNewSpecPreview(); await loadVault(); 
-        } catch (e) { status.innerText = "SYNC FAILED."; setTimeout(() => { loader.style.opacity = '0'; setTimeout(() => loader.style.display = 'none', 400); }, 2000); }
+            await fetch(API_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(pendingNewSpec) });
+            pendingNewSpec = []; document.getElementById('new-spec-name').value = ''; renderNewSpecPreview(); 
+            setTimeout(loadVault, 1000); 
+        } catch (e) { 
+            status.innerText = "SYNC FAILED."; 
+            setTimeout(hideLoader, 2000); 
+        }
     });
 
     const renderNewSpecPreview = () => {
@@ -341,11 +311,30 @@ document.addEventListener('DOMContentLoaded', () => {
     window.delPending = (i) => { pendingNewSpec.splice(i, 1); renderNewSpecPreview(); };
 
     document.getElementById('add-ing-btn').addEventListener('click', () => {
-        const cN = capitalizeText(document.getElementById('new-spec-name').value), iN = capitalizeText(document.getElementById('new-ing-name').value), amt = parseFloat(document.getElementById('new-ing-ml').value), btl = parseFloat(document.getElementById('new-ing-btl').value) || 0, col = document.getElementById('new-ing-color').value;
+        const cN = document.getElementById('new-spec-name').value, iN = document.getElementById('new-ing-name').value, amt = parseFloat(document.getElementById('new-ing-ml').value), btl = parseFloat(document.getElementById('new-ing-btl').value) || 0, col = document.getElementById('new-ing-color').value;
         if(!cN || !iN || !amt) { triggerHaptic('error'); return; }
         triggerHaptic('light');
         pendingNewSpec.push({ cocktailName: cN, ingredientName: iN, amount: amt, bottleSize: btl, categoryTag: col });
         document.getElementById('new-ing-name').value = ''; document.getElementById('new-ing-ml').value = ''; document.querySelectorAll('.speed-pour-btn, .speed-syrup-btn').forEach(b => b.classList.remove('active')); renderNewSpecPreview();
+    });
+
+    // Ratio Pills listener
+    document.querySelectorAll('.ratio-pill').forEach(pill => {
+        pill.addEventListener('click', (e) => {
+            triggerHaptic('light');
+            document.querySelectorAll('.ratio-pill').forEach(p => p.classList.remove('active'));
+            e.target.classList.add('active');
+        });
+    });
+
+    // Sweetener Pills listener
+    document.querySelectorAll('.sweetener-pill').forEach(pill => {
+        pill.addEventListener('click', (e) => {
+            triggerHaptic('light');
+            document.querySelectorAll('.sweetener-pill').forEach(p => p.classList.remove('active'));
+            e.target.classList.add('active');
+            document.getElementById('sweetener-type').value = e.target.getAttribute('data-val');
+        });
     });
 
 });
