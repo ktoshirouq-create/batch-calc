@@ -3,21 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Service Mode Batcher</title>
+    <title>Batching Calculator</title>
     
-    <link rel="icon" type="image/png" href="icon-512.png">
-    <link rel="apple-touch-icon" href="icon-512.png">
+    <link rel="icon" type="image/jpeg" href="icon-512.jpg">
+    <link rel="apple-touch-icon" href="icon-512.jpg">
     
     <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="manifest.json">
 </head>
 <body>
     <div id="loader" class="loader-overlay">
-        <span class="loader-text">SYNCING VAULT...</span>
+        <span class="loader-text" style="color: var(--nodee-gold)">SYNCING VAULT...</span>
     </div>
 
     <header class="top-bar">
-        <h1 class="brand">SERVICE MODE</h1>
+        <h1 class="brand">BATCHING CALCULATOR</h1>
         <button id="edit-toggle" class="lock-btn">LOCKED</button>
     </header>
 
@@ -26,41 +26,43 @@
         <button class="nav-tab" data-target="prep-module">PREP</button>
     </nav>
 
-    <main class="content-area">
+    <div id="ptr-indicator" class="ptr-indicator">↓ PULL TO SYNC ↓</div>
+
+    <main class="content-area" id="scroll-area">
         
         <section id="batch-module" class="module active">
             
             <div id="service-ui">
-                <div class="card spec-card">
-                    <select id="recipe-select" class="recipe-dropdown">
+                <div class="card spec-card glass-panel">
+                    <select id="recipe-select" class="premium-dropdown">
                         <option value="">Loading Vault...</option>
                     </select>
                     <div class="input-group">
                         <label>Target Yield</label>
                         <div class="massive-input">
                             <input type="number" id="target-yield" value="5" min="1" step="1">
-                            <span class="unit">BTL (1L)</span>
+                            <span class="unit">BTL</span>
                         </div>
                     </div>
-                    <button id="calc-batch-btn" class="btn-primary action-calc">CALCULATE BATCH</button>
+                    <button id="calc-batch-btn" class="btn-primary">CALCULATE BATCH</button>
                 </div>
                 <div id="batch-results" class="output-container"></div>
             </div>
 
             <div id="edit-ui" class="hidden">
-                <div class="card spec-card" style="border: 1px solid var(--neon-green)">
-                    <h2 class="card-title" style="color: var(--neon-green)">ADD SPEC</h2>
-                    <input type="text" id="new-spec-name" class="massive-text-input" placeholder="Cocktail Name">
+                <div class="card spec-card glass-panel edit-panel">
+                    <h2 class="card-title" style="color: var(--nodee-gold)">ADD SPEC</h2>
+                    <input type="text" id="new-spec-name" class="premium-text-input" placeholder="Cocktail Name">
                     
                     <div id="new-spec-preview" class="output-container" style="margin-bottom: 20px;"></div>
 
                     <div class="ingredient-adder">
-                        <input type="text" id="new-ing-name" class="basic-input" placeholder="Ingredient Name">
+                        <input type="text" id="new-ing-name" class="premium-basic-input" placeholder="Ingredient Name">
                         <div class="flex-row">
-                            <input type="number" id="new-ing-ml" class="basic-input" placeholder="ml">
-                            <input type="number" id="new-ing-btl" class="basic-input" placeholder="Btl Size (ml)">
+                            <input type="number" id="new-ing-ml" class="premium-basic-input" placeholder="ml">
+                            <input type="number" id="new-ing-btl" class="premium-basic-input" placeholder="Btl Size (ml)">
                         </div>
-                        <select id="new-ing-color" class="basic-input">
+                        <select id="new-ing-color" class="premium-basic-input dropdown-arrow">
                             <option value="amber-glow">Spirit / Liqueur (Amber)</option>
                             <option value="neon-green">Juice / Acid (Green)</option>
                             <option value="magenta-glow">Syrup / Sugar (Magenta)</option>
@@ -68,7 +70,7 @@
                         <button id="add-ing-btn" class="btn-secondary">+ ADD INGREDIENT</button>
                     </div>
 
-                    <button id="sync-vault-btn" class="btn-primary magenta-glow action-calc" style="margin-top: 20px;">SYNC TO VAULT</button>
+                    <button id="sync-vault-btn" class="btn-primary burgundy-btn" style="margin-top: 30px;">SYNC TO VAULT</button>
                 </div>
             </div>
 
@@ -76,27 +78,27 @@
 
         <section id="prep-module" class="module">
             
-            <div class="card spec-card">
-                <h2 class="card-title">Syrup Ratio</h2>
+            <div class="card spec-card glass-panel">
+                <h2 class="card-title">SYRUP RATIO</h2>
                 <div class="input-group">
                     <label>Base Weight (g)</label>
                     <div class="massive-input"><input type="number" id="syrup-base" value="500"></div>
                 </div>
                 <div class="input-group">
                     <label>Target Ratio (Base : Water)</label>
-                    <select id="syrup-ratio" class="recipe-dropdown" style="margin-bottom: 30px;">
+                    <select id="syrup-ratio" class="premium-dropdown" style="margin-bottom: 30px;">
                         <option value="1">1:1 (Simple)</option>
                         <option value="1.5">1.5:1 (Semi-Rich)</option>
                         <option value="2">2:1 (Rich / Demerara)</option>
                         <option value="3">3:1 (Honey / Agave)</option>
                     </select>
                 </div>
-                <button id="calc-syrup-btn" class="btn-primary cyan-glow action-calc">CALCULATE WATER</button>
+                <button id="calc-syrup-btn" class="btn-primary cyan-btn">CALCULATE WATER</button>
                 <div id="syrup-results" class="output-container" style="margin-top: 20px;"></div>
             </div>
 
-            <div class="card spec-card">
-                <h2 class="card-title">Brix Adjuster</h2>
+            <div class="card spec-card glass-panel">
+                <h2 class="card-title">BRIX ADJUSTER</h2>
                 <div class="input-group">
                     <label>Current Juice Weight (g)</label>
                     <div class="massive-input"><input type="number" id="brix-weight" value="500"></div>
@@ -111,7 +113,7 @@
                         <div class="massive-input"><input type="number" id="brix-target" value="50"></div>
                     </div>
                 </div>
-                <button id="calc-brix-btn" class="btn-primary magenta-glow action-calc">CALCULATE SUGAR</button>
+                <button id="calc-brix-btn" class="btn-primary burgundy-btn">CALCULATE SUGAR</button>
                 <div id="brix-results" class="output-container" style="margin-top: 20px;"></div>
             </div>
             
