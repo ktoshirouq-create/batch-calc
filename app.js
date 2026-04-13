@@ -6,6 +6,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let pendingNewSpec = []; 
     const BATCH_BOTTLE_SIZE_ML = 700; 
 
+    // Global App State
+    let currentBatchMode = 'yield'; // 'yield' or 'reverse'
+    let currentAnchorIndex = null;
+
     const triggerHaptic = (type = 'light') => {
         if (!navigator.vibrate) return;
         if (type === 'light') navigator.vibrate(30);
@@ -51,18 +55,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         <p style="font-size: 0.9rem;">Unlock <span style="color: var(--nodee-gold); font-weight: bold;">EDIT MODE</span> to add your first spec.</p>
                     </div>
                 `;
-                document.getElementById('open-spec-modal').innerText = "Vault Empty...";
             } else {
                 specNames.forEach(cocktail => {
                     const item = document.createElement('div');
                     item.className = 'modal-item';
                     item.innerText = cocktail;
                     item.addEventListener('click', () => {
-                        document.getElementById('recipe-select').value = cocktail;
-                        document.getElementById('open-spec-modal').innerText = cocktail;
-                        document.getElementById('open-spec-modal').style.color = "var(--text-main)";
-                        document.getElementById('spec-modal').classList.add('hidden');
-                        triggerHaptic('light');
+                        selectSpec(cocktail);
                     });
                     modalList.appendChild(item);
                 });
@@ -77,7 +76,62 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function selectSpec(cocktail) {
+        document.getElementById('recipe-select').value = cocktail;
+        document.getElementById('open-spec-modal').innerText = cocktail;
+        document.getElementById('open-spec-modal').style.color = "var(--text-main)";
+        document.getElementById('spec-modal').classList.add('hidden');
+        triggerHaptic('light');
+
+        // Populate Reverse Anchors
+        const anchorContainer = document.getElementById('anchor-list');
+        anchorContainer.innerHTML = '';
+        currentAnchorIndex = null;
+        
+        recipeVault[cocktail].forEach((ing, index) => {
+            const btn = document.createElement('button');
+            btn.className = 'anchor-pill';
+            btn.innerText = ing.name;
+            btn.addEventListener('click', () => {
+                triggerHaptic('light');
+                document.querySelectorAll('.anchor-pill').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentAnchorIndex = index;
+            });
+            anchorContainer.appendChild(btn);
+        });
+    }
+
     loadVault();
+
+    // MODE TOGGLE LOGIC
+    const yieldBtn = document.getElementById('mode-yield');
+    const reverseBtn = document.getElementById('mode-reverse');
+    const yieldControls = document.getElementById('yield-controls');
+    const reverseControls = document.getElementById('reverse-controls');
+
+    yieldBtn.addEventListener('click', () => {
+        triggerHaptic('light');
+        currentBatchMode = 'yield';
+        yieldBtn.classList.add('active');
+        reverseBtn.classList.remove('active');
+        yieldControls.classList.remove('hidden');
+        reverseControls.classList.add('hidden');
+    });
+
+    reverseBtn.addEventListener('click', () => {
+        triggerHaptic('light');
+        currentBatchMode = 'reverse';
+        reverseBtn.classList.add('active');
+        yieldBtn.classList.remove('active');
+        reverseControls.classList.remove('hidden');
+        yieldControls.classList.add('hidden');
+    });
+
+    // REVERSE MODE LOGIC: Clear anchor input if custom typing
+    document.getElementById('anchor-amount').addEventListener('input', () => {
+        // Just for consistency
+    });
 
     // SPEED RAIL LOGIC: Syrups & Smart Highlight
     const speedSyrupBtns = document.querySelectorAll('.speed-syrup-btn');
@@ -86,17 +140,13 @@ document.addEventListener('DOMContentLoaded', () => {
     speedSyrupBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             triggerHaptic('light');
-            
-            // Wipe active class from all syrup buttons, then lock it on the clicked one
             speedSyrupBtns.forEach(b => b.classList.remove('active'));
             e.target.classList.add('active');
-            
             newIngNameInput.value = e.target.getAttribute('data-name');
             newIngNameInput.classList.remove('input-error');
         });
     });
 
-    // Smart Override: Manually typing strips the syrup highlight
     newIngNameInput.addEventListener('input', () => {
         speedSyrupBtns.forEach(b => b.classList.remove('active'));
     });
@@ -108,17 +158,13 @@ document.addEventListener('DOMContentLoaded', () => {
     speedPourBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             triggerHaptic('light');
-            
-            // Wipe active class from all pour buttons, then lock it on the clicked one
             speedPourBtns.forEach(b => b.classList.remove('active'));
             e.target.classList.add('active');
-            
             customMlInput.value = e.target.getAttribute('data-ml');
             customMlInput.classList.remove('input-error');
         });
     });
 
-    // Smart Override: Manually typing strips the pour highlight
     customMlInput.addEventListener('input', () => {
         speedPourBtns.forEach(b => b.classList.remove('active'));
     });
@@ -187,15 +233,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const selectedColor = e.target.getAttribute('data-val');
             document.getElementById('new-ing-color').value = selectedColor;
 
-            // PROGRESSIVE DISCLOSURE & WIPE
             if (selectedColor === 'magenta-glow') { // SYRUP
                 quickSyrupsPanel.classList.remove('hidden');
                 btlInput.classList.add('hidden');
                 btlInput.value = ''; 
-            } else { // SPIRIT (amber-glow)
+            } else { // SPIRIT
                 quickSyrupsPanel.classList.add('hidden');
                 btlInput.classList.remove('hidden');
-                // Category Wipe: Strip syrup highlights when leaving syrup category
                 speedSyrupBtns.forEach(b => b.classList.remove('active'));
             }
         });
@@ -231,6 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('brix-results').innerHTML = '';
                 
                 document.getElementById('target-yield').value = '5';
+                document.getElementById('anchor-amount').value = '';
                 document.getElementById('syrup-base').value = '500';
                 document.getElementById('brix-weight').value = '500';
                 document.getElementById('brix-current').value = '9';
@@ -240,6 +285,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const specBtn = document.getElementById('open-spec-modal');
                 specBtn.innerText = 'Select Spec...';
                 specBtn.style.color = 'var(--text-muted)';
+
+                // Mode Reset
+                yieldBtn.click();
                 
                 await loadVault();
             }
@@ -261,7 +309,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const targetId = e.target.getAttribute('data-target');
             e.target.classList.add('active');
             document.getElementById(targetId).classList.add('active');
-            
             scrollArea.scrollTop = 0;
         });
     });
@@ -272,9 +319,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     lockBtn.addEventListener('click', () => {
         triggerHaptic('light');
-        
         scrollArea.scrollTop = 0;
-
         if (lockBtn.innerText === 'LOCKED') {
             lockBtn.innerText = 'EDIT MODE';
             lockBtn.style.color = 'var(--nodee-gold)';
@@ -293,7 +338,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('calc-batch-btn').addEventListener('click', () => {
         triggerHaptic('heavy');
         const recipeName = document.getElementById('recipe-select').value;
-        const targetYieldBottles = parseFloat(document.getElementById('target-yield').value) || 0;
         const resultsContainer = document.getElementById('batch-results');
         
         if(!recipeName || !recipeVault[recipeName]) {
@@ -304,12 +348,36 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const spec = recipeVault[recipeName];
-        const singleCocktailVolume = spec.reduce((sum, ing) => sum + ing.amount, 0);
-        
-        const totalBatchVolume = targetYieldBottles * BATCH_BOTTLE_SIZE_ML;
-        const multiplier = totalBatchVolume / singleCocktailVolume;
+        let multiplier = 0;
+        let totalBatchVol = 0;
 
-        let htmlOutput = '<h3 class="zone-header">K3 LIQUOR PULL</h3>';
+        if (currentBatchMode === 'yield') {
+            const targetYieldBottles = parseFloat(document.getElementById('target-yield').value) || 0;
+            const singleCocktailVolume = spec.reduce((sum, ing) => sum + ing.amount, 0);
+            totalBatchVol = targetYieldBottles * BATCH_BOTTLE_SIZE_ML;
+            multiplier = totalBatchVol / singleCocktailVolume;
+        } else {
+            // REVERSE MODE
+            if (currentAnchorIndex === null) {
+                triggerHaptic('error');
+                alert("Select an anchor ingredient first!");
+                return;
+            }
+            const inputAnchorAmount = parseFloat(document.getElementById('anchor-amount').value) || 0;
+            if (inputAnchorAmount <= 0) {
+                document.getElementById('anchor-amount').classList.add('input-error');
+                setTimeout(() => document.getElementById('anchor-amount').classList.remove('input-error'), 400);
+                triggerHaptic('error');
+                return;
+            }
+            const specAnchorAmount = spec[currentAnchorIndex].amount;
+            multiplier = inputAnchorAmount / specAnchorAmount;
+            const singleCocktailVolume = spec.reduce((sum, ing) => sum + ing.amount, 0);
+            totalBatchVol = singleCocktailVolume * multiplier;
+        }
+
+        const bottlesFilled = (totalBatchVol / BATCH_BOTTLE_SIZE_ML).toFixed(1);
+        let htmlOutput = `<h3 class="zone-header">K3 LIQUOR PULL (${bottlesFilled} BTL)</h3>`;
         let hasLiquor = false;
 
         spec.forEach(ing => {
@@ -332,13 +400,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="ing-name">${ing.name}</span>
                     <span class="ing-amount">${amountText}</span>
                 </div>`;
-            
             hasLiquor = true;
         });
 
-        if (!hasLiquor) {
-            htmlOutput += `<div class="result-row"><span class="ing-name" style="margin-top:10px;">No K3 ingredients in this spec.</span></div>`;
-        }
+        // Add non-liquor summary for complete batch build
+        htmlOutput += `<h3 class="zone-header">NON-LIQUOR ADDITIONS</h3>`;
+        spec.forEach(ing => {
+            if (ing.color === 'amber-glow') return;
+            const totalRequiredMl = Math.round(ing.amount * multiplier);
+            htmlOutput += `
+                <div class="result-row ${ing.color}">
+                    <span class="ing-name">${ing.name}</span>
+                    <span class="ing-amount">${totalRequiredMl}ml</span>
+                </div>`;
+        });
 
         resultsContainer.innerHTML = htmlOutput;
     });
@@ -348,30 +423,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const base = parseFloat(document.getElementById('syrup-base').value) || 0;
         const ratio = parseFloat(document.getElementById('syrup-ratio').value) || 1;
         const sweetenerType = document.getElementById('sweetener-type').value;
-
         if(!base) return;
-
-        let waterWeight = 0;
-
-        if (sweetenerType === 'honey') {
-            waterWeight = (base / ratio) - (base * 0.20);
-        } else {
-            waterWeight = base / ratio;
-        }
-
+        let waterWeight = (sweetenerType === 'honey') ? (base / ratio) - (base * 0.20) : base / ratio;
         waterWeight = Math.max(0, Math.round(waterWeight));
         const totalYield = Math.round(base + waterWeight);
-
         document.getElementById('syrup-results').innerHTML = `
-            <div class="result-row cyan-glow">
-                <span class="ing-name">Add Hot Water</span>
-                <span class="ing-amount">${waterWeight}g</span>
-            </div>
-            <div class="result-row">
-                <span class="ing-name">Total Yield Container</span>
-                <span class="ing-amount" style="color:var(--text-main);">${totalYield}g</span>
-            </div>
-        `;
+            <div class="result-row cyan-glow"><span class="ing-name">Add Hot Water</span><span class="ing-amount">${waterWeight}g</span></div>
+            <div class="result-row"><span class="ing-name">Total Yield Container</span><span class="ing-amount" style="color:var(--text-main);">${totalYield}g</span></div>`;
     });
 
     document.getElementById('calc-brix-btn').addEventListener('click', () => {
@@ -380,15 +438,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const current = parseFloat(document.getElementById('brix-current').value) || 0;
         const target = parseFloat(document.getElementById('brix-target').value) || 0;
         if(target <= current || target >= 100) return;
-
         const sugarGrams = Math.round(weight * ((target - current) / (100 - target)));
-
-        document.getElementById('brix-results').innerHTML = `
-            <div class="result-row magenta-glow">
-                <span class="ing-name">Add White Sugar</span>
-                <span class="ing-amount">${sugarGrams}g</span>
-            </div>
-        `;
+        document.getElementById('brix-results').innerHTML = `<div class="result-row magenta-glow"><span class="ing-name">Add White Sugar</span><span class="ing-amount">${sugarGrams}g</span></div>`;
     });
 
     const renderNewSpecPreview = () => {
@@ -397,17 +448,9 @@ document.addEventListener('DOMContentLoaded', () => {
         pendingNewSpec.forEach((ing, index) => {
             const row = document.createElement('div');
             row.className = `result-row ${ing.categoryTag}`;
-            
             const btlText = ing.bottleSize > 0 ? ` (${ing.bottleSize}ml)` : '';
-            
-            row.innerHTML = `
-                <span class="ing-name">${ing.ingredientName}${btlText}</span>
-                <span class="ing-amount" style="font-size:1.5rem">${ing.amount}ml</span>
-                <div class="action-links">
-                    <button class="action-btn edit" onclick="editPendingIng(${index})">EDIT</button>
-                    <button class="action-btn delete" onclick="deletePendingIng(${index})">REMOVE</button>
-                </div>
-            `;
+            row.innerHTML = `<span class="ing-name">${ing.ingredientName}${btlText}</span><span class="ing-amount" style="font-size:1.5rem">${ing.amount}ml</span>
+                <div class="action-links"><button class="action-btn edit" onclick="editPendingIng(${index})">EDIT</button><button class="action-btn delete" onclick="deletePendingIng(${index})">REMOVE</button></div>`;
             preview.appendChild(row);
         });
     };
@@ -417,22 +460,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const item = pendingNewSpec[index];
         document.getElementById('new-ing-name').value = item.ingredientName;
         document.getElementById('new-ing-ml').value = item.amount;
-        
         const btlInputEl = document.getElementById('new-ing-btl');
-        if (item.bottleSize > 0) {
-            btlInputEl.value = item.bottleSize;
-        } else {
-            btlInputEl.value = '';
-        }
-        
+        btlInputEl.value = item.bottleSize > 0 ? item.bottleSize : '';
         document.getElementById('new-ing-color').value = item.categoryTag;
-        
         const catBtns = document.querySelectorAll('.category-btn');
-        catBtns.forEach(b => {
-            b.classList.remove('active');
-            if(b.getAttribute('data-val') === item.categoryTag) b.classList.add('active');
-        });
-
+        catBtns.forEach(b => { b.classList.remove('active'); if(b.getAttribute('data-val') === item.categoryTag) b.classList.add('active'); });
         if (item.categoryTag === 'magenta-glow') {
             document.getElementById('quick-syrups-panel').classList.remove('hidden');
             btlInputEl.classList.add('hidden');
@@ -440,89 +472,39 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('quick-syrups-panel').classList.add('hidden');
             btlInputEl.classList.remove('hidden');
         }
-
-        // Wipe all highlights on edit to keep slate clean
-        document.querySelectorAll('.speed-pour-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.speed-syrup-btn').forEach(b => b.classList.remove('active'));
-        
+        document.querySelectorAll('.speed-pour-btn, .speed-syrup-btn').forEach(b => b.classList.remove('active'));
         pendingNewSpec.splice(index, 1);
         renderNewSpecPreview();
     };
 
-    window.deletePendingIng = (index) => {
-        triggerHaptic('light');
-        pendingNewSpec.splice(index, 1);
-        renderNewSpecPreview();
-    };
+    window.deletePendingIng = (index) => { triggerHaptic('light'); pendingNewSpec.splice(index, 1); renderNewSpecPreview(); };
 
     document.getElementById('add-ing-btn').addEventListener('click', () => {
-        const cNameEl = document.getElementById('new-spec-name');
-        const iNameEl = document.getElementById('new-ing-name');
-        const amtEl = document.getElementById('new-ing-ml');
-        const btlEl = document.getElementById('new-ing-btl');
-        
+        const cNameEl = document.getElementById('new-spec-name'), iNameEl = document.getElementById('new-ing-name'), amtEl = document.getElementById('new-ing-ml'), btlEl = document.getElementById('new-ing-btl');
         [cNameEl, iNameEl, amtEl, btlEl].forEach(el => el.classList.remove('input-error'));
-
-        const cName = capitalizeText(cNameEl.value.trim());
-        const iName = capitalizeText(iNameEl.value.trim());
-        const amt = parseFloat(amtEl.value);
-        const col = document.getElementById('new-ing-color').value;
-
-        let btl = 0; 
-        let hasError = false;
-
-        if (col === 'amber-glow') {
-            btl = parseFloat(btlEl.value);
-            if (!btl) { btlEl.classList.add('input-error'); hasError = true; }
-        }
-
+        const cName = capitalizeText(cNameEl.value.trim()), iName = capitalizeText(iNameEl.value.trim()), amt = parseFloat(amtEl.value), col = document.getElementById('new-ing-color').value;
+        let btl = 0, hasError = false;
+        if (col === 'amber-glow') { btl = parseFloat(btlEl.value); if (!btl) { btlEl.classList.add('input-error'); hasError = true; } }
         if(!cName) { cNameEl.classList.add('input-error'); hasError = true; }
         if(!iName) { iNameEl.classList.add('input-error'); hasError = true; }
         if(!amt) { amtEl.classList.add('input-error'); hasError = true; }
-
-        if(hasError) {
-            triggerHaptic('error');
-            return;
-        }
-
+        if(hasError) { triggerHaptic('error'); return; }
         triggerHaptic('light');
         pendingNewSpec.push({ cocktailName: cName, ingredientName: iName, amount: amt, bottleSize: btl, categoryTag: col });
-
-        iNameEl.value = '';
-        amtEl.value = '';
-        if (col === 'amber-glow') btlEl.value = '';
-        
-        // Remove Active State from Pour & Syrup Buttons after adding
-        document.querySelectorAll('.speed-pour-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.speed-syrup-btn').forEach(b => b.classList.remove('active'));
-
-        iNameEl.focus(); 
-        
-        renderNewSpecPreview();
+        iNameEl.value = ''; amtEl.value = ''; if (col === 'amber-glow') btlEl.value = '';
+        document.querySelectorAll('.speed-pour-btn, .speed-syrup-btn').forEach(b => b.classList.remove('active'));
+        iNameEl.focus(); renderNewSpecPreview();
     });
 
     document.getElementById('sync-vault-btn').addEventListener('click', async () => {
         if(pendingNewSpec.length === 0) return;
         triggerHaptic('heavy');
-        
         const loader = document.getElementById('loader');
         document.querySelector('.loader-text').innerText = "PUSHING TO VAULT...";
-        loader.style.display = 'flex';
-        loader.style.opacity = '1';
-        
+        loader.style.display = 'flex'; loader.style.opacity = '1';
         try {
-            await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify(pendingNewSpec)
-            });
-
-            pendingNewSpec = []; 
-            document.getElementById('new-spec-name').value = ''; 
-            renderNewSpecPreview(); 
-            
-            await loadVault(); 
-
+            await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(pendingNewSpec) });
+            pendingNewSpec = []; document.getElementById('new-spec-name').value = ''; renderNewSpecPreview(); await loadVault(); 
         } catch (error) {
             console.error("Sync Error:", error);
             document.querySelector('.loader-text').innerText = "SYNC FAILED.";
