@@ -4,6 +4,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     let recipeVault = {};
     let pendingNewSpec = []; 
+    
+    // Explicit 700ml constraint for perfect direct scaling
     const BATCH_BOTTLE_SIZE_ML = 700; 
 
     const triggerHaptic = (type = 'light') => {
