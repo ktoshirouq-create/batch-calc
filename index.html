@@ -8,7 +8,7 @@
     <link rel="icon" type="image/png" href="icon-512.png">
     <link rel="apple-touch-icon" href="icon-512.png">
     
-    <link rel="stylesheet" href="styles.css?v=15">
+    <link rel="stylesheet" href="styles.css?v=16">
     <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -53,7 +53,7 @@
                             <button id="yield-minus" class="stepper-btn">−</button>
                             <div class="massive-input" style="margin-bottom: 0;">
                                 <input type="number" id="target-yield" value="5" min="1" step="1">
-                                </div>
+                            </div>
                             <button id="yield-plus" class="stepper-btn">+</button>
                         </div>
                     </div>
@@ -70,16 +70,37 @@
                     <div id="new-spec-preview" class="output-container" style="margin-bottom: 20px;"></div>
 
                     <div class="ingredient-adder">
+                        
+                        <div class="speed-rail-group" style="margin-bottom: 15px;">
+                            <label style="color: var(--text-muted); font-size: 0.75rem; letter-spacing: 1px; margin-bottom: 8px; display: block;">QUICK SYRUPS</label>
+                            <div class="pill-group" style="margin-bottom: 15px;">
+                                <button class="speed-syrup-btn" data-name="Simple Syrup">SIMPLE</button>
+                                <button class="speed-syrup-btn" data-name="Honey Syrup">HONEY</button>
+                            </div>
+                        </div>
+
                         <input type="text" id="new-ing-name" class="premium-basic-input" placeholder="Ingredient Name">
                         
                         <div class="input-group" style="margin-bottom: 25px;">
                             <label>Category</label>
                             <div class="category-group">
                                 <button class="category-btn active" data-val="amber-glow">SPIRIT</button>
-                                <button class="category-btn" data-val="neon-green">JUICE</button>
                                 <button class="category-btn" data-val="magenta-glow">SYRUP</button>
                             </div>
                             <input type="hidden" id="new-ing-color" value="amber-glow">
+                        </div>
+
+                        <div class="speed-rail-group" style="margin-bottom: 10px;">
+                            <label style="color: var(--text-muted); font-size: 0.75rem; letter-spacing: 1px; margin-bottom: 8px; display: block;">QUICK POUR (ML)</label>
+                            <div class="speed-pour-row">
+                                <button class="speed-pour-btn" data-ml="10">10</button>
+                                <button class="speed-pour-btn" data-ml="15">15</button>
+                                <button class="speed-pour-btn" data-ml="20">20</button>
+                                <button class="speed-pour-btn" data-ml="25">25</button>
+                                <button class="speed-pour-btn" data-ml="30">30</button>
+                                <button class="speed-pour-btn" data-ml="35">35</button>
+                                <button class="speed-pour-btn" data-ml="40">40</button>
+                            </div>
                         </div>
 
                         <div class="flex-row">
@@ -154,6 +175,6 @@
 
     </main>
 
-    <script src="app.js?v=15"></script>
+    <script src="app.js?v=16"></script>
 </body>
 </html>
