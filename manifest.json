@@ -1,16 +1,16 @@
 {
-  "name": "Service Mode Batcher",
+  "name": "Batching Calculator",
   "short_name": "Batcher",
-  "start_url": "/index.html",
+  "start_url": ".",
   "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#000000",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "icon-512.png",
+      "src": "icon-512.jpg",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/jpeg"
     }
   ]
 }
