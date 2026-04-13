@@ -6,7 +6,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let pendingNewSpec = []; 
     const BATCH_BOTTLE_SIZE_ML = 1000; 
 
-    // --- HAPTICS ---
     const triggerHaptic = (type = 'light') => {
         if (!navigator.vibrate) return;
         if (type === 'light') navigator.vibrate(30);
@@ -14,12 +13,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (type === 'error') navigator.vibrate([50, 50, 50, 50]);
     };
 
-    // --- MATH CAPITALIZATION ENGINE ---
     const capitalizeText = (str) => {
         return str.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
     };
 
-    // --- INIT: LOAD VAULT FROM CLOUD ---
     async function loadVault() {
         const loader = document.getElementById('loader');
         loader.style.display = 'flex';
@@ -82,7 +79,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadVault();
 
-    // --- CUSTOM MODAL ---
     document.getElementById('open-spec-modal').addEventListener('click', () => {
         triggerHaptic('light');
         document.getElementById('spec-modal').classList.remove('hidden');
@@ -100,7 +96,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- PILLS & LABELED RECTANGLES ---
     const ratioPills = document.querySelectorAll('.ratio-pill');
     ratioPills.forEach(pill => {
         pill.addEventListener('click', (e) => {
@@ -121,7 +116,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // DYNAMIC BOTTLE SIZE LOGIC
     const categoryBtns = document.querySelectorAll('.category-btn');
     const btlInput = document.getElementById('new-ing-btl');
     
@@ -133,17 +127,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const selectedColor = e.target.getAttribute('data-val');
             document.getElementById('new-ing-color').value = selectedColor;
 
-            // Hide/Show Bottle Size based on category
             if (selectedColor === 'amber-glow') {
                 btlInput.classList.remove('hidden');
             } else {
                 btlInput.classList.add('hidden');
-                btlInput.value = ''; // Clear it out to be safe
+                btlInput.value = ''; 
             }
         });
     });
 
-    // --- PULL TO REFRESH LOGIC ---
     let touchStartY = 0;
     const scrollArea = document.getElementById('scroll-area');
     const ptrIndicator = document.getElementById('ptr-indicator');
@@ -177,7 +169,6 @@ document.addEventListener('DOMContentLoaded', () => {
         touchStartY = 0;
     }, {passive: true});
 
-    // --- UI NAVIGATION ---
     const tabs = document.querySelectorAll('.nav-tab');
     const modules = document.querySelectorAll('.module');
 
@@ -192,7 +183,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // --- EDIT MODE TOGGLE ---
     const lockBtn = document.getElementById('edit-toggle');
     const serviceUI = document.getElementById('service-ui');
     const editUI = document.getElementById('edit-ui');
@@ -214,7 +204,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- MODULE A: BATCH ENGINE (K3 FILTER) ---
     document.getElementById('calc-batch-btn').addEventListener('click', () => {
         triggerHaptic('heavy');
         const recipeName = document.getElementById('recipe-select').value;
@@ -267,7 +256,6 @@ document.addEventListener('DOMContentLoaded', () => {
         resultsContainer.innerHTML = htmlOutput;
     });
 
-    // --- MODULE B: PREP ENGINES ---
     document.getElementById('calc-syrup-btn').addEventListener('click', () => {
         triggerHaptic('heavy');
         const base = parseFloat(document.getElementById('syrup-base').value) || 0;
@@ -316,7 +304,6 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     });
 
-    // --- RECIPE BUILDER (EDIT MODE) ---
     const renderNewSpecPreview = () => {
         const preview = document.getElementById('new-spec-preview');
         preview.innerHTML = '';
@@ -324,7 +311,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const row = document.createElement('div');
             row.className = `result-row ${ing.categoryTag}`;
             
-            // Format preview cleanly if bottle size is 0
             const btlText = ing.bottleSize > 0 ? ` (${ing.bottleSize}ml)` : '';
             
             row.innerHTML = `
@@ -345,7 +331,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('new-ing-name').value = item.ingredientName;
         document.getElementById('new-ing-ml').value = item.amount;
         
-        // Restore Bottle Size if it existed
         const btlInputEl = document.getElementById('new-ing-btl');
         if (item.bottleSize > 0) {
             btlInputEl.value = item.bottleSize;
@@ -355,7 +340,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         document.getElementById('new-ing-color').value = item.categoryTag;
         
-        // Manage UI Visibility State
         if (item.categoryTag === 'amber-glow') {
             btlInputEl.classList.remove('hidden');
         } else {
@@ -386,16 +370,14 @@ document.addEventListener('DOMContentLoaded', () => {
         
         [cNameEl, iNameEl, amtEl, btlEl].forEach(el => el.classList.remove('input-error'));
 
-        // Apply Math Capitalization Engine before validation
         const cName = capitalizeText(cNameEl.value.trim());
         const iName = capitalizeText(iNameEl.value.trim());
         const amt = parseFloat(amtEl.value);
         const col = document.getElementById('new-ing-color').value;
 
-        let btl = 0; // Default background 0 for juices/syrups
+        let btl = 0; 
         let hasError = false;
 
-        // Dynamic validation: Only require bottle size if it's a Spirit
         if (col === 'amber-glow') {
             btl = parseFloat(btlEl.value);
             if (!btl) { btlEl.classList.add('input-error'); hasError = true; }
