@@ -14,6 +14,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (type === 'error') navigator.vibrate([50, 50, 50, 50]);
     };
 
+    // --- MATH CAPITALIZATION ENGINE ---
+    const capitalizeText = (str) => {
+        return str.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
+    };
+
     // --- INIT: LOAD VAULT FROM CLOUD ---
     async function loadVault() {
         const loader = document.getElementById('loader');
@@ -38,7 +43,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
 
-            // Populate Custom Modal List
             const modalList = document.getElementById('modal-list');
             modalList.innerHTML = '';
             const specNames = Object.keys(recipeVault);
@@ -89,7 +93,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('spec-modal').classList.add('hidden');
     });
 
-    // Tap-to-Dismiss Overlay Logic
     document.getElementById('spec-modal').addEventListener('click', (e) => {
         if (e.target.id === 'spec-modal') {
             triggerHaptic('light');
@@ -118,13 +121,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // DYNAMIC BOTTLE SIZE LOGIC
     const categoryBtns = document.querySelectorAll('.category-btn');
+    const btlInput = document.getElementById('new-ing-btl');
+    
     categoryBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             triggerHaptic('light');
             categoryBtns.forEach(b => b.classList.remove('active'));
             e.target.classList.add('active');
-            document.getElementById('new-ing-color').value = e.target.getAttribute('data-val');
+            const selectedColor = e.target.getAttribute('data-val');
+            document.getElementById('new-ing-color').value = selectedColor;
+
+            // Hide/Show Bottle Size based on category
+            if (selectedColor === 'amber-glow') {
+                btlInput.classList.remove('hidden');
+            } else {
+                btlInput.classList.add('hidden');
+                btlInput.value = ''; // Clear it out to be safe
+            }
         });
     });
 
@@ -222,7 +237,6 @@ document.addEventListener('DOMContentLoaded', () => {
         let hasLiquor = false;
 
         spec.forEach(ing => {
-            // FILTER: Skip if it's not a Spirit/Liqueur
             if (ing.color !== 'amber-glow') return; 
 
             const totalRequiredMl = Math.round(ing.amount * multiplier);
@@ -265,14 +279,11 @@ document.addEventListener('DOMContentLoaded', () => {
         let waterWeight = 0;
 
         if (sweetenerType === 'honey') {
-            // Standard ratio math minus 20% of the base weight (accounting for water in honey)
             waterWeight = (base / ratio) - (base * 0.20);
         } else {
-            // Standard ratio math for Demerara
             waterWeight = base / ratio;
         }
 
-        // Prevent negative water output if they enter a bizarre ratio
         waterWeight = Math.max(0, Math.round(waterWeight));
         const totalYield = Math.round(base + waterWeight);
 
@@ -312,8 +323,12 @@ document.addEventListener('DOMContentLoaded', () => {
         pendingNewSpec.forEach((ing, index) => {
             const row = document.createElement('div');
             row.className = `result-row ${ing.categoryTag}`;
+            
+            // Format preview cleanly if bottle size is 0
+            const btlText = ing.bottleSize > 0 ? ` (${ing.bottleSize}ml)` : '';
+            
             row.innerHTML = `
-                <span class="ing-name">${ing.ingredientName} (${ing.bottleSize}ml)</span>
+                <span class="ing-name">${ing.ingredientName}${btlText}</span>
                 <span class="ing-amount" style="font-size:1.5rem">${ing.amount}ml</span>
                 <div class="action-links">
                     <button class="action-btn edit" onclick="editPendingIng(${index})">EDIT</button>
@@ -329,9 +344,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const item = pendingNewSpec[index];
         document.getElementById('new-ing-name').value = item.ingredientName;
         document.getElementById('new-ing-ml').value = item.amount;
-        document.getElementById('new-ing-btl').value = item.bottleSize;
+        
+        // Restore Bottle Size if it existed
+        const btlInputEl = document.getElementById('new-ing-btl');
+        if (item.bottleSize > 0) {
+            btlInputEl.value = item.bottleSize;
+        } else {
+            btlInputEl.value = '';
+        }
         
         document.getElementById('new-ing-color').value = item.categoryTag;
+        
+        // Manage UI Visibility State
+        if (item.categoryTag === 'amber-glow') {
+            btlInputEl.classList.remove('hidden');
+        } else {
+            btlInputEl.classList.add('hidden');
+        }
+
         const catBtns = document.querySelectorAll('.category-btn');
         catBtns.forEach(b => {
             b.classList.remove('active');
@@ -356,17 +386,24 @@ document.addEventListener('DOMContentLoaded', () => {
         
         [cNameEl, iNameEl, amtEl, btlEl].forEach(el => el.classList.remove('input-error'));
 
-        const cName = cNameEl.value.trim();
-        const iName = iNameEl.value.trim();
+        // Apply Math Capitalization Engine before validation
+        const cName = capitalizeText(cNameEl.value.trim());
+        const iName = capitalizeText(iNameEl.value.trim());
         const amt = parseFloat(amtEl.value);
-        const btl = parseFloat(btlEl.value);
         const col = document.getElementById('new-ing-color').value;
 
+        let btl = 0; // Default background 0 for juices/syrups
         let hasError = false;
+
+        // Dynamic validation: Only require bottle size if it's a Spirit
+        if (col === 'amber-glow') {
+            btl = parseFloat(btlEl.value);
+            if (!btl) { btlEl.classList.add('input-error'); hasError = true; }
+        }
+
         if(!cName) { cNameEl.classList.add('input-error'); hasError = true; }
         if(!iName) { iNameEl.classList.add('input-error'); hasError = true; }
         if(!amt) { amtEl.classList.add('input-error'); hasError = true; }
-        if(!btl) { btlEl.classList.add('input-error'); hasError = true; }
 
         if(hasError) {
             triggerHaptic('error');
@@ -378,7 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         iNameEl.value = '';
         amtEl.value = '';
-        btlEl.value = '';
+        if (col === 'amber-glow') btlEl.value = '';
         iNameEl.focus(); 
         
         renderNewSpecPreview();
