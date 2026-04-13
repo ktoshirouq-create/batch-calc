@@ -79,6 +79,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadVault();
 
+    // SPEED RAIL LOGIC: Syrups
+    const speedSyrupBtns = document.querySelectorAll('.speed-syrup-btn');
+    speedSyrupBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            triggerHaptic('light');
+            document.getElementById('new-ing-name').value = e.target.getAttribute('data-name');
+            document.getElementById('new-ing-name').classList.remove('input-error');
+            
+            // Auto-click the SYRUP category
+            const syrupCatBtn = document.querySelector('.category-btn[data-val="magenta-glow"]');
+            if(syrupCatBtn) syrupCatBtn.click();
+        });
+    });
+
+    // SPEED RAIL LOGIC: Pour Matrix
+    const speedPourBtns = document.querySelectorAll('.speed-pour-btn');
+    speedPourBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            triggerHaptic('light');
+            document.getElementById('new-ing-ml').value = e.target.getAttribute('data-ml');
+            document.getElementById('new-ing-ml').classList.remove('input-error');
+        });
+    });
+
     const yieldInput = document.getElementById('target-yield');
     
     document.getElementById('yield-minus').addEventListener('click', () => {
@@ -168,7 +192,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, {passive: true});
 
-    // AUTO-WIPE LOGIC ADDED HERE
     scrollArea.addEventListener('touchend', async e => {
         if (scrollArea.scrollTop === 0 && touchStartY > 0) {
             const pullDistance = e.changedTouches[0].clientY - touchStartY;
@@ -176,19 +199,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 ptrIndicator.innerText = "SYNCING & CLEARING...";
                 triggerHaptic('heavy');
                 
-                // Clear all result outputs
                 document.getElementById('batch-results').innerHTML = '';
                 document.getElementById('syrup-results').innerHTML = '';
                 document.getElementById('brix-results').innerHTML = '';
                 
-                // Reset standard inputs
                 document.getElementById('target-yield').value = '5';
                 document.getElementById('syrup-base').value = '500';
                 document.getElementById('brix-weight').value = '500';
                 document.getElementById('brix-current').value = '9';
                 document.getElementById('brix-target').value = '50';
                 
-                // Reset Spec Selection
                 document.getElementById('recipe-select').value = '';
                 const specBtn = document.getElementById('open-spec-modal');
                 specBtn.innerText = 'Select Spec...';
