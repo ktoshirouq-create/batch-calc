@@ -7,7 +7,7 @@
     --nodee-gold: #C8A97E;
     --nodee-burgundy: #6B2B3C;
     
-    /* Output Accent Colors (Refined for Premium look) */
+    /* Output Accent Colors */
     --amber-glow: #E5B15D;
     --neon-green: #90C088;
     --magenta-glow: #B06A8B;
@@ -81,7 +81,7 @@ body {
     margin-bottom: 20px;
 }
 
-.edit-panel { border-top: 2px solid var(--nodee-burgundy); }
+.edit-panel { border-top: 2px solid var(--nodee-gold); } /* Changed from burgundy to gold to tie together with active edit mode */
 .card-title { font-size: 1.1rem; letter-spacing: 3px; font-weight: 800; color: var(--text-muted); margin-bottom: 30px; text-transform: uppercase; }
 
 /* Premium Inputs */
@@ -96,14 +96,14 @@ body {
     font-size: 1.8rem; font-weight: 600; margin-bottom: 35px; padding-bottom: 10px; outline: none; border-radius: 0; transition: border-color 0.3s;
 }
 .premium-dropdown:focus, .premium-text-input:focus { border-color: var(--nodee-gold); }
-.premium-text-input::placeholder { color: #333; font-weight: 400; }
+.premium-text-input::placeholder { color: var(--text-muted); font-weight: 400; } /* Contrast fix */
 
-.flex-row { display: flex; gap: 15px; width: 100%; }
+.flex-row { display: flex; gap: 25px; width: 100%; } /* Touch target spacing fix */
 .premium-basic-input { 
     width: 100%; background: transparent; border: none; border-bottom: 1px solid #444; color: var(--text-main); 
     font-size: 1.1rem; padding: 10px 0; margin-bottom: 25px; outline: none; border-radius: 0; transition: all 0.3s;
 }
-.premium-basic-input::placeholder { color: #555; }
+.premium-basic-input::placeholder { color: var(--text-muted); } /* Contrast fix */
 .premium-basic-input:focus { border-color: var(--nodee-gold); }
 
 /* Error State */
