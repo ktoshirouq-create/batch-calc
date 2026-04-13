@@ -16,6 +16,17 @@
         <span class="loader-text" style="color: var(--nodee-gold)">SYNCING VAULT...</span>
     </div>
 
+    <div id="spec-modal" class="custom-modal hidden">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h3 style="color: var(--nodee-gold); letter-spacing: 2px;">SELECT SPEC</h3>
+                <button id="close-modal" class="action-btn">CLOSE</button>
+            </div>
+            <div id="modal-list" class="modal-list">
+                </div>
+        </div>
+    </div>
+
     <header class="top-bar">
         <h1 class="brand">BATCHING CALCULATOR</h1>
         <button id="edit-toggle" class="lock-btn">LOCKED</button>
@@ -34,9 +45,9 @@
             
             <div id="service-ui">
                 <div class="card spec-card glass-panel">
-                    <select id="recipe-select" class="premium-dropdown">
-                        <option value="">Loading Vault...</option>
-                    </select>
+                    <button id="open-spec-modal" class="premium-text-input" style="text-align: left; padding: 15px 0;">Select Spec...</button>
+                    <input type="hidden" id="recipe-select" value="">
+                    
                     <div class="input-group">
                         <label>Target Yield</label>
                         <div class="massive-input">
@@ -62,11 +73,17 @@
                             <input type="number" id="new-ing-ml" class="premium-basic-input" placeholder="ml">
                             <input type="number" id="new-ing-btl" class="premium-basic-input" placeholder="Btl Size (ml)">
                         </div>
-                        <select id="new-ing-color" class="premium-basic-input dropdown-arrow">
-                            <option value="amber-glow">Spirit / Liqueur (Amber)</option>
-                            <option value="neon-green">Juice / Acid (Green)</option>
-                            <option value="magenta-glow">Syrup / Sugar (Magenta)</option>
-                        </select>
+                        
+                        <div class="input-group" style="margin-bottom: 25px;">
+                            <label>Category Color</label>
+                            <div class="swatch-group">
+                                <button class="color-swatch active" data-val="amber-glow" style="background-color: var(--amber-glow);"></button>
+                                <button class="color-swatch" data-val="neon-green" style="background-color: var(--neon-green);"></button>
+                                <button class="color-swatch" data-val="magenta-glow" style="background-color: var(--magenta-glow);"></button>
+                            </div>
+                            <input type="hidden" id="new-ing-color" value="amber-glow">
+                        </div>
+
                         <button id="add-ing-btn" class="btn-secondary">+ ADD INGREDIENT</button>
                     </div>
 
@@ -84,15 +101,18 @@
                     <label>Base Weight (g)</label>
                     <div class="massive-input"><input type="number" id="syrup-base" value="500"></div>
                 </div>
+                
                 <div class="input-group">
                     <label>Target Ratio (Base : Water)</label>
-                    <select id="syrup-ratio" class="premium-dropdown" style="margin-bottom: 30px;">
-                        <option value="1">1:1 (Simple)</option>
-                        <option value="1.5">1.5:1 (Semi-Rich)</option>
-                        <option value="2">2:1 (Rich / Demerara)</option>
-                        <option value="3">3:1 (Honey / Agave)</option>
-                    </select>
+                    <div class="pill-group">
+                        <button class="ratio-pill active" data-val="1">1:1</button>
+                        <button class="ratio-pill" data-val="1.5">1.5:1</button>
+                        <button class="ratio-pill" data-val="2">2:1</button>
+                        <button class="ratio-pill" data-val="3">3:1</button>
+                    </div>
+                    <input type="hidden" id="syrup-ratio" value="1">
                 </div>
+
                 <button id="calc-syrup-btn" class="btn-primary cyan-btn">CALCULATE WATER</button>
                 <div id="syrup-results" class="output-container" style="margin-top: 20px;"></div>
             </div>
