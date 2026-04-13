@@ -9,13 +9,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- HAPTICS ---
     const triggerHaptic = (type = 'light') => {
         if (!navigator.vibrate) return;
-        if (type === 'light') navigator.vibrate(50);
-        if (type === 'heavy') navigator.vibrate([100, 50, 100]);
+        if (type === 'light') navigator.vibrate(30);
+        if (type === 'heavy') navigator.vibrate([80, 40, 80]);
+        if (type === 'error') navigator.vibrate([50, 50, 50, 50]);
     };
 
     // --- INIT: LOAD VAULT FROM CLOUD ---
     async function loadVault() {
         const loader = document.getElementById('loader');
+        loader.style.display = 'flex';
+        loader.style.opacity = '1';
+        
         try {
             const res = await fetch(API_URL);
             const data = await res.json();
@@ -48,11 +52,49 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error("Vault Sync Error:", error);
-            document.querySelector('.loader-text').innerText = "SYNC FAILED. CHECK SIGNAL.";
+            document.querySelector('.loader-text').innerText = "SYNC FAILED.";
         }
     }
 
     loadVault();
+
+    // --- PULL TO REFRESH LOGIC ---
+    let touchStartY = 0;
+    const scrollArea = document.getElementById('scroll-area');
+    const ptrIndicator = document.getElementById('ptr-indicator');
+
+    scrollArea.addEventListener('touchstart', e => {
+        if (scrollArea.scrollTop === 0) {
+            touchStartY = e.touches[0].clientY;
+        }
+    }, {passive: true});
+
+    scrollArea.addEventListener('touchmove', e => {
+        if (scrollArea.scrollTop === 0 && touchStartY > 0) {
+            const pullDistance = e.touches[0].clientY - touchStartY;
+            if (pullDistance > 0 && pullDistance < 120) {
+                ptrIndicator.style.transform = `translateY(${pullDistance * 0.5}px)`;
+                ptrIndicator.style.opacity = pullDistance / 100;
+            }
+        }
+    }, {passive: true});
+
+    scrollArea.addEventListener('touchend', async e => {
+        if (scrollArea.scrollTop === 0 && touchStartY > 0) {
+            const pullDistance = e.changedTouches[0].clientY - touchStartY;
+            if (pullDistance > 70) {
+                ptrIndicator.innerText = "SYNCING VAULT...";
+                triggerHaptic('heavy');
+                await loadVault();
+            }
+            // Reset visually
+            ptrIndicator.style.transform = `translateY(-20px)`;
+            ptrIndicator.style.opacity = 0;
+            setTimeout(() => ptrIndicator.innerText = "↓ PULL TO SYNC ↓", 300);
+        }
+        touchStartY = 0;
+    }, {passive: true});
+
 
     // --- UI NAVIGATION ---
     const tabs = document.querySelectorAll('.nav-tab');
@@ -78,8 +120,8 @@ document.addEventListener('DOMContentLoaded', () => {
         triggerHaptic('light');
         if (lockBtn.innerText === 'LOCKED') {
             lockBtn.innerText = 'EDIT MODE';
-            lockBtn.style.color = 'var(--neon-green)';
-            lockBtn.style.borderColor = 'var(--neon-green)';
+            lockBtn.style.color = 'var(--nodee-burgundy)';
+            lockBtn.style.borderColor = 'var(--nodee-burgundy)';
             serviceUI.classList.add('hidden');
             editUI.classList.remove('hidden');
         } else {
@@ -91,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- MODULE A: BATCH ENGINE (Geographic Routing) ---
+    // --- MODULE A: BATCH ENGINE ---
     document.getElementById('calc-batch-btn').addEventListener('click', () => {
         triggerHaptic('heavy');
         const recipeName = document.getElementById('recipe-select').value;
@@ -141,15 +183,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- MODULE B: PREP ENGINES ---
-    
-    // Syrup Calculator
     document.getElementById('calc-syrup-btn').addEventListener('click', () => {
         triggerHaptic('heavy');
         const base = parseFloat(document.getElementById('syrup-base').value) || 0;
         const ratio = parseFloat(document.getElementById('syrup-ratio').value) || 1;
-
         if(!base) return;
-        
         const waterWeight = Math.round(base / ratio);
         const totalYield = base + waterWeight;
 
@@ -165,13 +203,11 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     });
 
-    // Brix Adjuster
     document.getElementById('calc-brix-btn').addEventListener('click', () => {
         triggerHaptic('heavy');
         const weight = parseFloat(document.getElementById('brix-weight').value) || 0;
         const current = parseFloat(document.getElementById('brix-current').value) || 0;
         const target = parseFloat(document.getElementById('brix-target').value) || 0;
-
         if(target <= current || target >= 100) return;
 
         const sugarGrams = Math.round(weight * ((target - current) / (100 - target)));
@@ -192,18 +228,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const row = document.createElement('div');
             row.className = `result-row ${ing.categoryTag}`;
             row.innerHTML = `
-                <span class="ing-name">${ing.ingredientName} (${ing.bottleSize}ml Btl)</span>
+                <span class="ing-name">${ing.ingredientName} (${ing.bottleSize}ml)</span>
                 <span class="ing-amount" style="font-size:1.5rem">${ing.amount}ml</span>
                 <div class="action-links">
-                    <button class="action-btn edit" onclick="editPendingIng(${index})">[EDIT]</button>
-                    <button class="action-btn delete" onclick="deletePendingIng(${index})">[X]</button>
+                    <button class="action-btn edit" onclick="editPendingIng(${index})">EDIT</button>
+                    <button class="action-btn delete" onclick="deletePendingIng(${index})">REMOVE</button>
                 </div>
             `;
             preview.appendChild(row);
         });
     };
 
-    // Global scope for inline onclick handlers
     window.editPendingIng = (index) => {
         triggerHaptic('light');
         const item = pendingNewSpec[index];
@@ -223,28 +258,39 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     document.getElementById('add-ing-btn').addEventListener('click', () => {
-        triggerHaptic('light');
-        const cName = document.getElementById('new-spec-name').value.trim();
-        const iName = document.getElementById('new-ing-name').value.trim();
-        const amt = parseFloat(document.getElementById('new-ing-ml').value);
-        const btl = parseFloat(document.getElementById('new-ing-btl').value);
+        const cNameEl = document.getElementById('new-spec-name');
+        const iNameEl = document.getElementById('new-ing-name');
+        const amtEl = document.getElementById('new-ing-ml');
+        const btlEl = document.getElementById('new-ing-btl');
+        
+        // Validation styling reset
+        [cNameEl, iNameEl, amtEl, btlEl].forEach(el => el.classList.remove('input-error'));
+
+        const cName = cNameEl.value.trim();
+        const iName = iNameEl.value.trim();
+        const amt = parseFloat(amtEl.value);
+        const btl = parseFloat(btlEl.value);
         const col = document.getElementById('new-ing-color').value;
 
-        if(!cName || !iName || !amt || !btl) return;
+        // Visual Validation Failure
+        let hasError = false;
+        if(!cName) { cNameEl.classList.add('input-error'); hasError = true; }
+        if(!iName) { iNameEl.classList.add('input-error'); hasError = true; }
+        if(!amt) { amtEl.classList.add('input-error'); hasError = true; }
+        if(!btl) { btlEl.classList.add('input-error'); hasError = true; }
 
-        pendingNewSpec.push({
-            cocktailName: cName,
-            ingredientName: iName,
-            amount: amt,
-            bottleSize: btl,
-            categoryTag: col
-        });
+        if(hasError) {
+            triggerHaptic('error');
+            return;
+        }
 
-        // Clear inputs, keep cocktail name, return focus
-        document.getElementById('new-ing-name').value = '';
-        document.getElementById('new-ing-ml').value = '';
-        document.getElementById('new-ing-btl').value = '';
-        document.getElementById('new-ing-name').focus(); // Auto-focus for next entry
+        triggerHaptic('light');
+        pendingNewSpec.push({ cocktailName: cName, ingredientName: iName, amount: amt, bottleSize: btl, categoryTag: col });
+
+        iNameEl.value = '';
+        amtEl.value = '';
+        btlEl.value = '';
+        iNameEl.focus(); 
         
         renderNewSpecPreview();
     });
@@ -254,10 +300,10 @@ document.addEventListener('DOMContentLoaded', () => {
         triggerHaptic('heavy');
         
         const loader = document.getElementById('loader');
+        document.querySelector('.loader-text').innerText = "PUSHING TO VAULT...";
         loader.style.display = 'flex';
         loader.style.opacity = '1';
-        document.querySelector('.loader-text').innerText = "PUSHING TO VAULT...";
-
+        
         try {
             await fetch(API_URL, {
                 method: 'POST',
