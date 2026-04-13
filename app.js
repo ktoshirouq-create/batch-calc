@@ -79,14 +79,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadVault();
 
-    // SPEED RAIL LOGIC: Syrups
+    // SPEED RAIL LOGIC: Syrups & Smart Highlight
     const speedSyrupBtns = document.querySelectorAll('.speed-syrup-btn');
+    const newIngNameInput = document.getElementById('new-ing-name');
+
     speedSyrupBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             triggerHaptic('light');
-            document.getElementById('new-ing-name').value = e.target.getAttribute('data-name');
-            document.getElementById('new-ing-name').classList.remove('input-error');
+            
+            // Wipe active class from all syrup buttons, then lock it on the clicked one
+            speedSyrupBtns.forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            
+            newIngNameInput.value = e.target.getAttribute('data-name');
+            newIngNameInput.classList.remove('input-error');
         });
+    });
+
+    // Smart Override: Manually typing strips the syrup highlight
+    newIngNameInput.addEventListener('input', () => {
+        speedSyrupBtns.forEach(b => b.classList.remove('active'));
     });
 
     // SPEED RAIL LOGIC: Pour Matrix & Smart Highlight
@@ -106,7 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Smart Override: If you manually type, strip the gold highlight from all buttons
+    // Smart Override: Manually typing strips the pour highlight
     customMlInput.addEventListener('input', () => {
         speedPourBtns.forEach(b => b.classList.remove('active'));
     });
@@ -175,7 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const selectedColor = e.target.getAttribute('data-val');
             document.getElementById('new-ing-color').value = selectedColor;
 
-            // PROGRESSIVE DISCLOSURE: Show/Hide the Quick Syrups panel based on category
+            // PROGRESSIVE DISCLOSURE & WIPE
             if (selectedColor === 'magenta-glow') { // SYRUP
                 quickSyrupsPanel.classList.remove('hidden');
                 btlInput.classList.add('hidden');
@@ -183,6 +195,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } else { // SPIRIT (amber-glow)
                 quickSyrupsPanel.classList.add('hidden');
                 btlInput.classList.remove('hidden');
+                // Category Wipe: Strip syrup highlights when leaving syrup category
+                speedSyrupBtns.forEach(b => b.classList.remove('active'));
             }
         });
     });
@@ -419,7 +433,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if(b.getAttribute('data-val') === item.categoryTag) b.classList.add('active');
         });
 
-        // PROGRESSIVE DISCLOSURE RESET ON EDIT:
         if (item.categoryTag === 'magenta-glow') {
             document.getElementById('quick-syrups-panel').classList.remove('hidden');
             btlInputEl.classList.add('hidden');
@@ -428,8 +441,9 @@ document.addEventListener('DOMContentLoaded', () => {
             btlInputEl.classList.remove('hidden');
         }
 
-        // RESET POUR HIGHLIGHTS ON EDIT:
+        // Wipe all highlights on edit to keep slate clean
         document.querySelectorAll('.speed-pour-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.speed-syrup-btn').forEach(b => b.classList.remove('active'));
         
         pendingNewSpec.splice(index, 1);
         renderNewSpecPreview();
@@ -478,8 +492,9 @@ document.addEventListener('DOMContentLoaded', () => {
         amtEl.value = '';
         if (col === 'amber-glow') btlEl.value = '';
         
-        // Remove Active State from Pour Buttons after adding
+        // Remove Active State from Pour & Syrup Buttons after adding
         document.querySelectorAll('.speed-pour-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.speed-syrup-btn').forEach(b => b.classList.remove('active'));
 
         iNameEl.focus(); 
         
