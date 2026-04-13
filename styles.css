@@ -104,7 +104,8 @@ body {
 .nav-tab { flex: 1; background: transparent; border: none; color: var(--text-muted); font-size: 1.2rem; font-weight: 800; letter-spacing: 1px; text-align: center; padding-bottom: 10px; transition: color 0.3s ease; }
 .nav-tab.active { color: var(--nodee-gold); border-bottom: 2px solid var(--nodee-gold); }
 
-.content-area { flex: 1; padding: 20px; overflow-y: auto; position: relative; z-index: 5; }
+/* TARGETED FIX: Ensure main container hides horizontal overflow */
+.content-area { flex: 1; padding: 20px; overflow-y: auto; overflow-x: hidden; position: relative; z-index: 5; }
 .module { display: none; animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
 .module.active { display: block; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
@@ -131,10 +132,12 @@ body {
 .premium-text-input:focus { border-color: var(--nodee-gold); }
 .premium-text-input::placeholder { color: var(--text-muted); font-weight: 400; text-transform: none; }
 
-/* AUTO-CAPITALIZATION CSS */
 #new-spec-name, #new-ing-name { text-transform: capitalize; }
 
-.flex-row { display: flex; gap: 25px; width: 100%; }
+/* TARGETED FIX: Constrain the flex row and force equal widths */
+.flex-row { display: flex; gap: 15px; width: 100%; }
+.half-width { flex: 1; min-width: 0; width: 50%; }
+
 .premium-basic-input { 
     background: transparent; border: none; border-bottom: 1px solid #444; color: var(--text-main); 
     font-size: 1.1rem; padding: 10px 0; margin-bottom: 25px; outline: none; border-radius: 0; transition: all 0.3s;
