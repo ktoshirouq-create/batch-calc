@@ -45,7 +45,7 @@
 
             <div id="edit-ui" class="hidden">
                 <div class="card spec-card" style="border: 1px solid var(--neon-green)">
-                    <h2 class="card-title" style="color: var(--neon-green)">BUILD SPEC</h2>
+                    <h2 class="card-title" style="color: var(--neon-green)">ADD SPEC</h2>
                     <input type="text" id="new-spec-name" class="massive-text-input" placeholder="Cocktail Name">
                     
                     <div id="new-spec-preview" class="output-container" style="margin-bottom: 20px;"></div>
@@ -71,6 +71,26 @@
         </section>
 
         <section id="prep-module" class="module">
+            
+            <div class="card spec-card">
+                <h2 class="card-title">Syrup Ratio</h2>
+                <div class="input-group">
+                    <label>Base Weight (g)</label>
+                    <div class="massive-input"><input type="number" id="syrup-base" value="500"></div>
+                </div>
+                <div class="input-group">
+                    <label>Target Ratio (Base : Water)</label>
+                    <select id="syrup-ratio" class="recipe-dropdown" style="margin-bottom: 30px;">
+                        <option value="1">1:1 (Simple)</option>
+                        <option value="1.5">1.5:1 (Semi-Rich)</option>
+                        <option value="2">2:1 (Rich / Demerara)</option>
+                        <option value="3">3:1 (Honey / Agave)</option>
+                    </select>
+                </div>
+                <button id="calc-syrup-btn" class="btn-primary cyan-glow action-calc">CALCULATE WATER</button>
+                <div id="syrup-results" class="output-container" style="margin-top: 20px;"></div>
+            </div>
+
             <div class="card spec-card">
                 <h2 class="card-title">Brix Adjuster</h2>
                 <div class="input-group">
@@ -88,8 +108,9 @@
                     </div>
                 </div>
                 <button id="calc-brix-btn" class="btn-primary magenta-glow action-calc">CALCULATE SUGAR</button>
+                <div id="brix-results" class="output-container" style="margin-top: 20px;"></div>
             </div>
-            <div id="brix-results" class="output-container"></div>
+            
         </section>
 
     </main>
