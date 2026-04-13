@@ -8,7 +8,7 @@
     <link rel="icon" type="image/png" href="icon-512.png">
     <link rel="apple-touch-icon" href="icon-512.png">
     
-    <link rel="stylesheet" href="styles.css?v=16">
+    <link rel="stylesheet" href="styles.css?v=17">
     <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -70,15 +70,6 @@
                     <div id="new-spec-preview" class="output-container" style="margin-bottom: 20px;"></div>
 
                     <div class="ingredient-adder">
-                        
-                        <div class="speed-rail-group" style="margin-bottom: 15px;">
-                            <label style="color: var(--text-muted); font-size: 0.75rem; letter-spacing: 1px; margin-bottom: 8px; display: block;">QUICK SYRUPS</label>
-                            <div class="pill-group" style="margin-bottom: 15px;">
-                                <button class="speed-syrup-btn" data-name="Simple Syrup">SIMPLE</button>
-                                <button class="speed-syrup-btn" data-name="Honey Syrup">HONEY</button>
-                            </div>
-                        </div>
-
                         <input type="text" id="new-ing-name" class="premium-basic-input" placeholder="Ingredient Name">
                         
                         <div class="input-group" style="margin-bottom: 25px;">
@@ -88,6 +79,14 @@
                                 <button class="category-btn" data-val="magenta-glow">SYRUP</button>
                             </div>
                             <input type="hidden" id="new-ing-color" value="amber-glow">
+                        </div>
+
+                        <div id="quick-syrups-panel" class="speed-rail-group hidden" style="margin-bottom: 25px;">
+                            <label style="color: var(--text-muted); font-size: 0.75rem; letter-spacing: 1px; margin-bottom: 8px; display: block;">QUICK SYRUPS</label>
+                            <div class="pill-group" style="margin-bottom: 0;">
+                                <button class="speed-syrup-btn" data-name="Simple Syrup">SIMPLE</button>
+                                <button class="speed-syrup-btn" data-name="Honey Syrup">HONEY</button>
+                            </div>
                         </div>
 
                         <div class="speed-rail-group" style="margin-bottom: 10px;">
@@ -175,6 +174,6 @@
 
     </main>
 
-    <script src="app.js?v=16"></script>
+    <script src="app.js?v=17"></script>
 </body>
 </html>
