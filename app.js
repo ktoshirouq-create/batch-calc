@@ -108,6 +108,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    const sweetenerPills = document.querySelectorAll('.sweetener-pill');
+    sweetenerPills.forEach(pill => {
+        pill.addEventListener('click', (e) => {
+            triggerHaptic('light');
+            sweetenerPills.forEach(p => p.classList.remove('active'));
+            e.target.classList.add('active');
+            document.getElementById('sweetener-type').value = e.target.getAttribute('data-val');
+        });
+    });
+
     const categoryBtns = document.querySelectorAll('.category-btn');
     categoryBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -208,12 +218,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalBatchVolume = targetYieldBottles * BATCH_BOTTLE_SIZE_ML;
         const multiplier = totalBatchVolume / singleCocktailVolume;
 
-        // Clean K3-Only Header
         let htmlOutput = '<h3 class="zone-header">K3 LIQUOR PULL</h3>';
         let hasLiquor = false;
 
         spec.forEach(ing => {
-            // THE FILTER: Skip if it's not a Spirit/Liqueur
+            // FILTER: Skip if it's not a Spirit/Liqueur
             if (ing.color !== 'amber-glow') return; 
 
             const totalRequiredMl = Math.round(ing.amount * multiplier);
@@ -249,9 +258,23 @@ document.addEventListener('DOMContentLoaded', () => {
         triggerHaptic('heavy');
         const base = parseFloat(document.getElementById('syrup-base').value) || 0;
         const ratio = parseFloat(document.getElementById('syrup-ratio').value) || 1;
+        const sweetenerType = document.getElementById('sweetener-type').value;
+
         if(!base) return;
-        const waterWeight = Math.round(base / ratio);
-        const totalYield = base + waterWeight;
+
+        let waterWeight = 0;
+
+        if (sweetenerType === 'honey') {
+            // Standard ratio math minus 20% of the base weight (accounting for water in honey)
+            waterWeight = (base / ratio) - (base * 0.20);
+        } else {
+            // Standard ratio math for Demerara
+            waterWeight = base / ratio;
+        }
+
+        // Prevent negative water output if they enter a bizarre ratio
+        waterWeight = Math.max(0, Math.round(waterWeight));
+        const totalYield = Math.round(base + waterWeight);
 
         document.getElementById('syrup-results').innerHTML = `
             <div class="result-row cyan-glow">
