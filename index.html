@@ -8,7 +8,7 @@
     <link rel="icon" type="image/jpeg" href="icon-512.jpg">
     <link rel="apple-touch-icon" href="icon-512.jpg">
     
-    <link rel="stylesheet" href="styles.css?v=6">
+    <link rel="stylesheet" href="styles.css?v=7">
     <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -69,12 +69,8 @@
 
                     <div class="ingredient-adder">
                         <input type="text" id="new-ing-name" class="premium-basic-input" placeholder="Ingredient Name">
-                        <div class="flex-row">
-                            <input type="number" id="new-ing-ml" class="premium-basic-input" placeholder="ml">
-                            <input type="number" id="new-ing-btl" class="premium-basic-input" placeholder="Btl Size (ml)">
-                        </div>
                         
-                        <div class="input-group" style="margin-bottom: 35px;">
+                        <div class="input-group" style="margin-bottom: 25px;">
                             <label>Category</label>
                             <div class="category-group">
                                 <button class="category-btn active" data-val="amber-glow">SPIRIT</button>
@@ -84,7 +80,12 @@
                             <input type="hidden" id="new-ing-color" value="amber-glow">
                         </div>
 
-                        <button id="add-ing-btn" class="btn-secondary">+ ADD INGREDIENT</button>
+                        <div class="flex-row">
+                            <input type="number" id="new-ing-ml" class="premium-basic-input" placeholder="ml" style="flex: 1;">
+                            <input type="number" id="new-ing-btl" class="premium-basic-input" placeholder="Btl Size (ml)" style="flex: 1;">
+                        </div>
+
+                        <button id="add-ing-btn" class="btn-secondary" style="margin-top: 10px;">+ ADD INGREDIENT</button>
                     </div>
 
                     <button id="sync-vault-btn" class="btn-primary burgundy-btn" style="margin-top: 30px;">SYNC TO VAULT</button>
@@ -151,6 +152,6 @@
 
     </main>
 
-    <script src="app.js?v=6"></script>
+    <script src="app.js?v=7"></script>
 </body>
 </html>
