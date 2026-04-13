@@ -1,11 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
     
-    // --- THE INVISIBLE BRIDGE ---
     const API_URL = 'https://script.google.com/macros/s/AKfycbx_fku9O9Ljbul6DIYuattXyjtu2fH9U_Reb24irImb1vU60jxDJWExv4yy9s1k0w3Q/exec';
     
     let recipeVault = {};
-    let pendingNewSpec = []; // Holds ingredients before syncing
-    const BATCH_BOTTLE_SIZE_ML = 1000; // 1L Target Bottles
+    let pendingNewSpec = []; 
+    const BATCH_BOTTLE_SIZE_ML = 1000; 
 
     // --- HAPTICS ---
     const triggerHaptic = (type = 'light') => {
@@ -21,9 +20,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch(API_URL);
             const data = await res.json();
             
-            recipeVault = {}; // Reset
+            recipeVault = {}; 
             
-            // Group the flat sheet rows into cocktails
             data.forEach(row => {
                 if(!recipeVault[row.cocktailName]) {
                     recipeVault[row.cocktailName] = [];
@@ -36,7 +34,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
 
-            // Populate Dropdown
             const select = document.getElementById('recipe-select');
             select.innerHTML = '<option value="" disabled selected>Select Spec...</option>';
             Object.keys(recipeVault).forEach(cocktail => {
@@ -46,7 +43,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 select.appendChild(opt);
             });
 
-            // Fade out loader
             loader.style.opacity = '0';
             setTimeout(() => loader.style.display = 'none', 400);
 
@@ -56,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    loadVault(); // Run on startup
+    loadVault();
 
     // --- UI NAVIGATION ---
     const tabs = document.querySelectorAll('.nav-tab');
@@ -95,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- MODULE A: BATCH ENGINE ---
+    // --- MODULE A: BATCH ENGINE (Geographic Routing) ---
     document.getElementById('calc-batch-btn').addEventListener('click', () => {
         triggerHaptic('heavy');
         const recipeName = document.getElementById('recipe-select').value;
@@ -109,7 +105,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalBatchVolume = targetYieldBottles * BATCH_BOTTLE_SIZE_ML;
         const multiplier = totalBatchVolume / singleCocktailVolume;
 
-        resultsContainer.innerHTML = ''; 
+        let k3Html = '<h3 class="zone-header">K3 (Liquor & Dry Storage)</h3>';
+        let k2Html = '<h3 class="zone-header">K2 (Fridge Storage)</h3>';
+        let hasK3 = false, hasK2 = false;
 
         spec.forEach(ing => {
             const totalRequiredMl = Math.round(ing.amount * multiplier);
@@ -124,14 +122,50 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (totalRequiredMl === 0) amountText = '0ml';
 
-            const row = document.createElement('div');
-            row.className = `result-row ${ing.color}`;
-            row.innerHTML = `<span class="ing-name">${ing.name}</span><span class="ing-amount">${amountText}</span>`;
-            resultsContainer.appendChild(row);
+            const rowStr = `
+                <div class="result-row ${ing.color}">
+                    <span class="ing-name">${ing.name}</span>
+                    <span class="ing-amount">${amountText}</span>
+                </div>`;
+
+            if (ing.color === 'neon-green') {
+                k2Html += rowStr;
+                hasK2 = true;
+            } else {
+                k3Html += rowStr;
+                hasK3 = true;
+            }
         });
+
+        resultsContainer.innerHTML = (hasK3 ? k3Html : '') + (hasK2 ? k2Html : '');
     });
 
-    // --- MODULE B: BRIX ENGINE ---
+    // --- MODULE B: PREP ENGINES ---
+    
+    // Syrup Calculator
+    document.getElementById('calc-syrup-btn').addEventListener('click', () => {
+        triggerHaptic('heavy');
+        const base = parseFloat(document.getElementById('syrup-base').value) || 0;
+        const ratio = parseFloat(document.getElementById('syrup-ratio').value) || 1;
+
+        if(!base) return;
+        
+        const waterWeight = Math.round(base / ratio);
+        const totalYield = base + waterWeight;
+
+        document.getElementById('syrup-results').innerHTML = `
+            <div class="result-row cyan-glow">
+                <span class="ing-name">Add Hot Water</span>
+                <span class="ing-amount">${waterWeight}g</span>
+            </div>
+            <div class="result-row">
+                <span class="ing-name">Total Yield Container</span>
+                <span class="ing-amount" style="color:var(--text-main);">${totalYield}g</span>
+            </div>
+        `;
+    });
+
+    // Brix Adjuster
     document.getElementById('calc-brix-btn').addEventListener('click', () => {
         triggerHaptic('heavy');
         const weight = parseFloat(document.getElementById('brix-weight').value) || 0;
@@ -140,11 +174,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if(target <= current || target >= 100) return;
 
-        // Formula: S = W * ((Target - Current) / (100 - Target))
         const sugarGrams = Math.round(weight * ((target - current) / (100 - target)));
 
-        const resultsContainer = document.getElementById('brix-results');
-        resultsContainer.innerHTML = `
+        document.getElementById('brix-results').innerHTML = `
             <div class="result-row magenta-glow">
                 <span class="ing-name">Add White Sugar</span>
                 <span class="ing-amount">${sugarGrams}g</span>
@@ -156,12 +188,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const renderNewSpecPreview = () => {
         const preview = document.getElementById('new-spec-preview');
         preview.innerHTML = '';
-        pendingNewSpec.forEach(ing => {
+        pendingNewSpec.forEach((ing, index) => {
             const row = document.createElement('div');
             row.className = `result-row ${ing.categoryTag}`;
-            row.innerHTML = `<span class="ing-name">${ing.ingredientName} (${ing.bottleSize}ml Btl)</span><span class="ing-amount" style="font-size:1.5rem">${ing.amount}ml</span>`;
+            row.innerHTML = `
+                <span class="ing-name">${ing.ingredientName} (${ing.bottleSize}ml Btl)</span>
+                <span class="ing-amount" style="font-size:1.5rem">${ing.amount}ml</span>
+                <div class="action-links">
+                    <button class="action-btn edit" onclick="editPendingIng(${index})">[EDIT]</button>
+                    <button class="action-btn delete" onclick="deletePendingIng(${index})">[X]</button>
+                </div>
+            `;
             preview.appendChild(row);
         });
+    };
+
+    // Global scope for inline onclick handlers
+    window.editPendingIng = (index) => {
+        triggerHaptic('light');
+        const item = pendingNewSpec[index];
+        document.getElementById('new-ing-name').value = item.ingredientName;
+        document.getElementById('new-ing-ml').value = item.amount;
+        document.getElementById('new-ing-btl').value = item.bottleSize;
+        document.getElementById('new-ing-color').value = item.categoryTag;
+        
+        pendingNewSpec.splice(index, 1);
+        renderNewSpecPreview();
+    };
+
+    window.deletePendingIng = (index) => {
+        triggerHaptic('light');
+        pendingNewSpec.splice(index, 1);
+        renderNewSpecPreview();
     };
 
     document.getElementById('add-ing-btn').addEventListener('click', () => {
@@ -182,10 +240,11 @@ document.addEventListener('DOMContentLoaded', () => {
             categoryTag: col
         });
 
-        // Clear ingredient inputs, keep cocktail name
+        // Clear inputs, keep cocktail name, return focus
         document.getElementById('new-ing-name').value = '';
         document.getElementById('new-ing-ml').value = '';
         document.getElementById('new-ing-btl').value = '';
+        document.getElementById('new-ing-name').focus(); // Auto-focus for next entry
         
         renderNewSpecPreview();
     });
@@ -200,18 +259,16 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelector('.loader-text').innerText = "PUSHING TO VAULT...";
 
         try {
-            // Using text/plain to bypass CORS preflight, body is stringified JSON
             await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify(pendingNewSpec)
             });
 
-            pendingNewSpec = []; // Clear pending
-            document.getElementById('new-spec-name').value = ''; // Clear title
-            renderNewSpecPreview(); // Clear preview
+            pendingNewSpec = []; 
+            document.getElementById('new-spec-name').value = ''; 
+            renderNewSpecPreview(); 
             
-            // Reload the vault to get the fresh data
             await loadVault(); 
 
         } catch (error) {
