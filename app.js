@@ -4,8 +4,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     let recipeVault = {};
     let pendingNewSpec = []; 
-    
-    // Explicit 700ml constraint for perfect direct scaling
     const BATCH_BOTTLE_SIZE_ML = 700; 
 
     const triggerHaptic = (type = 'light') => {
@@ -170,17 +168,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, {passive: true});
 
+    // AUTO-WIPE LOGIC ADDED HERE
     scrollArea.addEventListener('touchend', async e => {
         if (scrollArea.scrollTop === 0 && touchStartY > 0) {
             const pullDistance = e.changedTouches[0].clientY - touchStartY;
             if (pullDistance > 70) {
-                ptrIndicator.innerText = "SYNCING VAULT...";
+                ptrIndicator.innerText = "SYNCING & CLEARING...";
                 triggerHaptic('heavy');
+                
+                // Clear all result outputs
+                document.getElementById('batch-results').innerHTML = '';
+                document.getElementById('syrup-results').innerHTML = '';
+                document.getElementById('brix-results').innerHTML = '';
+                
+                // Reset standard inputs
+                document.getElementById('target-yield').value = '5';
+                document.getElementById('syrup-base').value = '500';
+                document.getElementById('brix-weight').value = '500';
+                document.getElementById('brix-current').value = '9';
+                document.getElementById('brix-target').value = '50';
+                
+                // Reset Spec Selection
+                document.getElementById('recipe-select').value = '';
+                const specBtn = document.getElementById('open-spec-modal');
+                specBtn.innerText = 'Select Spec...';
+                specBtn.style.color = 'var(--text-muted)';
+                
                 await loadVault();
             }
             ptrIndicator.style.transform = `translateY(-20px)`;
             ptrIndicator.style.opacity = 0;
-            setTimeout(() => ptrIndicator.innerText = "↓ PULL TO SYNC ↓", 300);
+            setTimeout(() => ptrIndicator.innerText = "↓ PULL TO REFRESH ↓", 300);
         }
         touchStartY = 0;
     }, {passive: true});
