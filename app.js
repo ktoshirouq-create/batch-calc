@@ -86,21 +86,29 @@ document.addEventListener('DOMContentLoaded', () => {
             triggerHaptic('light');
             document.getElementById('new-ing-name').value = e.target.getAttribute('data-name');
             document.getElementById('new-ing-name').classList.remove('input-error');
-            
-            // Auto-click the SYRUP category
-            const syrupCatBtn = document.querySelector('.category-btn[data-val="magenta-glow"]');
-            if(syrupCatBtn) syrupCatBtn.click();
         });
     });
 
-    // SPEED RAIL LOGIC: Pour Matrix
+    // SPEED RAIL LOGIC: Pour Matrix & Smart Highlight
     const speedPourBtns = document.querySelectorAll('.speed-pour-btn');
+    const customMlInput = document.getElementById('new-ing-ml');
+
     speedPourBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             triggerHaptic('light');
-            document.getElementById('new-ing-ml').value = e.target.getAttribute('data-ml');
-            document.getElementById('new-ing-ml').classList.remove('input-error');
+            
+            // Wipe active class from all pour buttons, then lock it on the clicked one
+            speedPourBtns.forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            
+            customMlInput.value = e.target.getAttribute('data-ml');
+            customMlInput.classList.remove('input-error');
         });
+    });
+
+    // Smart Override: If you manually type, strip the gold highlight from all buttons
+    customMlInput.addEventListener('input', () => {
+        speedPourBtns.forEach(b => b.classList.remove('active'));
     });
 
     const yieldInput = document.getElementById('target-yield');
@@ -156,20 +164,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const categoryBtns = document.querySelectorAll('.category-btn');
     const btlInput = document.getElementById('new-ing-btl');
+    const quickSyrupsPanel = document.getElementById('quick-syrups-panel');
     
     categoryBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             triggerHaptic('light');
             categoryBtns.forEach(b => b.classList.remove('active'));
             e.target.classList.add('active');
+            
             const selectedColor = e.target.getAttribute('data-val');
             document.getElementById('new-ing-color').value = selectedColor;
 
-            if (selectedColor === 'amber-glow') {
-                btlInput.classList.remove('hidden');
-            } else {
+            // PROGRESSIVE DISCLOSURE: Show/Hide the Quick Syrups panel based on category
+            if (selectedColor === 'magenta-glow') { // SYRUP
+                quickSyrupsPanel.classList.remove('hidden');
                 btlInput.classList.add('hidden');
                 btlInput.value = ''; 
+            } else { // SPIRIT (amber-glow)
+                quickSyrupsPanel.classList.add('hidden');
+                btlInput.classList.remove('hidden');
             }
         });
     });
@@ -400,17 +413,23 @@ document.addEventListener('DOMContentLoaded', () => {
         
         document.getElementById('new-ing-color').value = item.categoryTag;
         
-        if (item.categoryTag === 'amber-glow') {
-            btlInputEl.classList.remove('hidden');
-        } else {
-            btlInputEl.classList.add('hidden');
-        }
-
         const catBtns = document.querySelectorAll('.category-btn');
         catBtns.forEach(b => {
             b.classList.remove('active');
             if(b.getAttribute('data-val') === item.categoryTag) b.classList.add('active');
         });
+
+        // PROGRESSIVE DISCLOSURE RESET ON EDIT:
+        if (item.categoryTag === 'magenta-glow') {
+            document.getElementById('quick-syrups-panel').classList.remove('hidden');
+            btlInputEl.classList.add('hidden');
+        } else {
+            document.getElementById('quick-syrups-panel').classList.add('hidden');
+            btlInputEl.classList.remove('hidden');
+        }
+
+        // RESET POUR HIGHLIGHTS ON EDIT:
+        document.querySelectorAll('.speed-pour-btn').forEach(b => b.classList.remove('active'));
         
         pendingNewSpec.splice(index, 1);
         renderNewSpecPreview();
@@ -458,6 +477,10 @@ document.addEventListener('DOMContentLoaded', () => {
         iNameEl.value = '';
         amtEl.value = '';
         if (col === 'amber-glow') btlEl.value = '';
+        
+        // Remove Active State from Pour Buttons after adding
+        document.querySelectorAll('.speed-pour-btn').forEach(b => b.classList.remove('active'));
+
         iNameEl.focus(); 
         
         renderNewSpecPreview();
