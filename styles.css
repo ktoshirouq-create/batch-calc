@@ -12,6 +12,7 @@
     --neon-cyan: #7EAAC8;
 }
 
+/* ANTI-NATIVE OVERRIDE: Forbids Chrome from changing our buttons to white */
 * {
     box-sizing: border-box;
     margin: 0;
@@ -177,8 +178,18 @@ body {
 .premium-basic-input:focus { border-color: var(--nodee-gold); }
 
 /* SPEED RAIL STYLES */
-.speed-syrup-btn { flex: 1; background: transparent; border: 1px solid rgba(176, 106, 139, 0.5); color: var(--magenta-glow); padding: 10px 0; border-radius: 12px; font-size: 0.85rem; font-weight: 800; transition: all 0.2s; text-align: center; cursor: pointer; }
-.speed-syrup-btn:active { background: var(--magenta-glow); color: var(--bg-oled); transform: scale(0.98); }
+.speed-syrup-btn { 
+    flex: 1; background: transparent; border: 1px solid rgba(176, 106, 139, 0.5); 
+    color: var(--magenta-glow); padding: 10px 0; border-radius: 12px; font-size: 0.85rem; 
+    font-weight: 800; transition: all 0.2s; text-align: center; cursor: pointer; 
+}
+/* ADDED: Active state lock for the Quick Syrup buttons */
+.speed-syrup-btn.active {
+    background: var(--magenta-glow);
+    color: var(--bg-oled);
+    border-color: var(--magenta-glow);
+}
+.speed-syrup-btn:active { transform: scale(0.98); }
 
 .speed-pour-row { 
     display: flex; gap: 8px; width: 100%; overflow-x: auto; 
@@ -190,7 +201,6 @@ body {
     color: var(--text-main); padding: 12px 18px; border-radius: 12px; font-size: 1rem; 
     font-weight: 700; transition: all 0.2s; cursor: pointer; 
 }
-/* ADDED: Active state lock for the Quick Pour buttons */
 .speed-pour-btn.active {
     background: var(--nodee-gold); 
     color: var(--bg-oled); 
