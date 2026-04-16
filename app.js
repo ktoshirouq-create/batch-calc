@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     let recipeVault = {};
     let pendingNewSpec = []; 
+    let editingCocktailName = null; // Tracks if we are editing an existing spec
 
     const triggerHaptic = (type = 'light') => {
         if (!navigator.vibrate) return;
@@ -82,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span class="cocktail-title">${cocktail}</span>
                         <div class="action-links" style="margin:0;">
                             <button class="action-btn edit" onclick="loadSpecToEdit('${cocktail}')">EDIT</button>
-                            <button class="action-btn delete" onclick="alertDeleteLimitation()">DEL</button>
+                            <button class="action-btn delete" onclick="deleteManagedSpec('${cocktail}')">DEL</button>
                         </div>
                     `;
                     managedList.appendChild(mItem);
@@ -100,10 +101,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadVault();
 
-    // Global Functions for Managed Vault
+    // LIVE FRONTEND TO BACKEND DELETE LOGIC
+    window.deleteManagedSpec = async (cocktailName) => {
+        if (!confirm(`Are you sure you want to completely delete '${cocktailName}' from the vault?`)) return;
+        
+        triggerHaptic('heavy');
+        const loader = document.getElementById('loader');
+        document.querySelector('.loader-text').innerText = "DELETING...";
+        loader.style.display = 'flex';
+        loader.style.opacity = '1';
+
+        try {
+            await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action: 'delete', cocktailName: cocktailName })
+            });
+            await loadVault();
+        } catch (error) {
+            console.error("Delete Error:", error);
+            document.querySelector('.loader-text').innerText = "DELETE FAILED.";
+            setTimeout(() => { loader.style.opacity = '0'; setTimeout(() => loader.style.display = 'none', 400); }, 2000);
+        }
+    };
+
+    // EDIT LOGIC (The Swap Maneuver Preparation)
     window.loadSpecToEdit = (cocktailName) => {
         triggerHaptic('heavy');
         pendingNewSpec = [];
+        editingCocktailName = cocktailName; // Lock the app into Edit Mode for this specific cocktail
         document.getElementById('new-spec-name').value = cocktailName;
         
         recipeVault[cocktailName].forEach(ing => {
@@ -119,13 +145,8 @@ document.addEventListener('DOMContentLoaded', () => {
         renderNewSpecPreview();
         document.getElementById('scroll-area').scrollTop = 0;
         
-        // Let them know this creates a duplicate unless they clear the sheet
-        alert("Cocktail loaded into builder. \n\nNote: Saving this will add new rows to your Google Sheet. You must manually clear the old rows to prevent duplicates.");
-    };
-
-    window.alertDeleteLimitation = () => {
-        triggerHaptic('error');
-        alert("Database Protected. \n\nPlease open your Google Sheet manually and delete the rows for this cocktail. (A future Apps Script update will automate this).");
+        // Change the Sync Button to an Update Button
+        document.getElementById('sync-vault-btn').innerText = "UPDATE COCKTAIL";
     };
 
     // UI: Target Yield Stepper & Smart Labels
@@ -312,6 +333,13 @@ document.addEventListener('DOMContentLoaded', () => {
             lockBtn.style.borderColor = 'var(--text-muted)';
             editUI.classList.add('hidden');
             serviceUI.classList.remove('hidden');
+            
+            // Safety: Reset editing state if they lock the app mid-edit
+            editingCocktailName = null;
+            document.getElementById('sync-vault-btn').innerText = "SYNC TO VAULT";
+            pendingNewSpec = [];
+            document.getElementById('new-spec-name').value = '';
+            renderNewSpecPreview();
         }
     });
 
@@ -351,7 +379,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const bottlesToGrab = Math.floor(totalRequiredMl / ing.bottleSize);
                 const remainderMl = totalRequiredMl % ing.bottleSize;
 
-                if (bottlesToGrab > 0) amountText += `${bottlesToGrab} Btl`; // Simplified
+                if (bottlesToGrab > 0) amountText += `${bottlesToGrab} Btl`; 
                 if (remainderMl > 0) {
                     if (amountText !== '') amountText += ' + ';
                     amountText += `${remainderMl}ml`;
@@ -532,26 +560,52 @@ document.addEventListener('DOMContentLoaded', () => {
         renderNewSpecPreview();
     });
 
+    // PUSH / UPDATE TO VAULT (The Swap Maneuver)
     document.getElementById('sync-vault-btn').addEventListener('click', async () => {
         if(pendingNewSpec.length === 0) return;
         triggerHaptic('heavy');
         
+        // Grab the final name from the input box in case they changed it while editing
+        const finalName = capitalizeText(document.getElementById('new-spec-name').value.trim());
+        if(!finalName) {
+            document.getElementById('new-spec-name').classList.add('input-error');
+            setTimeout(() => document.getElementById('new-spec-name').classList.remove('input-error'), 400);
+            triggerHaptic('error');
+            return;
+        }
+
+        // Force all pending ingredients to use this final cocktail name
+        pendingNewSpec.forEach(ing => ing.cocktailName = finalName);
+        
         const loader = document.getElementById('loader');
-        document.querySelector('.loader-text').innerText = "PUSHING TO VAULT...";
+        document.querySelector('.loader-text').innerText = editingCocktailName ? "UPDATING VAULT..." : "PUSHING TO VAULT...";
         loader.style.display = 'flex';
         loader.style.opacity = '1';
         
         try {
+            // If we are editing, send the DELETE command for the old version first
+            if (editingCocktailName) {
+                await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: 'delete', cocktailName: editingCocktailName })
+                });
+            }
+
+            // Push the new version
             await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify(pendingNewSpec)
             });
 
+            // Reset the UI State
             pendingNewSpec = []; 
             document.getElementById('new-spec-name').value = ''; 
-            renderNewSpecPreview(); 
+            editingCocktailName = null; 
+            document.getElementById('sync-vault-btn').innerText = "SYNC TO VAULT";
             
+            renderNewSpecPreview(); 
             await loadVault(); 
 
         } catch (error) {
