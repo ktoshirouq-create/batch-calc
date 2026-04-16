@@ -80,14 +80,11 @@ body {
 .category-group { display: flex; flex-direction: row; gap: 10px; margin-bottom: 10px; width: 100%; }
 .category-btn {
     flex: 1; background: transparent; border: 1px solid; 
-    padding: 15px 0; border-radius: 12px; font-size: 0.85rem; font-weight: 800; text-align: center; transition: all 0.2s;
+    padding: 12px 0; border-radius: 12px; font-size: 0.85rem; font-weight: 800; text-align: center; transition: all 0.2s;
 }
 .category-btn[data-val="amber-glow"] { border-color: var(--amber-glow); color: var(--amber-glow); }
-.category-btn[data-val="neon-green"] { border-color: var(--neon-green); color: var(--neon-green); }
 .category-btn[data-val="magenta-glow"] { border-color: var(--magenta-glow); color: var(--magenta-glow); }
-
 .category-btn[data-val="amber-glow"].active { background: var(--amber-glow); color: var(--bg-oled); }
-.category-btn[data-val="neon-green"].active { background: var(--neon-green); color: var(--bg-oled); }
 .category-btn[data-val="magenta-glow"].active { background: var(--magenta-glow); color: var(--bg-oled); }
 
 /* Ratio & Sweetener Pills */
@@ -174,8 +171,17 @@ body {
 .premium-basic-input::placeholder { color: var(--text-muted); text-transform: none; }
 .premium-basic-input:focus { border-color: var(--nodee-gold); }
 
+/* Compact inputs for builder */
+.compact-input { margin-bottom: 15px; padding: 6px 0; }
+.ingredient-adder {
+    background: rgba(0, 0, 0, 0.4);
+    padding: 20px;
+    border-radius: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
 /* Quick Pills */
-.quick-pills { gap: 10px; display: flex; margin-bottom: 25px; }
+.quick-pills { gap: 10px; display: flex; margin-bottom: 10px; margin-top: 8px;}
 .quick-pill-btn {
     flex: 1; background: transparent; border: 1px solid #444; color: var(--text-muted);
     padding: 6px 0; border-radius: 8px; font-size: 0.75rem; font-weight: 700; transition: all 0.2s; cursor: pointer;
@@ -206,7 +212,6 @@ body {
 .result-row:last-child { border-bottom: none; }
 .result-row.amber-glow .ing-amount { color: var(--amber-glow); }
 .result-row.magenta-glow .ing-amount { color: var(--magenta-glow); }
-.result-row.neon-green .ing-amount { color: var(--neon-green); }
 .result-row.cyan-glow .ing-amount { color: var(--neon-cyan); }
 
 .ing-name { font-size: 1rem; color: var(--text-muted); margin-bottom: 4px; font-weight: 500; }
@@ -227,7 +232,7 @@ body {
 .action-btn.edit { color: var(--nodee-gold); }
 .action-btn.delete { color: #ff4444; }
 
-/* THE VAULT ACCORDION UI */
+/* THE VAULT 10/10 UX ACCORDION */
 .vault-item { border-bottom: 1px solid #222; padding: 5px 0; transition: background 0.2s; cursor: pointer; }
 .vault-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 0; }
 .cocktail-title { color: var(--text-main); font-size: 1.1rem; font-weight: 500; pointer-events: none; }
@@ -239,10 +244,17 @@ body {
     transition: max-height 0.3s cubic-bezier(0, 1, 0, 1), opacity 0.3s ease;
 }
 .vault-item.expanded .vault-details {
-    max-height: 1000px; /* Arbitrary large number for CSS transition hack */
+    max-height: 1500px;
     opacity: 1;
     transition: max-height 0.4s ease-in-out, opacity 0.4s ease;
-    padding-bottom: 15px;
+    padding: 10px 20px 15px 15px;
+    margin: 5px 0 25px 5px;
+    background: rgba(255, 255, 255, 0.03);
+    border-left: 2px solid var(--nodee-gold);
+    border-radius: 0 12px 12px 0;
 }
-.vault-details .result-row { padding: 8px 0; }
-.vault-details .ing-amount { font-size: 1.2rem; }
+
+.vault-details .result-row { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.02); }
+.vault-details .result-row:last-child { border-bottom: none; }
+.vault-details .ing-name { font-size: 1.1rem; color: var(--text-main); font-weight: 600; margin-bottom: 2px;}
+.vault-details .ing-amount { font-size: 1.25rem; font-weight: 400; }
