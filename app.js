@@ -55,6 +55,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 managedList.innerHTML = '<p style="color:var(--text-muted); font-size:0.9rem; padding: 10px 0;">No cocktails saved yet.</p>';
             } else {
                 specNames.forEach(cocktail => {
+                    // Sort Logic: Spirits (amber) top, Syrups (magenta) bottom
+                    recipeVault[cocktail].sort((a, b) => {
+                        if (a.color === 'amber-glow' && b.color === 'magenta-glow') return -1;
+                        if (a.color === 'magenta-glow' && b.color === 'amber-glow') return 1;
+                        return 0;
+                    });
+
                     // Inject Modal Item for Batch Screen
                     const item = document.createElement('div');
                     item.className = 'modal-item';
@@ -105,7 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            // If we are currently unlocked, ensure newly generated admin controls are visible
+            // If unlocked, ensure newly generated admin controls are visible
             const isLocked = document.getElementById('edit-toggle').innerText === 'LOCKED';
             if (!isLocked) {
                 document.querySelectorAll('.admin-controls').forEach(el => el.classList.remove('hidden'));
@@ -131,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 item.style.display = 'block';
             } else {
                 item.style.display = 'none';
-                item.classList.remove('expanded'); // Close if hidden
+                item.classList.remove('expanded'); 
             }
         });
     });
@@ -160,7 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // EDIT LOGIC (Swap maneuver prep)
+    // EDIT LOGIC
     window.loadSpecToEdit = (cocktailName) => {
         triggerHaptic('heavy');
         pendingNewSpec = [];
@@ -498,6 +505,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         pendingNewSpec.splice(index, 1);
         renderNewSpecPreview();
+        
+        // Auto-focus for fast editing
+        document.getElementById('new-ing-name').focus();
     };
 
     window.deletePendingIng = (index) => {
@@ -537,8 +547,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         iNameEl.value = ''; amtEl.value = '';
         if (col === 'amber-glow') btlEl.value = '';
-        iNameEl.focus(); 
+        
         renderNewSpecPreview();
+        
+        // Auto-focus back into the name field to keep keyboard open
+        iNameEl.focus(); 
     });
 
     // PUSH / UPDATE
