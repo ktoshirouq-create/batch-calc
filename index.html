@@ -8,7 +8,7 @@
     <link rel="icon" type="image/png" href="icon-512.png">
     <link rel="apple-touch-icon" href="icon-512.png">
     
-    <link rel="stylesheet" href="styles.css?v=16">
+    <link rel="stylesheet" href="styles.css?v=17">
     <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -130,22 +130,21 @@
                 <div id="new-spec-preview" class="output-container" style="margin-bottom: 20px;"></div>
 
                 <div class="ingredient-adder">
-                    <input type="text" id="new-ing-name" class="premium-basic-input" placeholder="Ingredient Name">
+                    <input type="text" id="new-ing-name" class="premium-basic-input compact-input" placeholder="Ingredient Name">
                     
-                    <div class="input-group" style="margin-bottom: 25px;">
+                    <div class="input-group" style="margin-bottom: 15px;">
                         <label>Category</label>
                         <div class="category-group">
                             <button class="category-btn active" data-val="amber-glow">SPIRIT</button>
-                            <button class="category-btn" data-val="neon-green">JUICE</button>
                             <button class="category-btn" data-val="magenta-glow">SYRUP</button>
                         </div>
                         <input type="hidden" id="new-ing-color" value="amber-glow">
                     </div>
 
                     <div class="flex-row">
-                        <input type="number" id="new-ing-ml" class="premium-basic-input half-width" placeholder="ml">
+                        <input type="number" id="new-ing-ml" class="premium-basic-input compact-input half-width" placeholder="ml">
                         <div class="half-width" id="btl-size-container">
-                            <input type="number" id="new-ing-btl" class="premium-basic-input w-100" placeholder="Btl Size (ml)" style="margin-bottom: 8px;">
+                            <input type="number" id="new-ing-btl" class="premium-basic-input compact-input w-100" placeholder="Btl Size (ml)">
                             <div class="quick-pills flex-row">
                                 <button class="quick-pill-btn" data-val="500">500ml</button>
                                 <button class="quick-pill-btn" data-val="700">700ml</button>
@@ -153,7 +152,7 @@
                         </div>
                     </div>
 
-                    <button id="add-ing-btn" class="btn-secondary" style="margin-top: 15px;">+ ADD INGREDIENT</button>
+                    <button id="add-ing-btn" class="btn-secondary" style="margin-top: 10px;">+ ADD INGREDIENT</button>
                 </div>
 
                 <button id="sync-vault-btn" class="btn-primary burgundy-btn" style="margin-top: 30px;">SYNC TO VAULT</button>
@@ -169,6 +168,6 @@
 
     </main>
 
-    <script src="app.js?v=16"></script>
+    <script src="app.js?v=17"></script>
 </body>
 </html>
