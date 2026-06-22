@@ -2,18 +2,17 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- BATCHING ENGINE RULES (THE BOUNCER) ---
     const BATCH_CONFIG = {
-        'Spirit Batch': { allowedCategories: ['amber-glow', 'neon-cyan', 'magenta-glow'] }, // Spirits, Liqueurs, & Syrups!
-        'Juice Batch': { allowedCategories: ['juice-glow', 'magenta-glow'] }, // Juices & Syrups
-        'Espresso Batch': { allowedCategories: ['coffee-dark'] } // Espresso
+        'Spirit Batch': { allowedCategories: ['amber-glow', 'neon-cyan', 'magenta-glow'] }, 
+        'Juice Batch': { allowedCategories: ['juice-glow', 'puree-mango', 'magenta-glow'] }, 
+        'Espresso Batch': { allowedCategories: ['coffee-dark'] }
     };
 
     function canAddToBatch(catClass, batchType) {
-        if (batchType === 'Mocktail' || batchType === 'Custom') return true; // No strict rules for these
+        if (batchType === 'Mocktail' || batchType === 'Custom') return true; 
         const config = BATCH_CONFIG[batchType];
         if (!config) return true;
         return config.allowedCategories.includes(catClass);
     }
-    // -------------------------------------------
 
     // --- STATE & CONFIG ---
     const API_URL = 'https://script.google.com/macros/s/AKfycbx_fku9O9Ljbul6DIYuattXyjtu2fH9U_Reb24irImb1vU60jxDJWExv4yy9s1k0w3Q/exec';
@@ -265,8 +264,12 @@ document.addEventListener('DOMContentLoaded', () => {
             mainSection.className = 'vault-main-section';
             let html = '';
             mainIngs.forEach(ing => {
-                const amt = ing.amount * round;
-                html += `<div class="result-row ${ing.color}"><span class="ing-name">${ing.name}</span><span class="ing-amount">${formatAmount(amt)}ml</span></div>`;
+                html += `<div class="result-row ${ing.color}"><span class="ing-name">${ing.name}</span>`;
+                if (ing.color === 'static-ruby') {
+                    html += `<span class="ing-amount">${ing.amount || ''} ${ing.unit || 'dash'}</span></div>`;
+                } else {
+                    html += `<span class="ing-amount">${formatAmount(ing.amount * round)}ml</span></div>`;
+                }
             });
             mainSection.innerHTML = html;
             container.appendChild(mainSection);
@@ -284,8 +287,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (sbIngs.length === 0) return;
                 const label = sbName.replace(cocktail + ' — ', '');
                 
-                // MULTIPLIER MATH: Scale the total yield and individual amounts by the round
-                const baseBatchYield = sbIngs.reduce((s, i) => s + (i.amount || 0), 0);
+                // MULTIPLIER MATH: Scale the total yield bypassing static elements
+                const baseBatchYield = sbIngs.filter(i => i.color !== 'static-ruby').reduce((s, i) => s + (i.amount || 0), 0);
                 const batchYield = baseBatchYield * round;
                 const mainRef = mainIngs.find(i => i.name === label);
                 let yieldLabel = `${formatAmount(batchYield)}ml`;
@@ -298,7 +301,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 section.className = 'vault-subbatch';
                 let html = `<h4 class="vault-subbatch-title">${label.toUpperCase()}<span class="vault-yield-label">${yieldLabel}</span></h4>`;
                 sbIngs.forEach(ing => {
-                    html += `<div class="subbatch-row ${ing.color}"><span class="ing-name">${ing.name}</span><span class="ing-amount">${formatAmount(ing.amount * round)}ml</span></div>`;
+                    let amtHtml = ing.color === 'static-ruby' ? `${ing.amount || ''} ${ing.unit || 'dash'}` : `${formatAmount(ing.amount * round)}ml`;
+                    html += `<div class="subbatch-row ${ing.color}"><span class="ing-name">${ing.name}</span><span class="ing-amount">${amtHtml}</span></div>`;
                 });
                 section.innerHTML = html;
                 container.appendChild(section);
@@ -313,18 +317,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const specs = Object.keys(recipeVault);
         if (specs.length === 0) { list.innerHTML = '<p class="text-muted text-sm">Database empty.</p>'; return; }
 
-        const catOrder = { 'amber-glow': 1, 'neon-cyan': 2, 'juice-glow': 3, 'magenta-glow': 4 };
+        const catOrder = { 'amber-glow': 1, 'neon-cyan': 2, 'juice-glow': 3, 'magenta-glow': 4, 'coffee-dark': 5, 'puree-mango': 6, 'static-ruby': 7 };
         const mains = specs.filter(s => !s.includes(' — '));
         const orphans = specs.filter(s => s.includes(' — ') && !mains.some(m => s.startsWith(m + ' — ')));
         const toRender = [...mains, ...orphans];
 
         toRender.forEach(cocktail => {
-            recipeVault[cocktail].sort((a, b) => (catOrder[a.color] || 5) - (catOrder[b.color] || 5));
+            recipeVault[cocktail].sort((a, b) => (catOrder[a.color] || 10) - (catOrder[b.color] || 10));
             const subBatches = specs.filter(s => s.startsWith(cocktail + ' — '));
-            subBatches.forEach(sb => recipeVault[sb].sort((a, b) => (catOrder[a.color] || 5) - (catOrder[b.color] || 5)));
+            subBatches.forEach(sb => recipeVault[sb].sort((a, b) => (catOrder[a.color] || 10) - (catOrder[b.color] || 10)));
 
             const id = cocktail.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
-            const escapedName = cocktail.replace(/'/g, "\\'");
 
             const vItem = document.createElement('div');
             vItem.className = 'vault-item';
@@ -438,40 +441,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof renderShelf === 'function') renderShelf();
     }
 
-    window.updateRound = (cocktailId, change) => {
-        triggerHaptic('light');
-        const valSpan = document.getElementById(`mult-val-${cocktailId}`);
-        if (!valSpan) return;
-        let next = (parseInt(valSpan.innerText) || 1) + change;
-        if(next < 1) next = 1;
-        
-        valSpan.innerText = next;
-        window.lastUsedRound = next; 
-
-        const container = document.getElementById(`recipe-list-${cocktailId}`);
-        if (container) {
-            container.querySelectorAll('.base-amt').forEach(el => {
-                el.innerText = `${(parseFloat(el.getAttribute('data-base')) * next).toFixed(1).replace(/\.0$/, '')}ml`;
-            });
-            const totalEl = container.querySelector('.base-total');
-            if(totalEl) totalEl.innerText = `${(parseFloat(totalEl.getAttribute('data-base')) * next).toFixed(1).replace(/\.0$/, '')}ml`;
-        }
-    };
-
-    const searchInput = document.getElementById('vault-search');
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            const term = e.target.value.toLowerCase();
-            document.querySelectorAll('.vault-item').forEach(item => {
-                const title = item.querySelector('.cocktail-title').innerText.toLowerCase();
-                item.style.display = title.includes(term) ? 'block' : 'none';
-            });
-        });
-    }
-
     // --- SPEC BUILDER ---
     let builderState = { name: '', sections: [{ name: 'MAIN', ingredients: [] }] };
-    const catLabels = { 'amber-glow': 'SPIRIT', 'neon-cyan': 'LIQUEUR', 'juice-glow': 'JUICE', 'magenta-glow': 'SYRUP', 'coffee-dark': 'ESPRESSO' };
+    const catLabels = { 'amber-glow': 'SPIRIT', 'neon-cyan': 'LIQUEUR', 'juice-glow': 'JUICE', 'magenta-glow': 'SYRUP', 'coffee-dark': 'ESPRESSO', 'puree-mango': 'PUREE', 'static-ruby': 'STATIC' };
 
     function renderBuilder() {
         const container = document.getElementById('builder-sections');
@@ -492,15 +464,50 @@ document.addEventListener('DOMContentLoaded', () => {
             sec.ingredients.forEach((ing, ingIdx) => {
                 const row = document.createElement('div');
                 row.className = 'builder-row';
+                
+                let amountHtml = '';
+                if (ing.cat === 'static-ruby') {
+                    const u = ing.unit || 'dash';
+                    amountHtml = `
+                        <div style="display:flex; width: 85px; align-items:center; gap:4px; margin-right:4px;">
+                           <input type="number" class="builder-static-input" value="${ing.amount || ''}" placeholder="0" style="width:30px;">
+                           <button class="unit-pill" data-unit="${u}">${u}</button>
+                        </div>
+                    `;
+                } else {
+                    amountHtml = `<input type="number" class="builder-row-amount" value="${ing.amount || ''}" placeholder="0">`;
+                }
+                
                 row.innerHTML = `
-                    <input type="number" class="builder-row-amount" value="${ing.amount || ''}" placeholder="0">
+                    ${amountHtml}
                     <input type="text" class="builder-row-name" list="shelf-suggestions" autocomplete="off" value="${(ing.name || '').replace(/"/g, '&quot;')}" placeholder="Ingredient">
                     <button class="builder-row-cat ${ing.cat}">${catLabels[ing.cat] || 'SPIRIT'}</button>
                     <button class="builder-row-remove">×</button>
                 `;
-                row.querySelector('.builder-row-amount').addEventListener('input', e => {
-                    builderState.sections[secIdx].ingredients[ingIdx].amount = parseFloat(e.target.value) || 0;
-                });
+                
+                if (ing.cat === 'static-ruby') {
+                    const staticInput = row.querySelector('.builder-static-input');
+                    if (staticInput) {
+                        staticInput.addEventListener('input', (e) => {
+                            builderState.sections[secIdx].ingredients[ingIdx].amount = parseFloat(e.target.value) || 0;
+                        });
+                    }
+                    const unitPill = row.querySelector('.unit-pill');
+                    if (unitPill) {
+                        unitPill.addEventListener('click', (e) => {
+                            triggerHaptic('light');
+                            const units = ['dash', 'squeeze', 'rinse'];
+                            let currIdx = units.indexOf(e.target.dataset.unit || 'dash');
+                            builderState.sections[secIdx].ingredients[ingIdx].unit = units[(currIdx + 1) % units.length];
+                            renderBuilder();
+                        });
+                    }
+                } else {
+                    row.querySelector('.builder-row-amount').addEventListener('input', e => {
+                        builderState.sections[secIdx].ingredients[ingIdx].amount = parseFloat(e.target.value) || 0;
+                    });
+                }
+                
                 row.querySelector('.builder-row-name').addEventListener('input', e => {
                     const val = e.target.value;
                     builderState.sections[secIdx].ingredients[ingIdx].name = val;
@@ -514,19 +521,24 @@ document.addEventListener('DOMContentLoaded', () => {
                                 const catBtn = row.querySelector('.builder-row-cat');
                                 catBtn.className = `builder-row-cat ${shelfCat}`;
                                 catBtn.innerText = catLabels[shelfCat] || 'SPIRIT';
+                                if (shelfCat === 'static-ruby') renderBuilder(); // Re-render to switch UI
                             }
                         }
                     }
                 });
                 row.querySelector('.builder-row-cat').addEventListener('click', () => {
                 triggerHaptic('light');
-                const cats = ['amber-glow', 'neon-cyan', 'juice-glow', 'magenta-glow', 'coffee-dark'];
+                const cats = ['amber-glow', 'neon-cyan', 'juice-glow', 'puree-mango', 'magenta-glow', 'coffee-dark', 'static-ruby'];
                 const current = builderState.sections[secIdx].ingredients[ingIdx].cat;
                     const next = cats[(cats.indexOf(current) + 1) % cats.length];
                     builderState.sections[secIdx].ingredients[ingIdx].cat = next;
-                    const btn = row.querySelector('.builder-row-cat');
-                    btn.className = `builder-row-cat ${next}`;
-                    btn.innerText = catLabels[next];
+                    if (next === 'static-ruby' || current === 'static-ruby') {
+                        renderBuilder(); // Re-render to toggle the static input UI
+                    } else {
+                        const btn = row.querySelector('.builder-row-cat');
+                        btn.className = `builder-row-cat ${next}`;
+                        btn.innerText = catLabels[next];
+                    }
                 });
                 row.querySelector('.builder-row-remove').addEventListener('click', () => {
                     triggerHaptic('light');
@@ -614,7 +626,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         ingredientName: capitalize(ing.name.trim()),
                         amount: parseFloat(ing.amount),
                         bottleSize: 0,
-                        categoryTag: ing.cat
+                        categoryTag: ing.cat,
+                        unit: ing.cat === 'static-ruby' ? (ing.unit || 'dash') : ''
                     });
                 });
             });
@@ -649,14 +662,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- BATCH BUILDER (one tap creates sub-section + MAIN reference) ---
+    // --- BATCH BUILDER ---
     let batchBuilderState = null;
 
     function openBatchBuilder() {
         batchBuilderState = { type: 'Spirit Batch', customType: '', ingredients: [], perDrink: 0 };
         
         const addBtn = document.getElementById('add-batch-btn');
-        if (addBtn) addBtn.classList.add('hidden'); // Hide button to prevent accidental closing
+        if (addBtn) addBtn.classList.add('hidden');
         
         const mainSec = builderState.sections.find(s => s.name === 'MAIN');
         let allowed = BATCH_CONFIG['Spirit Batch'].allowedCategories;
@@ -672,7 +685,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let defName = allowed[0] === 'coffee-dark' ? 'Espresso' : '';
             batchBuilderState.ingredients.push({ amount: 0, name: defName, cat: allowed[0] });
         } else {
-            batchBuilderState.perDrink = batchBuilderState.ingredients.reduce((sum, ing) => sum + (ing.amount || 0), 0);
+            batchBuilderState.perDrink = batchBuilderState.ingredients.filter(i => i.cat !== 'static-ruby').reduce((sum, ing) => sum + (ing.amount || 0), 0);
         }
         renderBuilder();
         renderBatchForm();
@@ -693,7 +706,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (c) c.innerHTML = '';
         
         const addBtn = document.getElementById('add-batch-btn');
-        if (addBtn) addBtn.classList.remove('hidden'); // Bring the button back
+        if (addBtn) addBtn.classList.remove('hidden');
     }
 
     function confirmBatchBuilder() {
@@ -701,7 +714,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const validIngs = batchBuilderState.ingredients.filter(i => i.name.trim() && i.amount > 0);
         if (validIngs.length === 0) return openAlertModal("Add at least one constituent ingredient with name and amount.");
         
-        // RELY ON MANUAL SERVICE POUR OVERRIDE
         const perDrink = batchBuilderState.perDrink;
         if (!perDrink || perDrink <= 0) return openAlertModal("Set a service pour amount greater than 0.");
         
@@ -717,24 +729,22 @@ document.addEventListener('DOMContentLoaded', () => {
             builderState.sections.push(subSection);
         }
         validIngs.forEach(i => {
-            subSection.ingredients.push({ amount: i.amount, name: capitalize(i.name.trim()), cat: i.cat });
+            subSection.ingredients.push({ amount: i.amount, name: capitalize(i.name.trim()), cat: i.cat, unit: i.unit });
         });
         const mainSection = builderState.sections.find(s => s.name === 'MAIN');
-                if (mainSection) {
-                    const existing = mainSection.ingredients.find(i => i.name && i.name.toLowerCase() === batchName.toLowerCase());
-                    if (existing) { existing.amount = perDrink; existing.cat = mainCat; }
-                    else { mainSection.ingredients.push({ amount: perDrink, name: batchName, cat: mainCat }); }
-                }
-                
-                // PREVENT BUG: Clear the state so it doesn't dump items back to MAIN
-            batchBuilderState.ingredients = [];
-            closeBatchBuilder();
-            renderBuilder();
-            
-            // PREVENT SCROLL JUMP: Snap back to the top of the builder
-            const scrollArea = document.getElementById('scroll-area');
-            if (scrollArea) scrollArea.scrollTop = 0;
+        if (mainSection) {
+            const existing = mainSection.ingredients.find(i => i.name && i.name.toLowerCase() === batchName.toLowerCase());
+            if (existing) { existing.amount = perDrink; existing.cat = mainCat; }
+            else { mainSection.ingredients.push({ amount: perDrink, name: batchName, cat: mainCat }); }
         }
+                
+        batchBuilderState.ingredients = [];
+        closeBatchBuilder();
+        renderBuilder();
+        
+        const scrollArea = document.getElementById('scroll-area');
+        if (scrollArea) scrollArea.scrollTop = 0;
+    }
 
     function renderBatchForm() {
         const container = document.getElementById('batch-form-container');
@@ -791,9 +801,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 batchBuilderState.ingredients = [];
                 batchBuilderState.type = newType;
                 
-                let allowed = ['amber-glow', 'neon-cyan', 'juice-glow', 'magenta-glow', 'coffee-dark'];
+                let allowed = ['amber-glow', 'neon-cyan', 'juice-glow', 'puree-mango', 'magenta-glow', 'coffee-dark'];
                 if (BATCH_CONFIG[newType]) allowed = BATCH_CONFIG[newType].allowedCategories;
-                else if (newType === 'Mocktail') allowed = ['juice-glow', 'magenta-glow'];
+                else if (newType === 'Mocktail') allowed = ['juice-glow', 'puree-mango', 'magenta-glow'];
 
                 if (mainSec) {
                     for (let i = mainSec.ingredients.length - 1; i >= 0; i--) {
@@ -810,7 +820,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     batchBuilderState.ingredients.push({ amount: 0, name: defName, cat: defCat });
                     batchBuilderState.perDrink = 0;
                 } else {
-                    batchBuilderState.perDrink = batchBuilderState.ingredients.reduce((sum, ing) => sum + (ing.amount || 0), 0);
+                    batchBuilderState.perDrink = batchBuilderState.ingredients.filter(i => i.cat !== 'static-ruby').reduce((sum, ing) => sum + (ing.amount || 0), 0);
                 }
 
                 renderBuilder();
@@ -859,33 +869,67 @@ document.addEventListener('DOMContentLoaded', () => {
         batchBuilderState.ingredients.forEach((ing, idx) => {
             const row = document.createElement('div');
             row.className = 'builder-row';
+            
+            let amountHtml = '';
+            if (ing.cat === 'static-ruby') {
+                const u = ing.unit || 'dash';
+                amountHtml = `
+                    <div style="display:flex; width: 85px; align-items:center; gap:4px; margin-right:4px;">
+                       <input type="number" class="builder-static-input" value="${ing.amount || ''}" placeholder="0" style="width:30px;">
+                       <button class="unit-pill" data-unit="${u}">${u}</button>
+                    </div>
+                `;
+            } else {
+                amountHtml = `<input type="number" class="builder-row-amount" value="${ing.amount || ''}" placeholder="0">`;
+            }
+            
             row.innerHTML = `
-                <input type="number" class="builder-row-amount" value="${ing.amount || ''}" placeholder="0">
+                ${amountHtml}
                 <input type="text" class="builder-row-name" value="${(ing.name || '').replace(/"/g, '&quot;')}" placeholder="Ingredient">
                 <button class="builder-row-cat ${ing.cat}">${catLabels[ing.cat] || 'SPIRIT'}</button>
                 <button class="builder-row-remove">×</button>
             `;
-            row.querySelector('.builder-row-amount').addEventListener('input', e => {
-                batchBuilderState.ingredients[idx].amount = parseFloat(e.target.value) || 0;
-                updateBatchYieldDisplay();
-            });
+            
+            if (ing.cat === 'static-ruby') {
+                const staticInput = row.querySelector('.builder-static-input');
+                if (staticInput) {
+                    staticInput.addEventListener('input', (e) => {
+                        batchBuilderState.ingredients[idx].amount = parseFloat(e.target.value) || 0;
+                    });
+                }
+                const unitPill = row.querySelector('.unit-pill');
+                if (unitPill) {
+                    unitPill.addEventListener('click', (e) => {
+                        triggerHaptic('light');
+                        const units = ['dash', 'squeeze', 'rinse'];
+                        let currIdx = units.indexOf(e.target.dataset.unit || 'dash');
+                        batchBuilderState.ingredients[idx].unit = units[(currIdx + 1) % units.length];
+                        renderBatchIngredients();
+                    });
+                }
+            } else {
+                row.querySelector('.builder-row-amount').addEventListener('input', e => {
+                    batchBuilderState.ingredients[idx].amount = parseFloat(e.target.value) || 0;
+                    updateBatchYieldDisplay();
+                });
+            }
+            
             row.querySelector('.builder-row-name').addEventListener('input', e => {
                 batchBuilderState.ingredients[idx].name = e.target.value;
             });
             row.querySelector('.builder-row-cat').addEventListener('click', () => {
                 triggerHaptic('light');
                 
-                let cats = ['amber-glow', 'neon-cyan', 'juice-glow', 'magenta-glow', 'coffee-dark'];
+                let cats = ['amber-glow', 'neon-cyan', 'juice-glow', 'puree-mango', 'magenta-glow', 'coffee-dark', 'static-ruby'];
                 if (BATCH_CONFIG[batchBuilderState.type]) {
                     cats = BATCH_CONFIG[batchBuilderState.type].allowedCategories;
                 } else if (batchBuilderState.type === 'Mocktail') {
-                    cats = ['juice-glow', 'magenta-glow'];
+                    cats = ['juice-glow', 'puree-mango', 'magenta-glow'];
                 }
 
-                // BOUNCER LOCK: If only one category is allowed, reject the change
                 if (cats.length === 1) {
                     row.classList.remove('bouncer-reject-pulse');
-                    void row.offsetWidth; // Trigger reflow
+                    void row.offsetWidth; 
                     row.classList.add('bouncer-reject-pulse');
                     triggerHaptic('heavy');
                     const catName = catLabels[cats[0]] || (cats[0] === 'coffee-dark' ? 'ESPRESSO' : 'this category');
@@ -900,15 +944,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 const next = cats[(curIdx + 1) % cats.length];
                 batchBuilderState.ingredients[idx].cat = next;
                 
-                const btn = row.querySelector('.builder-row-cat');
-                btn.className = `builder-row-cat ${next}`;
-                btn.innerText = catLabels[next];
+                if (next === 'static-ruby' || current === 'static-ruby') {
+                    renderBatchIngredients(); 
+                } else {
+                    const btn = row.querySelector('.builder-row-cat');
+                    btn.className = `builder-row-cat ${next}`;
+                    btn.innerText = catLabels[next];
+                }
             });
             row.querySelector('.builder-row-remove').addEventListener('click', () => {
                 triggerHaptic('light');
                 const removed = batchBuilderState.ingredients.splice(idx, 1)[0];
                 
-                // Exclude: Return it safely to MAIN
                 const mainSec = builderState.sections.find(s => s.name === 'MAIN');
                 if (mainSec && removed.name.trim() !== '') {
                     mainSec.ingredients.push(removed);
@@ -930,7 +977,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateBatchYieldDisplay() {
         const autoSum = document.getElementById('batch-auto-sum');
         if (!autoSum || !batchBuilderState) return;
-        const total = batchBuilderState.ingredients.reduce((s, i) => s + (i.amount || 0), 0);
+        const total = batchBuilderState.ingredients.filter(i => i.cat !== 'static-ruby').reduce((s, i) => s + (i.amount || 0), 0);
         autoSum.innerText = `${total.toFixed(1).replace(/\.0$/, '')} ml`;
     }
 
@@ -949,8 +996,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const SHELF_KEY = 'codex_shelf_v1';
     let shelfData = {};
     let shelfAddState = null;
-    const shelfCatLabels = { 'amber-glow': 'SPIRIT', 'neon-cyan': 'LIQUEUR', 'juice-glow': 'JUICE', 'magenta-glow': 'SYRUP', 'coffee-dark': 'ESPRESSO' };
-    const shelfDefaultAbvs = { 'amber-glow': 40, 'neon-cyan': 20, 'juice-glow': 0, 'magenta-glow': 0, 'coffee-dark': 0 };
+    const shelfCatLabels = { 'amber-glow': 'SPIRIT', 'neon-cyan': 'LIQUEUR', 'juice-glow': 'JUICE', 'magenta-glow': 'SYRUP', 'coffee-dark': 'ESPRESSO', 'puree-mango': 'PUREE', 'static-ruby': 'STATIC' };
+    const shelfDefaultAbvs = { 'amber-glow': 40, 'neon-cyan': 20, 'juice-glow': 0, 'magenta-glow': 0, 'coffee-dark': 0, 'puree-mango': 0, 'static-ruby': 45 };
 
     function loadShelf() {
         try {
@@ -1049,12 +1096,12 @@ document.addEventListener('DOMContentLoaded', () => {
         form.querySelector('.shelf-add-name').addEventListener('input', e => { shelfAddState.name = e.target.value; });
         form.querySelector('.shelf-add-cat').addEventListener('click', () => {
             triggerHaptic('light');
-            const cats = ['amber-glow', 'neon-cyan', 'juice-glow', 'magenta-glow'];
+            const cats = ['amber-glow', 'neon-cyan', 'juice-glow', 'puree-mango', 'magenta-glow', 'coffee-dark', 'static-ruby'];
             shelfAddState.cat = cats[(cats.indexOf(shelfAddState.cat) + 1) % cats.length];
             const btn = form.querySelector('.shelf-add-cat');
             btn.className = `shelf-add-cat ${shelfAddState.cat}`;
             btn.innerText = shelfCatLabels[shelfAddState.cat];
-            shelfAddState.abv = shelfDefaultAbvs[shelfAddState.cat];
+            shelfAddState.abv = shelfDefaultAbvs[shelfAddState.cat] || 0;
             form.querySelector('.shelf-add-abv').value = shelfAddState.abv;
         });
         form.querySelector('.shelf-add-abv').addEventListener('input', e => { shelfAddState.abv = parseFloat(e.target.value) || 0; });
@@ -1065,8 +1112,8 @@ document.addEventListener('DOMContentLoaded', () => {
         form.querySelector('.shelf-add-save').addEventListener('click', () => {
             triggerHaptic('heavy');
             const name = capitalize(shelfAddState.name.trim());
-            if (!name) return openAlertModal("Ingredient name required.");
-            if (shelfData[name]) return openAlertModal(`"${name}" is already on the shelf.`);
+            if (!name) return openAlertModal({title:'NOTICE', message:"Ingredient name required."});
+            if (shelfData[name]) return openAlertModal({title:'NOTICE', message:`"${name}" is already on the shelf.`});
             shelfData[name] = { category: shelfAddState.cat, abv: shelfAddState.abv, inStock: true };
             saveShelf();
             toggleShelfAddForm();
@@ -1078,10 +1125,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const list = document.getElementById('shelf-list');
         if (!list) return;
         list.innerHTML = '';
-        const catOrder = { 'amber-glow': 1, 'neon-cyan': 2, 'juice-glow': 3, 'magenta-glow': 4 };
+        const catOrder = { 'amber-glow': 1, 'neon-cyan': 2, 'juice-glow': 3, 'magenta-glow': 4, 'coffee-dark': 5, 'puree-mango': 6, 'static-ruby': 7 };
         const entries = Object.entries(shelfData).sort((a, b) => {
-            const ordA = catOrder[a[1].category] || 5;
-            const ordB = catOrder[b[1].category] || 5;
+            const ordA = catOrder[a[1].category] || 10;
+            const ordB = catOrder[b[1].category] || 10;
             if (ordA !== ordB) return ordA - ordB;
             return a[0].localeCompare(b[0]);
         });
@@ -1113,7 +1160,7 @@ document.addEventListener('DOMContentLoaded', () => {
             row.querySelector('.shelf-cat-btn').addEventListener('click', (e) => {
                 e.stopPropagation();
                 triggerHaptic('light');
-                const cats = ['amber-glow', 'neon-cyan', 'juice-glow', 'magenta-glow'];
+                const cats = ['amber-glow', 'neon-cyan', 'juice-glow', 'puree-mango', 'magenta-glow', 'coffee-dark', 'static-ruby'];
                 const current = shelfData[name].category;
                 const next = cats[(cats.indexOf(current) + 1) % cats.length];
                 shelfData[name].category = next;
@@ -1128,10 +1175,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 pressTimer = setTimeout(() => {
                     pressTimer = null;
                     triggerHaptic('medium');
-                    openConfirmModal(`Remove "${name}" from the shelf?`, () => {
-                        delete shelfData[name];
-                        saveShelf();
-                        renderShelf();
+                    openConfirmModal({
+                        title: 'REMOVE INGREDIENT', 
+                        message: `Remove "${name}" from the shelf?`, 
+                        onConfirm: () => {
+                            delete shelfData[name];
+                            saveShelf();
+                            renderShelf();
+                        }
                     });
                 }, 500);
             });
@@ -1156,11 +1207,9 @@ document.addEventListener('DOMContentLoaded', () => {
     injectShelfCard();
     renderShelf();
 
-    // Kill the legacy LOCKED toggle
     const legacyLockBtn = document.getElementById('edit-toggle');
     if (legacyLockBtn) legacyLockBtn.remove();
 
-    // Spec Builder: collapsible new/edit flow
     function expandSpecBuilder() {
         document.getElementById('new-spec-btn')?.classList.add('hidden');
         document.getElementById('builder-content')?.classList.remove('hidden');
@@ -1180,7 +1229,6 @@ document.addEventListener('DOMContentLoaded', () => {
         resetBuilder();
     });
 
-    // Inject long-press action sheet modal
     if (!document.getElementById('action-sheet-modal')) {
         document.body.insertAdjacentHTML('beforeend', `
             <div id="action-sheet-modal" class="modal-overlay hidden">
@@ -1210,6 +1258,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sheet.querySelector('.action-sheet-title').innerText = cocktailName;
         sheet.classList.remove('hidden');
     };
+    
     // --- EDIT & DELETE ---
     window.editSpec = (name) => {
         triggerHaptic('heavy');
@@ -1220,7 +1269,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const isMain = sectionName === name;
             const sec = { name: isMain ? 'MAIN' : sectionName.replace(name + ' — ', ''), ingredients: [] };
             (recipeVault[sectionName] || []).forEach(ing => {
-                sec.ingredients.push({ amount: ing.amount, name: ing.name, cat: ing.color });
+                sec.ingredients.push({ amount: ing.amount, name: ing.name, cat: ing.color, unit: ing.unit });
             });
             builderState.sections.push(sec);
         });
@@ -1255,7 +1304,7 @@ document.addEventListener('DOMContentLoaded', () => {
             triggerHaptic('light');
             const title = capitalize(document.getElementById('spec-title-input').value.trim());
             const text = document.getElementById('keep-paste-area').value;
-            if(!title || !text) {                 openAlertModal({ title: 'MISSING INFO', message: 'Need both a cocktail title and recipe text.' });                 return;             }
+            if(!title || !text) { openAlertModal({ title: 'MISSING INFO', message: 'Need both a cocktail title and recipe text.' }); return; }
             if (editingCocktailName && editingCocktailName !== title) editingCocktailName = null;
 
             parsedStagingData = [];
@@ -1264,7 +1313,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const ratioRegex = /^\d+\s*:\s*\d+\s+(.+)$/;
             const unitStrip = /^(?:ml|g|oz|cl|tbsp|tsp|dash(?:es)?|squeeze(?:s)?|pinch(?:es)?|drop(?:s)?|barspoon(?:s)?|bsp|cube(?:s)?|leaves|leaf|shot(?:s)?)\s+/i;
             const underscoreRegex = /^_+\s*(.+?)\s*_+$/;
-            // Only EXPLICIT batch patterns count as section headers — everything else is prep/garnish/skip
+            
             const batchHeaderRegex = /^(spirit\s*batch|juice\s*batch|cream(?:\s+batch)?|mocktail|.+\s+batch)\s*:?\s*$/i;
             const syrupKeys = ['syrup', 'sugar', 'agave', 'honey', 'gomme', 'orgeat', 'falernum', 'grenadine', 'cordial'];
             const liqueurKeys = ['liqueur', 'licor', 'amaro', 'campari', 'aperol', 'vermouth', 'cointreau', 'triple sec', 'chartreuse', 'bénédictine', 'benedictine', 'maraschino', 'amaretto', 'disaronno', 'dissarono', 'kahlua', 'tia maria', 'baileys', 'crème de', 'creme de', 'sambuca', 'absinthe', 'pastis', 'sherry', 'port', 'madeira', 'lillet', 'suze', 'fernet', 'jägermeister', 'jagermeister', 'drambuie', 'galliano', 'frangelico', 'midori', 'curaçao', 'curacao', 'st-germain', 'st. germain', 'bitters', 'angostura', 'peychaud', 'wine', 'champagne', 'prosecco', 'cava'];
@@ -1296,20 +1345,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const trimmed = line.trim();
                 if (!trimmed) return;
 
-                // Underscore section: __Spirit Batch__
                 const underscoreMatch = trimmed.match(underscoreRegex);
                 if (underscoreMatch) {
                     currentSection = `${title} — ${detectBatchType(underscoreMatch[1])}`;
                     return;
                 }
 
-                // Explicit batch header (non-numbered line matching batch pattern)
                 if (!/^\d/.test(trimmed) && batchHeaderRegex.test(trimmed)) {
                     currentSection = `${title} — ${detectBatchType(trimmed)}`;
                     return;
                 }
 
-                // Ratio line: "1:1 X juice and Y juice" → split into placeholder ingredients (amount 0)
                 const ratioMatch = trimmed.match(ratioRegex);
                 if (ratioMatch) {
                     const parts = ratioMatch[1].split(/\s+and\s+/i);
@@ -1321,7 +1367,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                // Ingredient line (starts with a number)
                 const ingMatch = trimmed.match(lineRegex);
                 if (ingMatch) {
                     const amt = parseFloat(ingMatch[1].replace(',', '.'));
@@ -1331,9 +1376,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     parsedStagingData.push({ cocktailName: currentSection, ingredientName: name, amount: amt, bottleSize: 0, categoryTag: categorize(name) });
                     return;
                 }
-
-                // Everything else (prep, garnish, instructions, qualitative ingredients) is skipped
-                // — add those manually in staging review after parsing
             });
             renderStagingArea();
         });
@@ -1522,7 +1564,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (currentBrix > targetBrix) {
-                // Dilute with water
                 const waterToAdd = currentWeight * ((currentBrix / targetBrix) - 1);
                 res.innerHTML = `
                     <h3 class="zone-header">DILUTION REQUIRED</h3>
@@ -1530,7 +1571,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="result-row mt-10"><span class="ing-name text-gold fw-bold">NEW YIELD</span><span class="ing-amount">${(currentWeight + waterToAdd).toFixed(1)}g</span></div>
                 `;
             } else {
-                // Enrich with dry sugar (assuming 100 brix)
                 const sugarToAdd = currentWeight * ((targetBrix - currentBrix) / (100 - targetBrix));
                 res.innerHTML = `
                     <h3 class="zone-header">ENRICHMENT REQUIRED</h3>
@@ -1591,8 +1631,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             spec.forEach(ing => {
                 const amt = ing.amount * fDrinks;
-                totalVol += amt;
-                html += `<div class="result-row ${ing.color}"><span class="ing-name">${ing.name}</span><span class="ing-amount">${amt.toFixed(0)}ml</span></div>`;
+                if (ing.color !== 'static-ruby') totalVol += amt;
+                let amtDisplay = ing.color === 'static-ruby' ? `${ing.amount * fDrinks} ${ing.unit || 'dash'}` : `${amt.toFixed(0)}ml`;
+                html += `<div class="result-row ${ing.color}"><span class="ing-name">${ing.name}</span><span class="ing-amount">${amtDisplay}</span></div>`;
             });
 
             if (fDilution > 0) {
@@ -1601,7 +1642,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += `<div class="result-row"><span class="ing-name text-muted">Filtered Water (${fDilution}%)</span><span class="ing-amount text-muted">${water.toFixed(0)}ml</span></div>`;
             }
             
-            html += `<div class="result-row mt-10"><span class="ing-name text-gold fw-bold">TOTAL BATCH VOLUME</span><span class="ing-amount">${totalVol.toFixed(0)}ml</span></div>`;
+            html += `<div class="result-row mt-10"><span class="ing-name text-gold fw-bold">TOTAL LIQUID VOLUME</span><span class="ing-amount">${totalVol.toFixed(0)}ml</span></div>`;
             res.innerHTML = html;
         });
     }
@@ -1629,7 +1670,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnRevIng) {
         btnRevIng.addEventListener('click', () => {
             if(!activeRevSpec) return;
-            const spec = recipeVault[activeRevSpec];
+            const spec = recipeVault[activeRevSpec].filter(i => i.color !== 'static-ruby');
             const ings = spec.map(ing => ({label: `${ing.name} (${ing.amount}ml)`, value: ing.name, data: ing.amount}));
             
             openSelectModal('LIMITING INGREDIENT', ings, (val, label, amt) => {
@@ -1659,7 +1700,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             spec.forEach(ing => {
                 const reqAmt = ing.amount * maxDrinks;
-                let displayAmt = `${reqAmt.toFixed(0)}ml`;
+                let displayAmt = ing.color === 'static-ruby' ? `${reqAmt} ${ing.unit || 'dash'}` : `${reqAmt.toFixed(0)}ml`;
                 if(ing.name === activeRevIng) displayAmt = `${reqAmt.toFixed(0)}ml <span class="text-muted text-sm">(Empty)</span>`;
                 
                 html += `<div class="result-row ${ing.color}"><span class="ing-name">${ing.name}</span><span class="ing-amount">${displayAmt}</span></div>`;
@@ -1679,29 +1720,23 @@ document.addEventListener('DOMContentLoaded', () => {
             if (raw) opsData = JSON.parse(raw);
         } catch (e) { console.error('Failed to load OPS data'); }
 
-        // THE 5 AM WIPE LOGIC
         const now = new Date();
         let lastWipeStr = localStorage.getItem('codex_ops_last_wipe');
         let wipeDate = new Date();
-        wipeDate.setHours(5, 0, 0, 0); // 5 AM today boundary
+        wipeDate.setHours(5, 0, 0, 0); 
 
-        // If it's currently before 5 AM, the "current day's boundary" was yesterday at 5 AM
         if (now.getHours() < 5) wipeDate.setDate(wipeDate.getDate() - 1);
 
         if (!lastWipeStr || new Date(parseInt(lastWipeStr)) < wipeDate) {
-            // Time to wipe daily tasks!
             opsData.opening.forEach(t => t.completed = false);
             opsData.closing.forEach(t => t.completed = false);
             
-            // Check for Monday (Weekly Wipe)
             if (now.getDay() === 1 && (!lastWipeStr || new Date(parseInt(lastWipeStr)).getDay() !== 1)) {
                 opsData.weekly.forEach(t => t.completed = false);
             }
-            // Check for 1st of Month (Monthly Wipe)
             if (now.getDate() === 1 && (!lastWipeStr || new Date(parseInt(lastWipeStr)).getDate() !== 1)) {
                 opsData.monthly.forEach(t => t.completed = false);
             }
-
             localStorage.setItem('codex_ops_last_wipe', Date.now().toString());
             saveOps();
         }
@@ -1717,27 +1752,52 @@ document.addEventListener('DOMContentLoaded', () => {
         container.innerHTML = '';
 
         const tasks = opsData[activeOpsCategory] || [];
+        const isDaily = (activeOpsCategory === 'opening' || activeOpsCategory === 'closing');
 
-        // SINK TO BOTTOM LOGIC: Sort incomplete tasks to the top
-        const sortedTasks = [...tasks].map((t, i) => ({...t, originalIndex: i}))
-                                      .sort((a, b) => (a.completed === b.completed ? 0 : a.completed ? 1 : -1));
+        let sortedTasks = [];
+        if (isDaily) {
+            sortedTasks = [...tasks].map((t, i) => ({...t, originalIndex: i}));
+        } else {
+            sortedTasks = [...tasks].map((t, i) => ({...t, originalIndex: i}))
+                                      .sort((a, b) => {
+                                          if (a.completed !== b.completed) return a.completed ? 1 : -1;
+                                          return (a.lastCompleted || 0) - (b.lastCompleted || 0);
+                                      });
+        }
 
         if (sortedTasks.length === 0) {
             container.innerHTML = '<p class="text-muted text-sm text-center" style="padding: 20px;">No tasks. Tap ＋ ADD TASK below to begin.</p>';
             return;
         }
 
-        sortedTasks.forEach(taskObj => {
+        sortedTasks.forEach((taskObj, displayIndex) => {
             const hasSubtasks = taskObj.subtasks && taskObj.subtasks.length > 0;
             const row = document.createElement('div');
             row.className = `ops-row ${taskObj.completed ? 'completed' : ''}`;
+            row.setAttribute('draggable', isDaily ? 'true' : 'false');
             
-            let html = `
-                <div class="ops-row-main">
-                    <div class="ops-checkbox"></div>
-                    <span class="ops-text">${taskObj.text}</span>
-                </div>
-            `;
+            let html = `<div class="ops-row-main">`;
+            
+            if (isDaily) {
+                html += `<div class="ops-number">${displayIndex + 1}</div>`;
+            } else {
+                html += `<div class="ops-checkbox"></div>`;
+            }
+            
+            let textContent = taskObj.text;
+            if (!isDaily && !taskObj.completed && taskObj.lastCompleted) {
+                const daysAgo = Math.floor((Date.now() - taskObj.lastCompleted) / (1000 * 60 * 60 * 24));
+                let timeLabel = daysAgo === 0 ? 'Today' : `${daysAgo} day${daysAgo > 1 ? 's' : ''} ago`;
+                textContent += `<div class="ops-time-tag ${daysAgo >= 7 ? 'text-red' : ''}">Last completed: ${timeLabel}</div>`;
+            }
+            
+            html += `<span class="ops-text" style="flex:1;">${textContent}</span>`;
+            
+            if (isDaily) {
+                html += `<div class="drag-handle-task">≡</div>`;
+            }
+            html += `</div>`;
+            
             if (hasSubtasks) {
                 html += `<div class="ops-subtasks">`;
                 taskObj.subtasks.forEach(sub => {
@@ -1747,16 +1807,22 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             row.innerHTML = html;
 
-            // Click Checkbox -> Toggle Complete
-            row.querySelector('.ops-checkbox').addEventListener('click', (e) => {
-                e.stopPropagation();
-                triggerHaptic('light');
-                opsData[activeOpsCategory][taskObj.originalIndex].completed = !opsData[activeOpsCategory][taskObj.originalIndex].completed;
-                saveOps();
-                renderOpsList();
-            });
+            const checkTarget = isDaily ? row.querySelector('.ops-number') : row.querySelector('.ops-checkbox');
+            if (checkTarget) {
+                checkTarget.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    triggerHaptic('light');
+                    const isNowComplete = !opsData[activeOpsCategory][taskObj.originalIndex].completed;
+                    opsData[activeOpsCategory][taskObj.originalIndex].completed = isNowComplete;
+                    
+                    if (!isDaily && isNowComplete) {
+                        opsData[activeOpsCategory][taskObj.originalIndex].lastCompleted = Date.now();
+                    }
+                    saveOps();
+                    renderOpsList();
+                });
+            }
 
-            // Click Text -> Expand Accordion (if subtasks exist)
             row.querySelector('.ops-text').addEventListener('click', (e) => {
                 e.stopPropagation();
                 if (hasSubtasks) {
@@ -1765,10 +1831,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
-            // Long Press -> Task Actions (Add Substep / Delete)
+            if (isDaily) {
+                row.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', taskObj.originalIndex);
+                    row.style.opacity = '0.4';
+                });
+                row.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    row.style.borderTop = '2px solid var(--nodee-gold)';
+                });
+                row.addEventListener('dragleave', (e) => {
+                    row.style.borderTop = 'none';
+                });
+                row.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    row.style.borderTop = 'none';
+                    const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+                    const toIdx = taskObj.originalIndex;
+                    if (fromIdx !== toIdx && !isNaN(fromIdx)) {
+                        const item = opsData[activeOpsCategory].splice(fromIdx, 1)[0];
+                        opsData[activeOpsCategory].splice(toIdx, 0, item);
+                        saveOps();
+                        renderOpsList();
+                    }
+                });
+                row.addEventListener('dragend', () => {
+                    row.style.opacity = '1';
+                    document.querySelectorAll('.ops-row').forEach(r => r.style.borderTop = 'none');
+                });
+            }
+
             let pressTimer = null;
             let pressStart = null;
             row.addEventListener('pointerdown', (e) => {
+                if (e.target.closest('.drag-handle-task')) return; 
                 pressStart = { x: e.clientX, y: e.clientY };
                 pressTimer = setTimeout(() => {
                     pressTimer = null;
@@ -1813,11 +1909,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Initialize OPS
     loadOps();
     renderOpsList();
 
-    // OPS Event Listeners
     document.querySelectorAll('.ops-pill').forEach(pill => {
         pill.addEventListener('click', (e) => {
             triggerHaptic('light');
@@ -1881,36 +1975,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    const lockBtn = document.getElementById('edit-toggle');
-    if (lockBtn) {
-        lockBtn.addEventListener('click', () => {
-            triggerHaptic('light');
-            const isLocked = lockBtn.innerText === 'LOCKED';
-            
-            lockBtn.innerText = isLocked ? 'EDIT MODE' : 'LOCKED';
-            lockBtn.style.color = isLocked ? 'var(--nodee-gold)' : 'var(--text-muted)';
-            lockBtn.style.borderColor = isLocked ? 'var(--nodee-gold)' : 'var(--text-muted)';
-            
-            const parserUI = document.getElementById('admin-parser-ui');
-            if(parserUI) parserUI.classList.toggle('hidden', !isLocked);
-            
-            document.querySelectorAll('.admin-controls').forEach(el => el.classList.toggle('hidden', !isLocked));
-            
-            if(!isLocked) {
-                editingCocktailName = null;
-                document.getElementById('spec-title-input').value = '';
-                document.getElementById('keep-paste-area').value = '';
-                document.getElementById('staging-area').classList.add('hidden');
-                parsedStagingData = [];
-                resetBuilder();
-            }
-        });
-    }
-
     // --- SESSION TIMEOUT: DEFAULT TO SERVICE MODE ---
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-            // When the app is opened/returns from background, force all toggles back to Service Mode
             document.querySelectorAll('.view-toggle .view-pill[data-view="service"]').forEach(btn => {
                 if (!btn.classList.contains('active')) btn.click();
             });
