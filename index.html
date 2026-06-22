@@ -4,14 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     
-    <!-- PWA Standalone Enforcers -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
     
     <title>The Codex</title>
     
-    <!-- Manifest Link -->
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icon-512.png">
     <link rel="apple-touch-icon" href="icon-512.png">
@@ -191,6 +189,38 @@
             </div>
         </section>
 
+        <section id="ops-module" class="module">
+            <div class="card glass-panel">
+                <h2 class="card-title text-gold">OPERATIONS & SOPS</h2>
+                
+                <div class="flex-row" style="margin-bottom: 20px;">
+                    <div class="half-width">
+                        <span class="text-muted text-xs" style="display:block; margin-bottom: 8px; text-align: center;">DAILY TASKS</span>
+                        <div class="pill-group ops-pill-group" style="margin-bottom: 0;">
+                            <button class="mod-pill ops-pill active" data-val="opening">OPEN</button>
+                            <button class="mod-pill ops-pill" data-val="closing">CLOSE</button>
+                        </div>
+                    </div>
+                    <div class="half-width">
+                        <span class="text-muted text-xs" style="display:block; margin-bottom: 8px; text-align: center;">PERIODIC</span>
+                        <div class="pill-group ops-pill-group" style="margin-bottom: 0;">
+                            <button class="mod-pill ops-pill" data-val="weekly">WEEKLY</button>
+                            <button class="mod-pill ops-pill" data-val="monthly">MONTHLY</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="ops-list-container" style="margin-top: 20px; display: flex; flex-direction: column; gap: 8px;">
+                    </div>
+
+                <button id="ops-add-btn" class="builder-add-ing" style="margin-top: 20px;">＋ ADD TASK</button>
+                
+                <div style="margin-top: 35px; display: flex; justify-content: center;">
+                    <button id="ops-reset-btn" style="background: transparent; border: none; color: var(--text-muted); font-size: 0.65rem; font-weight: 800; letter-spacing: 2px; text-decoration: underline; cursor: pointer; padding: 10px;">FORCE RESET TASKS</button>
+                </div>
+            </div>
+        </section>
+
         <section id="law-module" class="module">
             <div class="card glass-panel" style="border-top: 3px solid #ff4444; background: rgba(255, 68, 68, 0.05);">
                 <h2 class="card-title" style="color: #ff4444; margin-bottom: 15px;">BOUNCER QUICK-CHECK</h2>
@@ -244,38 +274,6 @@
                     <li><strong>Beer/Wine:</strong> Allowed 08:00 to 01:00. Strictly prohibited 03:00 to 06:00.</li>
                     <li><strong>Clearance:</strong> All alcohol consumption must cease no later than 30 mins after serving hours expire.</li>
                 </ul>
-            </div>
-        </section>
-
-        <section id="ops-module" class="module">
-            <div class="card glass-panel">
-                <h2 class="card-title text-gold">OPERATIONS & SOPS</h2>
-                
-                <div class="flex-row" style="margin-bottom: 20px;">
-                    <div class="half-width">
-                        <span class="text-muted text-xs" style="display:block; margin-bottom: 8px; text-align: center;">DAILY TASKS</span>
-                        <div class="pill-group ops-pill-group" style="margin-bottom: 0;">
-                            <button class="mod-pill ops-pill active" data-val="opening">OPEN</button>
-                            <button class="mod-pill ops-pill" data-val="closing">CLOSE</button>
-                        </div>
-                    </div>
-                    <div class="half-width">
-                        <span class="text-muted text-xs" style="display:block; margin-bottom: 8px; text-align: center;">PERIODIC</span>
-                        <div class="pill-group ops-pill-group" style="margin-bottom: 0;">
-                            <button class="mod-pill ops-pill" data-val="weekly">WEEKLY</button>
-                            <button class="mod-pill ops-pill" data-val="monthly">MONTHLY</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <div id="ops-list-container" style="margin-top: 20px; display: flex; flex-direction: column; gap: 8px;">
-                    </div>
-
-                <button id="ops-add-btn" class="builder-add-ing" style="margin-top: 20px;">＋ ADD TASK</button>
-                
-                <div style="margin-top: 35px; display: flex; justify-content: center;">
-                    <button id="ops-reset-btn" style="background: transparent; border: none; color: var(--text-muted); font-size: 0.65rem; font-weight: 800; letter-spacing: 2px; text-decoration: underline; cursor: pointer; padding: 10px;">FORCE RESET TASKS</button>
-                </div>
             </div>
         </section>
     </main>
