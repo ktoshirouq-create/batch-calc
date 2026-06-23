@@ -815,15 +815,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 if (batchBuilderState.ingredients.length === 0) {
-                    let defCat = allowed[0] || 'amber-glow';
-                    const batchNameMap = {
-    'coffee-dark': 'Espresso',
-    'juice-glow': 'Juice',
-    'magenta-glow': 'Syrup',
-    'puree-mango': 'Puree'
-};
-let defName = batchNameMap[defCat] || '';
-                    batchBuilderState.ingredients.push({ amount: 0, name: defName, cat: defCat });
+                    if (newType === 'Juice Batch' || newType === 'Mocktail') {
+                        batchBuilderState.ingredients.push({ amount: 0, name: 'Juice', cat: 'juice-glow' });
+                        batchBuilderState.ingredients.push({ amount: 0, name: 'Puree', cat: 'puree-mango' });
+                        
+                        const spiritSec = builderState.sections.find(s => s.name === 'Spirit Batch');
+                        const syrupInSpirit = spiritSec ? spiritSec.ingredients.some(i => i.cat === 'magenta-glow') : false;
+                        
+                        if (!syrupInSpirit) {
+                            batchBuilderState.ingredients.push({ amount: 0, name: 'Syrup', cat: 'magenta-glow' });
+                        }
+                    } else {
+                        let defCat = allowed[0] || 'amber-glow';
+                        const batchNameMap = { 'coffee-dark': 'Espresso', 'juice-glow': 'Juice', 'magenta-glow': 'Syrup', 'puree-mango': 'Puree' };
+                        let defName = batchNameMap[defCat] || '';
+                        batchBuilderState.ingredients.push({ amount: 0, name: defName, cat: defCat });
+                    }
                     batchBuilderState.perDrink = 0;
                 } else {
                     batchBuilderState.perDrink = batchBuilderState.ingredients.filter(i => i.cat !== 'static-ruby').reduce((sum, ing) => sum + (ing.amount || 0), 0);
@@ -1729,13 +1736,14 @@ let defName = batchNameMap[defCat] || '';
         const now = new Date();
         let lastWipeStr = localStorage.getItem('codex_ops_last_wipe');
         let wipeDate = new Date();
-        wipeDate.setHours(10, 0, 0, 0); // Smart 10:00 AM Rollover
+        wipeDate.setHours(10, 0, 0, 0); 
 
         if (now.getHours() < 10) wipeDate.setDate(wipeDate.getDate() - 1);
 
         if (!lastWipeStr || new Date(parseInt(lastWipeStr)) < wipeDate) {
-            opsData.opening.forEach(t => t.completed = false);
+            opsData.opening?.forEach(t => t.completed = false);
             opsData.mid?.forEach(t => t.completed = false);
+            opsData.closing?.forEach(t => t.completed = false);
             opsData.closing.forEach(t => t.completed = false);
             
             if (now.getDay() === 1 && (!lastWipeStr || new Date(parseInt(lastWipeStr)).getDay() !== 1)) {
