@@ -816,7 +816,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (batchBuilderState.ingredients.length === 0) {
                     let defCat = allowed[0] || 'amber-glow';
-                    let defName = defCat === 'coffee-dark' ? 'Espresso' : '';
+                    const batchNameMap = {
+    'coffee-dark': 'Espresso',
+    'juice-glow': 'Juice',
+    'magenta-glow': 'Syrup',
+    'puree-mango': 'Puree'
+};
+let defName = batchNameMap[defCat] || '';
                     batchBuilderState.ingredients.push({ amount: 0, name: defName, cat: defCat });
                     batchBuilderState.perDrink = 0;
                 } else {
