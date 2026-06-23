@@ -32,7 +32,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeAbvSpec = null;
 
    // --- HELPERS ---
-    const UNIT_TO_ML = { ml: 1, g: 1, dash: 0.8, squeeze: 15, qty: 0 };
     const capitalize = (str) => str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
     const triggerHaptic = (t = 'light') => {
         if (!navigator.vibrate) return;
@@ -728,6 +727,10 @@ document.addEventListener('DOMContentLoaded', () => {
             subSection = { name: batchName, ingredients: [] };
             builderState.sections.push(subSection);
         }
+        
+        // Clear existing ingredients to prevent duplication on edit
+        subSection.ingredients = []; 
+        
         validIngs.forEach(i => {
             subSection.ingredients.push({ amount: i.amount, name: capitalize(i.name.trim()), cat: i.cat, unit: i.unit });
         });
@@ -1744,7 +1747,6 @@ document.addEventListener('DOMContentLoaded', () => {
             opsData.opening?.forEach(t => t.completed = false);
             opsData.mid?.forEach(t => t.completed = false);
             opsData.closing?.forEach(t => t.completed = false);
-            opsData.closing.forEach(t => t.completed = false);
             
             if (now.getDay() === 1 && (!lastWipeStr || new Date(parseInt(lastWipeStr)).getDay() !== 1)) {
                 opsData.weekly.forEach(t => t.completed = false);
@@ -1974,7 +1976,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (opsResetBtn) {
         opsResetBtn.addEventListener('click', () => {
             triggerHaptic('heavy');
-            
             let totalDaily = 0;
             let completedDaily = 0;
             ['opening', 'mid', 'closing'].forEach(cat => {
@@ -1986,7 +1987,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             openConfirmModal({
                 title: 'END SHIFT',
-                message: `Shift Progress: ${completedDaily}/${totalDaily} tasks completed.\n\nEnd shift and reset the daily board? (Periodic tasks will remain saved).`,
+                message: `Shift Progress: ${completedDaily}/${totalDaily} tasks completed.\n\nEnd shift and reset the daily board? (Periodic tasks remain saved).`,
                 confirmLabel: 'RESET BOARD',
                 danger: false,
                 onConfirm: () => {
