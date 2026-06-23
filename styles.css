@@ -329,3 +329,125 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .ops-row-main { display: flex; align-items: center; gap: 12px; padding: 14px 12px; width: 100%; }
 .ops-subtasks { display: none; padding: 0 12px 14px 46px; flex-direction: column; gap: 6px; border-top: 1px dashed rgba(255,255,255,0.05); margin-top: -6px; }
 .ops-row.expanded .ops-subtasks { display: flex; }
+/* --- PREMIUM OPS DASHBOARD --- */
+.ops-dashboard-header {
+    background: rgba(20, 20, 20, 0.8);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 24px;
+    border: 1px solid rgba(212, 175, 55, 0.2); /* Subtle Gold */
+}
+
+.ops-progress-text {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    color: #f1f1f1;
+    margin-bottom: 8px;
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+
+.ops-progress-bar-bg {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.ops-progress-bar-fill {
+    height: 100%;
+    background: #D4AF37; /* Signature Gold */
+    width: 0%;
+    transition: width 0.5s ease;
+    border-radius: 4px;
+}
+
+/* --- PILL SELECTORS --- */
+.ops-pill-container {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+}
+
+.ops-pill {
+    flex: 1;
+    text-align: center;
+    padding: 12px 0;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: #888;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.ops-pill.active {
+    background: #D4AF37;
+    color: #000;
+    border-color: #D4AF37;
+}
+
+/* --- TASKS --- */
+.ops-task-item {
+    display: flex;
+    align-items: center;
+    padding: 16px;
+    background: #1e1e1e;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.ops-task-checkbox {
+    width: 24px;
+    height: 24px;
+    border: 2px solid #555;
+    border-radius: 50%;
+    margin-right: 16px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ops-task-text {
+    font-size: 1rem;
+    color: #e0e0e0;
+    transition: all 0.3s ease;
+}
+
+/* Completed State */
+.ops-task-item.completed {
+    opacity: 0.4;
+    background: #181818;
+}
+
+.ops-task-item.completed .ops-task-checkbox {
+    background: #D4AF37;
+    border-color: #D4AF37;
+}
+
+.ops-task-item.completed .ops-task-text {
+    text-decoration: line-through;
+    color: #888;
+}
+
+.end-shift-btn {
+    width: 100%;
+    padding: 16px;
+    background: transparent;
+    border: 2px solid #D4AF37;
+    color: #D4AF37;
+    border-radius: 8px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    margin-top: 24px;
+    transition: all 0.3s ease;
+}
+
+.end-shift-btn:active {
+    background: #D4AF37;
+    color: #000;
+}
