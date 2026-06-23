@@ -1717,7 +1717,7 @@ let defName = batchNameMap[defCat] || '';
 
     // --- OPS MODULE ENGINE ---
     const OPS_KEY = 'codex_ops_v1';
-    let opsData = { opening: [], closing: [], weekly: [], monthly: [] };
+    let opsData = { opening: [], mid: [], closing: [], weekly: [], monthly: [] };
     let activeOpsCategory = 'opening';
 
     function loadOps() {
@@ -1729,12 +1729,13 @@ let defName = batchNameMap[defCat] || '';
         const now = new Date();
         let lastWipeStr = localStorage.getItem('codex_ops_last_wipe');
         let wipeDate = new Date();
-        wipeDate.setHours(5, 0, 0, 0); 
+        wipeDate.setHours(10, 0, 0, 0); // Smart 10:00 AM Rollover
 
-        if (now.getHours() < 5) wipeDate.setDate(wipeDate.getDate() - 1);
+        if (now.getHours() < 10) wipeDate.setDate(wipeDate.getDate() - 1);
 
         if (!lastWipeStr || new Date(parseInt(lastWipeStr)) < wipeDate) {
             opsData.opening.forEach(t => t.completed = false);
+            opsData.mid?.forEach(t => t.completed = false);
             opsData.closing.forEach(t => t.completed = false);
             
             if (now.getDay() === 1 && (!lastWipeStr || new Date(parseInt(lastWipeStr)).getDay() !== 1)) {
@@ -1757,8 +1758,25 @@ let defName = batchNameMap[defCat] || '';
         if (!container) return;
         container.innerHTML = '';
 
+        // Calculate and Update Dashboard Progress
+        const dailyCategories = ['opening', 'mid', 'closing'];
+        let totalDaily = 0;
+        let completedDaily = 0;
+        dailyCategories.forEach(cat => {
+            if (opsData[cat]) {
+                totalDaily += opsData[cat].length;
+                completedDaily += opsData[cat].filter(t => t.completed).length;
+            }
+        });
+        const progressPercent = totalDaily === 0 ? 0 : Math.round((completedDaily / totalDaily) * 100);
+        
+        const countEl = document.getElementById('ops-progress-count');
+        const fillEl = document.getElementById('ops-progress-fill');
+        if (countEl) countEl.innerText = `${completedDaily}/${totalDaily} (${progressPercent}%)`;
+        if (fillEl) fillEl.style.width = `${progressPercent}%`;
+
         const tasks = opsData[activeOpsCategory] || [];
-        const isDaily = (activeOpsCategory === 'opening' || activeOpsCategory === 'closing');
+        const isDaily = dailyCategories.includes(activeOpsCategory);
 
         let sortedTasks = [];
         if (isDaily) {
@@ -1947,17 +1965,31 @@ let defName = batchNameMap[defCat] || '';
     const opsResetBtn = document.getElementById('ops-reset-btn');
     if (opsResetBtn) {
         opsResetBtn.addEventListener('click', () => {
+            triggerHaptic('heavy');
+            
+            let totalDaily = 0;
+            let completedDaily = 0;
+            ['opening', 'mid', 'closing'].forEach(cat => {
+                if (opsData[cat]) {
+                    totalDaily += opsData[cat].length;
+                    completedDaily += opsData[cat].filter(t => t.completed).length;
+                }
+            });
+
             openConfirmModal({
-                title: 'FORCE RESET',
-                message: 'Uncheck all tasks across ALL categories?',
-                confirmLabel: 'RESET',
-                danger: true,
+                title: 'END SHIFT',
+                message: `Shift Progress: ${completedDaily}/${totalDaily} tasks completed.\n\nEnd shift and reset the daily board? (Periodic tasks will remain saved).`,
+                confirmLabel: 'RESET BOARD',
+                danger: false,
                 onConfirm: () => {
-                    ['opening', 'closing', 'weekly', 'monthly'].forEach(cat => {
+                    ['opening', 'mid', 'closing'].forEach(cat => {
                         if(opsData[cat]) opsData[cat].forEach(t => t.completed = false);
                     });
+                    localStorage.setItem('codex_ops_last_wipe', Date.now().toString());
                     saveOps();
                     renderOpsList();
+                    const scrollArea = document.getElementById('scroll-area');
+                    if (scrollArea) scrollArea.scrollTop = 0;
                 }
             });
         });
