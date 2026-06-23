@@ -451,3 +451,43 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
     background: #D4AF37;
     color: #000;
 }
+/* --- PREMIUM OPS TRACK & DASHBOARD --- */
+.ops-track {
+    display: flex;
+    background: rgba(10, 10, 10, 0.6);
+    border-radius: 8px;
+    padding: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.ops-track .ops-pill {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 10px 0;
+    border-radius: 6px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    margin: 0;
+}
+.ops-track .ops-pill.active {
+    background: #D4AF37;
+    color: #000;
+    box-shadow: 0 2px 8px rgba(212, 175, 55, 0.3);
+}
+.end-shift-btn {
+    width: 100%;
+    padding: 16px;
+    background: transparent;
+    border: 2px solid #D4AF37;
+    color: #D4AF37;
+    border-radius: 8px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    margin-top: 24px;
+    transition: all 0.3s ease;
+}
+.end-shift-btn:active {
+    background: #D4AF37;
+    color: #000;
+}
