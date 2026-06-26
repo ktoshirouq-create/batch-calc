@@ -673,13 +673,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const mainSec = builderState.sections.find(s => s.name === 'MAIN');
         let allowed = BATCH_CONFIG['Spirit Batch'].allowedCategories;
         if (mainSec) {
-            for (let i = mainSec.ingredients.length - 1; i >= 0; i--) {
-                const ing = mainSec.ingredients[i];
-                if (ing.name.trim() && ing.amount > 0 && allowed.includes(ing.cat)) {
-                    batchBuilderState.ingredients.unshift(mainSec.ingredients.splice(i, 1)[0]);
-                }
-            }
-        }
+                        for (let i = mainSec.ingredients.length - 1; i >= 0; i--) {
+                            const ing = mainSec.ingredients[i];
+                            const safeAmount = parseFloat(ing.amount) || 0;
+                            if (ing.name && ing.name.trim() !== '' && safeAmount > 0 && allowed.includes(ing.cat)) {
+                                batchBuilderState.ingredients.unshift(mainSec.ingredients.splice(i, 1)[0]);
+                            }
+                        }
+                    }
         if (batchBuilderState.ingredients.length === 0) {
             let defName = allowed[0] === 'coffee-dark' ? 'Espresso' : '';
             batchBuilderState.ingredients.push({ amount: 0, name: defName, cat: allowed[0] });
@@ -811,7 +812,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (mainSec) {
                     for (let i = mainSec.ingredients.length - 1; i >= 0; i--) {
                         const ing = mainSec.ingredients[i];
-                        if (ing.name.trim() && ing.amount > 0 && allowed.includes(ing.cat)) {
+                        const safeAmount = parseFloat(ing.amount) || 0;
+                        if (ing.name && ing.name.trim() !== '' && safeAmount > 0 && allowed.includes(ing.cat)) {
                             batchBuilderState.ingredients.unshift(mainSec.ingredients.splice(i, 1)[0]);
                         }
                     }
