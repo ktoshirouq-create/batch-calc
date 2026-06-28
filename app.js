@@ -38,6 +38,27 @@ document.addEventListener('DOMContentLoaded', () => {
         t === 'heavy' ? navigator.vibrate([80, 40, 80]) : navigator.vibrate(30);
     };
 
+    // --- INGREDIENT CATEGORIZATION (shared by parser + builder name fallback) ---
+    const SYRUP_KEYS = ['syrup', 'sugar', 'agave', 'honey', 'gomme', 'orgeat', 'falernum', 'grenadine', 'cordial'];
+    const LIQUEUR_KEYS = ['liqueur', 'licor', 'amaro', 'campari', 'aperol', 'vermouth', 'cointreau', 'triple sec', 'chartreuse', 'bénédictine', 'benedictine', 'maraschino', 'amaretto', 'disaronno', 'dissarono', 'kahlua', 'tia maria', 'baileys', 'crème de', 'creme de', 'sambuca', 'absinthe', 'pastis', 'sherry', 'port', 'madeira', 'lillet', 'suze', 'fernet', 'jägermeister', 'jagermeister', 'drambuie', 'galliano', 'frangelico', 'midori', 'curaçao', 'curacao', 'st-germain', 'st. germain', 'bitters', 'angostura', 'peychaud', 'wine', 'champagne', 'prosecco', 'cava'];
+    const JUICE_KEYS = ['juice', 'lemon', 'lime', 'orange', 'grapefruit', 'pineapple', 'cranberry', 'apple', 'tomato', 'water', 'soda', 'tonic', 'cola', 'ginger beer', 'coconut', 'milk', 'cream', 'egg', 'yuzu', 'passion', 'mango', 'raspberry', 'strawberry', 'blackberry', 'blueberry', 'watermelon', 'cucumber', 'kiwi', 'lychee', 'guava', 'peach', 'pear', 'rhubarb', 'beetroot', 'carrot', 'fig'];
+
+    function categorizeIngredient(name) {
+        const low = (name || '').toLowerCase().trim();
+        if (!low) return 'amber-glow';
+        if (/spirit\s*batch/.test(low)) return 'amber-glow';
+        if (/juice\s*batch/.test(low)) return 'juice-glow';
+        if (/mocktail/.test(low)) return 'juice-glow';
+        if (/cream.*batch/.test(low)) return 'magenta-glow';
+        if (/espresso\s*batch/.test(low)) return 'coffee-dark';
+        if (/espresso|cold\s*brew|coffee/.test(low)) return 'coffee-dark';
+        if (/puree/.test(low)) return 'puree-mango';
+        if (SYRUP_KEYS.some(k => low.includes(k))) return 'magenta-glow';
+        if (LIQUEUR_KEYS.some(k => low.includes(k))) return 'neon-cyan';
+        if (JUICE_KEYS.some(k => low.includes(k))) return 'juice-glow';
+        return 'amber-glow';
+    }
+
     const showLoader = (m) => {
         const lText = document.querySelector('.loader-text');
         if (lText) lText.innerText = m;
@@ -510,18 +531,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 row.querySelector('.builder-row-name').addEventListener('input', e => {
                     const val = e.target.value;
                     builderState.sections[secIdx].ingredients[ingIdx].name = val;
-                    // Match against shelf case-insensitively; if found, auto-set category to match the shelf entry
-                    if (typeof shelfData !== 'undefined' && val.trim()) {
+                    if (!val.trim()) return;
+                    const currentCat = builderState.sections[secIdx].ingredients[ingIdx].cat;
+                    // Shelf hit wins (preserves overrides like Yuzu = LIQUEUR). Else fall back to keyword detection.
+                    let detectedCat = null;
+                    let shelfHit = false;
+                    if (typeof shelfData !== 'undefined') {
                         const shelfMatch = Object.keys(shelfData).find(k => k.toLowerCase() === val.toLowerCase().trim());
-                        if (shelfMatch) {
-                            const shelfCat = shelfData[shelfMatch].category;
-                            if (builderState.sections[secIdx].ingredients[ingIdx].cat !== shelfCat) {
-                                builderState.sections[secIdx].ingredients[ingIdx].cat = shelfCat;
-                                const catBtn = row.querySelector('.builder-row-cat');
-                                catBtn.className = `builder-row-cat ${shelfCat}`;
-                                catBtn.innerText = catLabels[shelfCat] || 'SPIRIT';
-                                if (shelfCat === 'static-ruby') renderBuilder(); // Re-render to switch UI
-                            }
+                        if (shelfMatch) { detectedCat = shelfData[shelfMatch].category; shelfHit = true; }
+                    }
+                    if (!shelfHit) detectedCat = categorizeIngredient(val);
+                    // Shelf hits always apply. Keyword fallback only when row is still at default amber-glow (don't override manual cycling).
+                    const shouldUpdate = detectedCat && detectedCat !== currentCat && (shelfHit || currentCat === 'amber-glow');
+                    if (shouldUpdate) {
+                        builderState.sections[secIdx].ingredients[ingIdx].cat = detectedCat;
+                        if (detectedCat === 'static-ruby' || currentCat === 'static-ruby') {
+                            renderBuilder();
+                        } else {
+                            const catBtn = row.querySelector('.builder-row-cat');
+                            catBtn.className = `builder-row-cat ${detectedCat}`;
+                            catBtn.innerText = catLabels[detectedCat] || 'SPIRIT';
                         }
                     }
                 });
@@ -665,30 +694,88 @@ document.addEventListener('DOMContentLoaded', () => {
     let batchBuilderState = null;
 
     function openBatchBuilder() {
-        batchBuilderState = { type: 'Spirit Batch', customType: '', ingredients: [], perDrink: 0 };
+        // Smart default: open to the first unused batch type (Spirit → Juice → Espresso → Mocktail)
+        const typeOrder = ['Spirit Batch', 'Juice Batch', 'Espresso Batch', 'Mocktail'];
+        const defaultType = typeOrder.find(t => !builderState.sections.find(s => s.name === t)) || 'Spirit Batch';
+        batchBuilderState = { type: defaultType, customType: '', ingredients: [], perDrink: 0 };
         
         const addBtn = document.getElementById('add-batch-btn');
         if (addBtn) addBtn.classList.add('hidden');
         
+        sweepIntoBatch(defaultType);
+        renderBuilder();
+        renderBatchForm();
+    }
+
+    // Shared sweep — sweeps MAIN into the batch, merges existing sub-section, fills placeholders if empty
+    function sweepIntoBatch(targetType) {
         const mainSec = builderState.sections.find(s => s.name === 'MAIN');
-        let allowed = BATCH_CONFIG['Spirit Batch'].allowedCategories;
+        
+        let allowed = ['amber-glow', 'neon-cyan', 'juice-glow', 'puree-mango', 'magenta-glow', 'coffee-dark'];
+        if (BATCH_CONFIG[targetType]) allowed = BATCH_CONFIG[targetType].allowedCategories;
+        else if (targetType === 'Mocktail') allowed = ['juice-glow', 'puree-mango', 'magenta-glow'];
+        
+        // Build exclusion sets: names already in OTHER sub-batches, plus all sub-batch names (so refs don't pull in as constituents)
+        const inOtherBatch = new Set();
+        const subSectionNames = new Set();
+        builderState.sections.forEach(s => {
+            if (s.name === 'MAIN') return;
+            subSectionNames.add(s.name.toLowerCase());
+            if (s.name === targetType) return;
+            s.ingredients.forEach(i => { if (i.name) inOtherBatch.add(i.name.toLowerCase().trim()); });
+        });
+        
+        // Sweep MAIN — no amount filter; pull anything with right cat, skip batch refs and cross-batch dupes
         if (mainSec) {
             for (let i = mainSec.ingredients.length - 1; i >= 0; i--) {
                 const ing = mainSec.ingredients[i];
-                // Removed the math barrier. If it has a name and the right category, sweep it!
-                if (ing.name && ing.name.trim() !== '' && allowed.includes(ing.cat)) {
-                    batchBuilderState.ingredients.unshift(mainSec.ingredients.splice(i, 1)[0]);
-                }
+                if (!ing.name || !ing.name.trim()) continue;
+                if (!allowed.includes(ing.cat)) continue;
+                const lowName = ing.name.toLowerCase().trim();
+                if (subSectionNames.has(lowName)) continue;
+                if (inOtherBatch.has(lowName)) continue;
+                batchBuilderState.ingredients.unshift(mainSec.ingredients.splice(i, 1)[0]);
             }
         }
-        if (batchBuilderState.ingredients.length === 0) {
-            let defName = allowed[0] === 'coffee-dark' ? 'Espresso' : '';
-            batchBuilderState.ingredients.push({ amount: 0, name: defName, cat: allowed[0] });
-        } else {
-            batchBuilderState.perDrink = batchBuilderState.ingredients.filter(i => i.cat !== 'static-ruby').reduce((sum, ing) => sum + (ing.amount || 0), 0);
+        
+        // Merge existing sub-section ingredients (handles re-opening / editing an already-created batch)
+        const existingSub = builderState.sections.find(s => s.name === targetType);
+        if (existingSub && existingSub.ingredients.length > 0) {
+            const haveNames = new Set(batchBuilderState.ingredients.map(i => (i.name || '').toLowerCase().trim()));
+            existingSub.ingredients.forEach(i => {
+                const lowName = (i.name || '').toLowerCase().trim();
+                if (lowName && !haveNames.has(lowName)) {
+                    batchBuilderState.ingredients.push({ amount: i.amount, name: i.name, cat: i.cat, unit: i.unit });
+                }
+            });
         }
-        renderBuilder();
-        renderBatchForm();
+        
+        // Placeholder fallback if still empty — skip placeholders whose category is already in another sub-batch
+        if (batchBuilderState.ingredients.length === 0) {
+            const catsInOtherBatch = new Set();
+            builderState.sections.forEach(s => {
+                if (s.name === 'MAIN' || s.name === targetType) return;
+                s.ingredients.forEach(i => catsInOtherBatch.add(i.cat));
+            });
+            if (targetType === 'Juice Batch' || targetType === 'Mocktail') {
+                batchBuilderState.ingredients.push({ amount: 0, name: 'Juice', cat: 'juice-glow' });
+                if (!catsInOtherBatch.has('puree-mango')) batchBuilderState.ingredients.push({ amount: 0, name: 'Puree', cat: 'puree-mango' });
+                if (!catsInOtherBatch.has('magenta-glow')) batchBuilderState.ingredients.push({ amount: 0, name: 'Syrup', cat: 'magenta-glow' });
+            } else {
+                const defCat = allowed[0] || 'amber-glow';
+                const batchNameMap = { 'coffee-dark': 'Espresso', 'juice-glow': 'Juice', 'magenta-glow': 'Syrup', 'puree-mango': 'Puree' };
+                batchBuilderState.ingredients.push({ amount: 0, name: batchNameMap[defCat] || '', cat: defCat });
+            }
+            batchBuilderState.perDrink = 0;
+        } else {
+            // Prefer existing MAIN ref's amount (preserves pour size on edit); else sum constituents
+            const mainRef = mainSec && mainSec.ingredients.find(i => i.name && i.name.toLowerCase().trim() === targetType.toLowerCase());
+            if (mainRef && mainRef.amount > 0) {
+                batchBuilderState.perDrink = mainRef.amount;
+            } else {
+                batchBuilderState.perDrink = batchBuilderState.ingredients.filter(i => i.cat !== 'static-ruby').reduce((sum, ing) => sum + (ing.amount || 0), 0);
+            }
+        }
     }
 
     function closeBatchBuilder() {
@@ -796,50 +883,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const newType = pill.getAttribute('data-type');
                 if (newType === batchBuilderState.type) return;
 
+                // Return current batch ingredients to MAIN so the sweep can re-pick them under the new rules
                 const mainSec = builderState.sections.find(s => s.name === 'MAIN');
                 if (mainSec) {
                     batchBuilderState.ingredients.forEach(ing => {
-                        if (ing.name.trim()) mainSec.ingredients.push(ing);
+                        if (ing.name && ing.name.trim()) mainSec.ingredients.push(ing);
                     });
                 }
                 batchBuilderState.ingredients = [];
                 batchBuilderState.type = newType;
                 
-                let allowed = ['amber-glow', 'neon-cyan', 'juice-glow', 'puree-mango', 'magenta-glow', 'coffee-dark'];
-                if (BATCH_CONFIG[newType]) allowed = BATCH_CONFIG[newType].allowedCategories;
-                else if (newType === 'Mocktail') allowed = ['juice-glow', 'puree-mango', 'magenta-glow'];
-
-                if (mainSec) {
-                    for (let i = mainSec.ingredients.length - 1; i >= 0; i--) {
-                        const ing = mainSec.ingredients[i];
-                        const safeAmount = parseFloat(ing.amount) || 0;
-                        if (ing.name && ing.name.trim() !== '' && safeAmount > 0 && allowed.includes(ing.cat)) {
-                            batchBuilderState.ingredients.unshift(mainSec.ingredients.splice(i, 1)[0]);
-                        }
-                    }
-                }
-
-                if (batchBuilderState.ingredients.length === 0) {
-                    if (newType === 'Juice Batch' || newType === 'Mocktail') {
-                        batchBuilderState.ingredients.push({ amount: 0, name: 'Juice', cat: 'juice-glow' });
-                        batchBuilderState.ingredients.push({ amount: 0, name: 'Puree', cat: 'puree-mango' });
-                        
-                        const spiritSec = builderState.sections.find(s => s.name === 'Spirit Batch');
-                        const syrupInSpirit = spiritSec ? spiritSec.ingredients.some(i => i.cat === 'magenta-glow') : false;
-                        
-                        if (!syrupInSpirit) {
-                            batchBuilderState.ingredients.push({ amount: 0, name: 'Syrup', cat: 'magenta-glow' });
-                        }
-                    } else {
-                        let defCat = allowed[0] || 'amber-glow';
-                        const batchNameMap = { 'coffee-dark': 'Espresso', 'juice-glow': 'Juice', 'magenta-glow': 'Syrup', 'puree-mango': 'Puree' };
-                        let defName = batchNameMap[defCat] || '';
-                        batchBuilderState.ingredients.push({ amount: 0, name: defName, cat: defCat });
-                    }
-                    batchBuilderState.perDrink = 0;
-                } else {
-                    batchBuilderState.perDrink = batchBuilderState.ingredients.filter(i => i.cat !== 'static-ruby').reduce((sum, ing) => sum + (ing.amount || 0), 0);
-                }
+                sweepIntoBatch(newType);
 
                 renderBuilder();
                 renderBatchForm();
@@ -903,7 +957,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             row.innerHTML = `
                 ${amountHtml}
-                <input type="text" class="builder-row-name" value="${(ing.name || '').replace(/"/g, '&quot;')}" placeholder="Ingredient">
+                <input type="text" class="builder-row-name" list="shelf-suggestions" autocomplete="off" value="${(ing.name || '').replace(/"/g, '&quot;')}" placeholder="Ingredient">
                 <button class="builder-row-cat ${ing.cat}">${catLabels[ing.cat] || 'SPIRIT'}</button>
                 <button class="builder-row-remove">×</button>
             `;
@@ -1333,9 +1387,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const underscoreRegex = /^_+\s*(.+?)\s*_+$/;
             
             const batchHeaderRegex = /^(spirit\s*batch|juice\s*batch|cream(?:\s+batch)?|mocktail|.+\s+batch)\s*:?\s*$/i;
-            const syrupKeys = ['syrup', 'sugar', 'agave', 'honey', 'gomme', 'orgeat', 'falernum', 'grenadine', 'cordial'];
-            const liqueurKeys = ['liqueur', 'licor', 'amaro', 'campari', 'aperol', 'vermouth', 'cointreau', 'triple sec', 'chartreuse', 'bénédictine', 'benedictine', 'maraschino', 'amaretto', 'disaronno', 'dissarono', 'kahlua', 'tia maria', 'baileys', 'crème de', 'creme de', 'sambuca', 'absinthe', 'pastis', 'sherry', 'port', 'madeira', 'lillet', 'suze', 'fernet', 'jägermeister', 'jagermeister', 'drambuie', 'galliano', 'frangelico', 'midori', 'curaçao', 'curacao', 'st-germain', 'st. germain', 'bitters', 'angostura', 'peychaud', 'wine', 'champagne', 'prosecco', 'cava'];
-            const juiceKeys = ['juice', 'puree', 'lemon', 'lime', 'orange', 'grapefruit', 'pineapple', 'cranberry', 'apple', 'tomato', 'water', 'soda', 'tonic', 'cola', 'ginger beer', 'coconut', 'milk', 'cream', 'egg', 'yuzu', 'passion', 'mango', 'raspberry', 'strawberry', 'blackberry', 'blueberry', 'watermelon', 'cucumber', 'kiwi', 'lychee', 'guava', 'peach', 'pear', 'rhubarb', 'beetroot', 'carrot', 'fig'];
 
             const detectBatchType = (raw) => {
                 const low = raw.toLowerCase();
@@ -1346,17 +1397,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return capitalize(raw.replace(/:$/, '').trim());
             };
 
-            const categorize = (name) => {
-                const low = name.toLowerCase();
-                if (/spirit\s*batch/.test(low)) return 'amber-glow';
-                if (/juice\s*batch/.test(low)) return 'juice-glow';
-                if (/mocktail/.test(low)) return 'juice-glow';
-                if (/cream.*batch/.test(low)) return 'magenta-glow';
-                if (syrupKeys.some(k => low.includes(k))) return 'magenta-glow';
-                if (liqueurKeys.some(k => low.includes(k))) return 'neon-cyan';
-                if (juiceKeys.some(k => low.includes(k))) return 'juice-glow';
-                return 'amber-glow';
-            };
+            const categorize = categorizeIngredient;
 
             let currentSection = title;
             lines.forEach(line => {
