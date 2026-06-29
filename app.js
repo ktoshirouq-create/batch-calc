@@ -149,8 +149,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (customInput) {
             const wrap = document.createElement('div');
             wrap.className = 'modal-custom-input';
+            const prefillVal = (customInput.prefill || '').replace(/"/g, '&quot;');
             wrap.innerHTML = `
-                <input type="text" class="premium-text-input" placeholder="${customInput.placeholder || 'Custom...'}" style="margin-bottom: 0;">
+                <input type="text" class="premium-text-input" placeholder="${customInput.placeholder || 'Custom...'}" value="${prefillVal}" style="margin-bottom: 0;">
                 <button class="btn-primary" style="margin-top: 12px;">${customInput.btnLabel || 'ADD'}</button>
             `;
             const input = wrap.querySelector('input');
@@ -2037,6 +2038,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const actions = [];
                     if (isLinked) actions.push({ label: 'View Spec', value: 'view-spec' });
                     if (isPeriodic) actions.push({ label: 'Set Frequency', value: 'set-freq' });
+                    actions.push({ label: 'Edit Task', value: 'edit' });
                     actions.push({ label: 'Add Sub-Step', value: 'add-sub' });
                     actions.push({ label: 'Delete Task', value: 'delete' });
                     
@@ -2045,6 +2047,21 @@ document.addEventListener('DOMContentLoaded', () => {
                             opsData[activeOpsCategory].splice(taskObj.originalIndex, 1);
                             saveOps();
                             renderOpsList();
+                        } else if (val === 'edit') {
+                            setTimeout(() => {
+                                openSelectModal('EDIT TASK', [], null, {
+                                    placeholder: 'Edit task text...',
+                                    btnLabel: 'SAVE',
+                                    prefill: opsData[activeOpsCategory][taskObj.originalIndex].text,
+                                    onSubmit: (newText) => {
+                                        const t = newText.trim();
+                                        if (!t) return;
+                                        opsData[activeOpsCategory][taskObj.originalIndex].text = t;
+                                        saveOps();
+                                        renderOpsList();
+                                    }
+                                });
+                            }, 350);
                         } else if (val === 'view-spec') {
                             const codexTab = document.querySelector('.nav-tab[data-target="codex-module"]');
                             if (codexTab) codexTab.click();
