@@ -9,7 +9,7 @@
     --magenta-glow: #B06A8B;
     --juice-glow: #9EC4A8;
     --coffee-dark: #6F4E37;
-    --puree-mango: #F2B138;
+    --puree-mango: #E8743B;
     --static-ruby: #8C1C20;
 }
 
@@ -138,7 +138,7 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .puree-mango .ing-amount { color: var(--puree-mango); }
 .static-ruby .ing-amount { color: var(--static-ruby); }
 
-.puree-mango { background: rgba(242, 177, 56, 0.15); border: 1px solid rgba(242, 177, 56, 0.4); color: #f2b138; }
+.puree-mango { background: rgba(232, 116, 59, 0.15); border: 1px solid rgba(232, 116, 59, 0.4); color: #E8743B; }
 .static-ruby { background: rgba(140, 28, 32, 0.15); border: 1px solid rgba(140, 28, 32, 0.4); color: #d64d52; }
 
 /* Wash & Mod Pills */
