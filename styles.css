@@ -316,10 +316,13 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .ops-delete-btn { color: #d97c8e; font-size: 1.4rem; padding: 0 8px; cursor: pointer; display: none; }
 
 /* Completed State (The Dimming Effect) */
-.ops-row.completed { opacity: 0.35; background: transparent; border-color: transparent; }
+.ops-row.completed { opacity: 0.55; background: transparent; border-color: transparent; }
 .ops-row.completed .ops-checkbox, .ops-row.completed .ops-number { border-color: var(--nodee-gold); background: var(--nodee-gold); color: #000; text-decoration: line-through; }
 .ops-row.completed .ops-checkbox::after { content: '✓'; color: #000; font-size: 0.8rem; font-weight: 900; }
 .ops-row.completed .ops-text { text-decoration: line-through; color: var(--text-muted); }
+.ops-row-linked .ops-text { color: var(--nodee-gold); }
+.ops-link-glyph { margin-right: 6px; font-size: 0.85em; opacity: 0.85; }
+.ops-row-linked.completed .ops-text { color: var(--text-muted); }
 
 /* OPS UI Overrides: Hide sliding background if the group is inactive */
 .ops-pill-group:not(:has(.active))::before { display: none; }
