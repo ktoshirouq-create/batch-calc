@@ -1770,7 +1770,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- OPS MODULE ENGINE ---
     const OPS_KEY = 'codex_ops_v1';
-    let opsData = { opening: [], mid: [], closing: [], weekly: [], monthly: [] };
+    let opsData = { opening: [], prep: [], closing: [], weekly: [], monthly: [] };
     let activeOpsCategory = 'opening';
 
     function loadOps() {
@@ -1787,9 +1787,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (now.getHours() < 10) wipeDate.setDate(wipeDate.getDate() - 1);
 
         if (!lastWipeStr || new Date(parseInt(lastWipeStr)) < wipeDate) {
+            // PER-CATEGORY WIPE BEHAVIOR (intentionally different per bucket):
+            //   opening / closing — completed unticks (SOPs reset daily)
+            //   prep              — completed DELETES; uncompleted carries over
+            //   weekly / monthly  — completed unticks on cadence boundary
             opsData.opening?.forEach(t => t.completed = false);
-            opsData.mid?.forEach(t => t.completed = false);
             opsData.closing?.forEach(t => t.completed = false);
+            
+            if (opsData.prep && opsData.prep.length > 0) {
+                opsData.prep = opsData.prep.filter(t => !t.completed);
+            }
             
             if (now.getDay() === 1 && (!lastWipeStr || new Date(parseInt(lastWipeStr)).getDay() !== 1)) {
                 opsData.weekly.forEach(t => t.completed = false);
@@ -1798,6 +1805,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 opsData.monthly.forEach(t => t.completed = false);
             }
             localStorage.setItem('codex_ops_last_wipe', Date.now().toString());
+            saveOps();
+        }
+
+        // One-time migration: rename legacy `mid` bucket to `prep`
+        if (opsData.mid && Array.isArray(opsData.mid)) {
+            opsData.prep = [...(opsData.prep || []), ...opsData.mid];
+            delete opsData.mid;
             saveOps();
         }
     }
@@ -1811,11 +1825,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!container) return;
         container.innerHTML = '';
 
-        // Calculate and Update Dashboard Progress
-        const dailyCategories = ['opening', 'mid', 'closing'];
+        // Calculate and Update Dashboard Progress (opening + closing only — PREP is shift-flexible)
+        const sopCategories = ['opening', 'closing'];
         let totalDaily = 0;
         let completedDaily = 0;
-        dailyCategories.forEach(cat => {
+        sopCategories.forEach(cat => {
             if (opsData[cat]) {
                 totalDaily += opsData[cat].length;
                 completedDaily += opsData[cat].filter(t => t.completed).length;
@@ -1829,12 +1843,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (fillEl) fillEl.style.width = `${progressPercent}%`;
 
         const tasks = opsData[activeOpsCategory] || [];
-        const isDaily = dailyCategories.includes(activeOpsCategory);
+        const isNumberedSop = activeOpsCategory === 'opening' || activeOpsCategory === 'closing';
+        const isPrep = activeOpsCategory === 'prep';
+        const isPeriodic = activeOpsCategory === 'weekly' || activeOpsCategory === 'monthly';
+        const isDraggable = isNumberedSop || isPrep;  // PREP draggable for urgency; SOPs draggable for order
 
         let sortedTasks = [];
-        if (isDaily) {
+        if (isNumberedSop) {
             sortedTasks = [...tasks].map((t, i) => ({...t, originalIndex: i}));
+        } else if (isPrep) {
+            // PREP: uncompleted in drag-set order, completed sinks to bottom
+            sortedTasks = [...tasks].map((t, i) => ({...t, originalIndex: i}))
+                                      .sort((a, b) => {
+                                          if (a.completed !== b.completed) return a.completed ? 1 : -1;
+                                          return 0;
+                                      });
         } else {
+            // Periodic: uncompleted by oldest-last-done first, completed sinks to bottom
             sortedTasks = [...tasks].map((t, i) => ({...t, originalIndex: i}))
                                       .sort((a, b) => {
                                           if (a.completed !== b.completed) return a.completed ? 1 : -1;
@@ -1847,30 +1872,58 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        const defaultInterval = activeOpsCategory === 'weekly' ? 7 : (activeOpsCategory === 'monthly' ? 30 : null);
+        const formatDate = (ts) => {
+            const d = new Date(ts);
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        };
+
         sortedTasks.forEach((taskObj, displayIndex) => {
             const hasSubtasks = taskObj.subtasks && taskObj.subtasks.length > 0;
+            const isLinked = !!(taskObj.linkedSpec && taskObj.linkedSection);
             const row = document.createElement('div');
-            row.className = `ops-row ${taskObj.completed ? 'completed' : ''}`;
-            row.setAttribute('draggable', isDaily ? 'true' : 'false');
+            let rowClasses = `ops-row ${taskObj.completed ? 'completed' : ''}`;
+            if (isLinked) rowClasses += ' ops-row-linked';
+            row.className = rowClasses;
+            row.setAttribute('draggable', isDraggable ? 'true' : 'false');
             
             let html = `<div class="ops-row-main">`;
             
-            if (isDaily) {
+            if (isNumberedSop) {
                 html += `<div class="ops-number">${displayIndex + 1}</div>`;
             } else {
                 html += `<div class="ops-checkbox"></div>`;
             }
             
-            let textContent = taskObj.text;
-            if (!isDaily && !taskObj.completed && taskObj.lastCompleted) {
-                const daysAgo = Math.floor((Date.now() - taskObj.lastCompleted) / (1000 * 60 * 60 * 24));
-                let timeLabel = daysAgo === 0 ? 'Today' : `${daysAgo} day${daysAgo > 1 ? 's' : ''} ago`;
-                textContent += `<div class="ops-time-tag ${daysAgo >= 7 ? 'text-red' : ''}">Last completed: ${timeLabel}</div>`;
+            let labelHtml = '';
+            if (isLinked) {
+                labelHtml += `<span class="ops-link-glyph">🔗</span>`;
+            }
+            labelHtml += taskObj.text;
+            
+            // Periodic: due-date countdown / overdue / completed-on display
+            if (isPeriodic) {
+                const interval = taskObj.intervalDays || defaultInterval;
+                if (taskObj.completed && taskObj.lastCompleted) {
+                    labelHtml += `<div class="ops-time-tag">✓ Done ${formatDate(taskObj.lastCompleted)}</div>`;
+                } else if (taskObj.lastCompleted) {
+                    const daysSince = Math.floor((Date.now() - taskObj.lastCompleted) / (1000 * 60 * 60 * 24));
+                    const daysUntilDue = interval - daysSince;
+                    const isOverdue = daysUntilDue < 0;
+                    const dueLabel = isOverdue ? `OVERDUE by ${Math.abs(daysUntilDue)} day${Math.abs(daysUntilDue) !== 1 ? 's' : ''}` : `Next due in ${daysUntilDue} day${daysUntilDue !== 1 ? 's' : ''}`;
+                    labelHtml += `<div class="ops-time-tag">Last: ${formatDate(taskObj.lastCompleted)}</div>`;
+                    labelHtml += `<div class="ops-time-tag ${isOverdue ? 'text-red' : ''}">${dueLabel}</div>`;
+                }
             }
             
-            html += `<span class="ops-text" style="flex:1;">${textContent}</span>`;
+            // PREP linked: show last-batched date if we have one
+            if (isPrep && isLinked && taskObj.lastCompleted) {
+                labelHtml += `<div class="ops-time-tag">Last batched: ${formatDate(taskObj.lastCompleted)}</div>`;
+            }
             
-            if (isDaily) {
+            html += `<span class="ops-text" style="flex:1;">${labelHtml}</span>`;
+            
+            if (isDraggable) {
                 html += `<div class="drag-handle-task">≡</div>`;
             }
             html += `</div>`;
@@ -1884,15 +1937,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             row.innerHTML = html;
 
-            const checkTarget = isDaily ? row.querySelector('.ops-number') : row.querySelector('.ops-checkbox');
+            const checkTarget = isNumberedSop ? row.querySelector('.ops-number') : row.querySelector('.ops-checkbox');
             if (checkTarget) {
                 checkTarget.addEventListener('click', (e) => {
                     e.stopPropagation();
                     triggerHaptic('light');
                     const isNowComplete = !opsData[activeOpsCategory][taskObj.originalIndex].completed;
                     opsData[activeOpsCategory][taskObj.originalIndex].completed = isNowComplete;
-                    
-                    if (!isDaily && isNowComplete) {
+                    // Stamp lastCompleted for periodic AND for prep (so we can show "last batched" on linked items)
+                    if ((isPeriodic || isPrep) && isNowComplete) {
                         opsData[activeOpsCategory][taskObj.originalIndex].lastCompleted = Date.now();
                     }
                     saveOps();
@@ -1902,13 +1955,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
             row.querySelector('.ops-text').addEventListener('click', (e) => {
                 e.stopPropagation();
+                // Linked PREP item — tap jumps to the Codex spec
+                if (isLinked) {
+                    const specName = taskObj.linkedSpec;
+                    if (!recipeVault[specName]) {
+                        openConfirmModal({
+                            title: 'SPEC NOT FOUND',
+                            message: `"${specName}" no longer exists in the Codex. Break the link, or delete this task?`,
+                            confirmLabel: 'BREAK LINK',
+                            cancelLabel: 'KEEP',
+                            onConfirm: () => {
+                                delete opsData[activeOpsCategory][taskObj.originalIndex].linkedSpec;
+                                delete opsData[activeOpsCategory][taskObj.originalIndex].linkedSection;
+                                saveOps();
+                                renderOpsList();
+                            }
+                        });
+                        return;
+                    }
+                    triggerHaptic('light');
+                    // Jump to CODEX tab and expand the linked spec
+                    const codexTab = document.querySelector('.nav-tab[data-target="codex-module"]');
+                    if (codexTab) codexTab.click();
+                    setTimeout(() => {
+                        const items = document.querySelectorAll('#managed-vault-list .vault-item');
+                        items.forEach(item => {
+                            const title = item.querySelector('.cocktail-title');
+                            if (title && title.innerText === specName) {
+                                item.classList.add('expanded');
+                                item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
+                        });
+                    }, 100);
+                    return;
+                }
                 if (hasSubtasks) {
                     triggerHaptic('light');
                     row.classList.toggle('expanded');
                 }
             });
 
-            if (isDaily) {
+            if (isDraggable) {
                 row.addEventListener('dragstart', (e) => {
                     e.dataTransfer.setData('text/plain', taskObj.originalIndex);
                     row.style.opacity = '0.4';
@@ -1946,14 +2033,56 @@ document.addEventListener('DOMContentLoaded', () => {
                 pressTimer = setTimeout(() => {
                     pressTimer = null;
                     triggerHaptic('medium');
-                    openSelectModal('TASK ACTIONS', [
-                        { label: 'Add Sub-Step', value: 'add-sub' },
-                        { label: 'Delete Task', value: 'delete' }
-                    ], (val) => {
+                    
+                    const actions = [];
+                    if (isLinked) actions.push({ label: 'View Spec', value: 'view-spec' });
+                    if (isPeriodic) actions.push({ label: 'Set Frequency', value: 'set-freq' });
+                    actions.push({ label: 'Add Sub-Step', value: 'add-sub' });
+                    actions.push({ label: 'Delete Task', value: 'delete' });
+                    
+                    openSelectModal('TASK ACTIONS', actions, (val) => {
                         if (val === 'delete') {
                             opsData[activeOpsCategory].splice(taskObj.originalIndex, 1);
                             saveOps();
                             renderOpsList();
+                        } else if (val === 'view-spec') {
+                            const codexTab = document.querySelector('.nav-tab[data-target="codex-module"]');
+                            if (codexTab) codexTab.click();
+                            setTimeout(() => {
+                                const items = document.querySelectorAll('#managed-vault-list .vault-item');
+                                items.forEach(item => {
+                                    const title = item.querySelector('.cocktail-title');
+                                    if (title && title.innerText === taskObj.linkedSpec) {
+                                        item.classList.add('expanded');
+                                        item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    }
+                                });
+                            }, 100);
+                        } else if (val === 'set-freq') {
+                            setTimeout(() => {
+                                openSelectModal('FREQUENCY', [
+                                    { label: 'Every 7 days', value: 7 },
+                                    { label: 'Every 14 days', value: 14 },
+                                    { label: 'Every 30 days', value: 30 },
+                                    { label: 'Every 60 days', value: 60 },
+                                    { label: 'Every 90 days', value: 90 }
+                                ], (days) => {
+                                    opsData[activeOpsCategory][taskObj.originalIndex].intervalDays = parseInt(days);
+                                    saveOps();
+                                    renderOpsList();
+                                }, {
+                                    placeholder: 'Custom days...',
+                                    btnLabel: 'SET',
+                                    onSubmit: (val) => {
+                                        const days = parseInt(val);
+                                        if (!isNaN(days) && days > 0) {
+                                            opsData[activeOpsCategory][taskObj.originalIndex].intervalDays = days;
+                                            saveOps();
+                                            renderOpsList();
+                                        }
+                                    }
+                                });
+                            }, 350);
                         } else if (val === 'add-sub') {
                             setTimeout(() => {
                                 openSelectModal('ADD SUB-STEP', [], null, {
@@ -2003,6 +2132,39 @@ document.addEventListener('DOMContentLoaded', () => {
     if (opsAddBtn) {
         opsAddBtn.addEventListener('click', () => {
             triggerHaptic('light');
+            
+            // PREP gets a sub-batch picker (linked tasks); other categories just get the free-text modal
+            if (activeOpsCategory === 'prep') {
+                const subBatchOptions = Object.keys(recipeVault || {})
+                    .filter(name => name.includes(' — '))
+                    .sort((a, b) => a.localeCompare(b))
+                    .map(name => {
+                        const [spec, section] = name.split(' — ');
+                        return { label: name, value: name, data: { spec, section } };
+                    });
+                
+                openSelectModal('NEW PREP TASK', subBatchOptions, (val, label, data) => {
+                    opsData.prep.push({
+                        text: label,
+                        completed: false,
+                        subtasks: [],
+                        linkedSpec: data.spec,
+                        linkedSection: data.section
+                    });
+                    saveOps();
+                    renderOpsList();
+                }, {
+                    placeholder: 'Or type an ad-hoc task...',
+                    btnLabel: 'ADD',
+                    onSubmit: (val) => {
+                        opsData.prep.push({ text: val, completed: false, subtasks: [] });
+                        saveOps();
+                        renderOpsList();
+                    }
+                });
+                return;
+            }
+            
             openSelectModal('NEW TASK', [], null, {
                 placeholder: 'Type main task here...',
                 btnLabel: 'ADD',
@@ -2021,7 +2183,7 @@ document.addEventListener('DOMContentLoaded', () => {
             triggerHaptic('heavy');
             let totalDaily = 0;
             let completedDaily = 0;
-            ['opening', 'mid', 'closing'].forEach(cat => {
+            ['opening', 'closing'].forEach(cat => {
                 if (opsData[cat]) {
                     totalDaily += opsData[cat].length;
                     completedDaily += opsData[cat].filter(t => t.completed).length;
@@ -2030,13 +2192,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             openConfirmModal({
                 title: 'END SHIFT',
-                message: `Shift Progress: ${completedDaily}/${totalDaily} tasks completed.\n\nEnd shift and reset the daily board? (Periodic tasks remain saved).`,
+                message: `Shift Progress: ${completedDaily}/${totalDaily} SOP tasks completed.\n\nReset SOPs and clear completed prep? (Uncompleted prep + periodic tasks remain).`,
                 confirmLabel: 'RESET BOARD',
                 danger: false,
                 onConfirm: () => {
-                    ['opening', 'mid', 'closing'].forEach(cat => {
+                    // SOPs: just untick
+                    ['opening', 'closing'].forEach(cat => {
                         if(opsData[cat]) opsData[cat].forEach(t => t.completed = false);
                     });
+                    // PREP: delete completed, keep uncompleted
+                    if (opsData.prep) opsData.prep = opsData.prep.filter(t => !t.completed);
                     localStorage.setItem('codex_ops_last_wipe', Date.now().toString());
                     saveOps();
                     renderOpsList();
