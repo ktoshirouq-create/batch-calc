@@ -320,7 +320,7 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .ops-row.completed .ops-checkbox, .ops-row.completed .ops-number { border-color: var(--nodee-gold); background: var(--nodee-gold); color: #000; text-decoration: line-through; }
 .ops-row.completed .ops-checkbox::after { content: '✓'; color: #000; font-size: 0.8rem; font-weight: 900; }
 .ops-row.completed .ops-text { text-decoration: line-through; color: var(--text-muted); }
-.ops-row.completed .ops-time-tag { text-decoration: none; }
+.ops-row.completed .ops-time-tag { text-decoration: none; display: inline-block; }
 .ops-row-linked .ops-text { color: var(--nodee-gold); }
 .ops-link-glyph { margin-right: 6px; font-size: 0.85em; opacity: 0.85; }
 .ops-row-linked.completed .ops-text { color: var(--text-muted); }
