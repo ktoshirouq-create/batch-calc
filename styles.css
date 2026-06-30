@@ -138,15 +138,14 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .puree-mango .ing-amount { color: var(--puree-mango); }
 .static-ruby .ing-amount { color: var(--static-ruby); }
 
-.puree-mango { background: rgba(232, 116, 59, 0.15); border: 1px solid rgba(232, 116, 59, 0.4); color: #E8743B; }
-.static-ruby { background: rgba(140, 28, 32, 0.15); border: 1px solid rgba(140, 28, 32, 0.4); color: #d64d52; }
+.builder-row-cat.puree-mango, .stage-cat.puree-mango, .shelf-cat-btn.puree-mango, .shelf-add-cat.puree-mango { background: var(--puree-mango); }
+.builder-row-cat.static-ruby, .stage-cat.static-ruby, .shelf-cat-btn.static-ruby, .shelf-add-cat.static-ruby { background: var(--static-ruby); color: #fff; }
 
 /* Wash & Mod Pills */
 .wash-pill, .mod-pill, .view-pill { flex: 1; background: transparent; border: none; color: var(--text-muted); padding: 12px 0; border-radius: 10px; font-size: 0.85rem; font-weight: 800; letter-spacing: 1px; text-align: center; transition: color 0.25s ease; cursor: pointer; position: relative; z-index: 2; }
 .wash-pill.active, .mod-pill.active, .view-pill.active { color: var(--bg-oled); }
 .wash-pill:active, .mod-pill:active, .view-pill:active { transform: scale(0.96); transition: transform 0.1s ease; }
 .view-pill { font-size: 0.7rem; padding: 11px 0; letter-spacing: 1.5px; font-weight: 900; }
-.vault-content.view-service .vault-subbatch, .vault-content.view-service .vault-divider { display: none !important; }
 /* Quick Pills */
 .quick-pills { gap: 10px; }
 .quick-pill-btn { flex: 1; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04); color: var(--text-muted); padding: 10px 0; border-radius: 10px; font-size: 0.8rem; font-weight: 700; cursor: pointer; }
@@ -324,6 +323,24 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .ops-row-linked .ops-text { color: var(--nodee-gold); }
 .ops-link-glyph { margin-right: 6px; font-size: 0.85em; opacity: 0.85; }
 .ops-row-linked.completed .ops-text { color: var(--text-muted); }
+
+/* Subtask progress badge */
+.ops-subtask-badge { display: inline-flex; align-items: center; gap: 3px; color: var(--nodee-gold); font-size: 0.7rem; font-weight: 800; flex-shrink: 0; margin-right: 4px; cursor: pointer; padding: 2px 4px; }
+.ops-subtask-badge .chevron { display: inline-block; transition: transform 0.2s ease; font-size: 0.6rem; }
+.ops-row.expanded .ops-subtask-badge .chevron { transform: rotate(180deg); }
+
+/* Interactive subtask rows */
+.ops-subtasks { display: none; padding: 4px 12px 14px 46px; flex-direction: column; gap: 4px; }
+.ops-row.expanded .ops-subtasks { display: flex; }
+.ops-subtask-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.ops-subtask-check { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--text-muted); display: flex; align-items: center; justify-content: center; flex-shrink: 0; cursor: pointer; font-size: 0.6rem; }
+.ops-subtask-check.done { background: var(--nodee-gold); border-color: var(--nodee-gold); color: #000; }
+.ops-subtask-text { flex: 1; font-size: 0.82rem; color: var(--text-main); cursor: pointer; }
+.ops-subtask-row.done .ops-subtask-text { text-decoration: line-through; color: var(--text-muted); }
+.ops-subtask-del { color: var(--text-muted); font-size: 1.1rem; padding: 0 6px; cursor: pointer; flex-shrink: 0; }
+.ops-subtask-input { flex: 1; background: rgba(255,255,255,0.04); border: 1px solid #222; border-radius: 8px; padding: 6px 10px; color: var(--text-main); font-size: 0.82rem; }
+.ops-subtask-add { display: flex; align-items: center; gap: 6px; padding: 8px 0 2px; color: var(--text-muted); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.5px; cursor: pointer; }
+.ops-subtask-add:active { color: var(--nodee-gold); }
 
 /* OPS UI Overrides: Hide sliding background if the group is inactive */
 .ops-pill-group:not(:has(.active))::before { display: none; }
