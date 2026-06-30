@@ -53,6 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (/espresso\s*batch/.test(low)) return 'coffee-dark';
         if (/espresso|cold\s*brew|coffee/.test(low)) return 'coffee-dark';
         if (/puree/.test(low)) return 'puree-mango';
+        if (/bitters|angostura|ango|peychaud|egg white|^egg$|tincture|saline|absinthe rinse/.test(low)) return 'static-ruby';
         if (SYRUP_KEYS.some(k => low.includes(k))) return 'magenta-glow';
         if (LIQUEUR_KEYS.some(k => low.includes(k))) return 'neon-cyan';
         if (JUICE_KEYS.some(k => low.includes(k))) return 'juice-glow';
@@ -363,30 +364,7 @@ document.addEventListener('DOMContentLoaded', () => {
             details.id = `details-${id}`;
 
             const content = document.createElement('div');
-            content.className = 'vault-content view-service';
-
-            if (subBatches.length > 0) {
-                const viewToggle = document.createElement('div');
-                viewToggle.className = 'pill-group view-toggle';
-                viewToggle.style.marginTop = '12px';
-                viewToggle.style.marginBottom = '18px';
-                viewToggle.onclick = (e) => e.stopPropagation();
-                viewToggle.innerHTML = `
-                    <button class="view-pill active" data-view="service">SERVICE</button>
-                    <button class="view-pill" data-view="prep">PREP</button>
-                `;
-                details.appendChild(viewToggle);
-
-                viewToggle.querySelectorAll('.view-pill').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        triggerHaptic('light');
-                        viewToggle.querySelectorAll('.view-pill').forEach(b => b.classList.remove('active'));
-                        btn.classList.add('active');
-                        content.className = btn.getAttribute('data-view') === 'service' ? 'vault-content view-service' : 'vault-content view-prep';
-                    });
-                });
-            }
+            content.className = 'vault-content';
 
             const mult = document.createElement('div');
             mult.className = 'service-multiplier';
@@ -464,7 +442,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- SPEC BUILDER ---
     let builderState = { name: '', sections: [{ name: 'MAIN', ingredients: [] }] };
-    const catLabels = { 'amber-glow': 'SPIRIT', 'neon-cyan': 'LIQUEUR', 'juice-glow': 'JUICE', 'magenta-glow': 'SYRUP', 'coffee-dark': 'ESPRESSO', 'puree-mango': 'PUREE', 'static-ruby': 'STATIC' };
+    const catLabels = { 'amber-glow': 'SPIRIT', 'neon-cyan': 'LIQUEUR', 'juice-glow': 'JUICE', 'magenta-glow': 'SYRUP', 'coffee-dark': 'ESPRESSO', 'puree-mango': 'PUREE', 'static-ruby': 'OTHER' };
+    const STATIC_UNITS = ['dash', 'squeeze', 'top'];;
 
     function renderBuilder() {
         const container = document.getElementById('builder-sections');
@@ -490,7 +469,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (ing.cat === 'static-ruby') {
                     const u = ing.unit || 'dash';
                     amountHtml = `
-                        <div style="display:flex; width: 85px; align-items:center; gap:4px; margin-right:4px;">
+                        <div style="display:flex; width: 95px; align-items:center; gap:4px; margin-right:4px;">
                            <input type="number" class="builder-static-input" value="${ing.amount || ''}" placeholder="0" style="width:30px;">
                            <button class="unit-pill" data-unit="${u}">${u}</button>
                         </div>
@@ -517,9 +496,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (unitPill) {
                         unitPill.addEventListener('click', (e) => {
                             triggerHaptic('light');
-                            const units = ['dash', 'squeeze', 'rinse'];
-                            let currIdx = units.indexOf(e.target.dataset.unit || 'dash');
-                            builderState.sections[secIdx].ingredients[ingIdx].unit = units[(currIdx + 1) % units.length];
+                            let currIdx = STATIC_UNITS.indexOf(e.target.dataset.unit || 'dash');
+                            builderState.sections[secIdx].ingredients[ingIdx].unit = STATIC_UNITS[(currIdx + 1) % STATIC_UNITS.length];
                             renderBuilder();
                         });
                     }
@@ -974,9 +952,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (unitPill) {
                     unitPill.addEventListener('click', (e) => {
                         triggerHaptic('light');
-                        const units = ['dash', 'squeeze', 'rinse'];
-                        let currIdx = units.indexOf(e.target.dataset.unit || 'dash');
-                        batchBuilderState.ingredients[idx].unit = units[(currIdx + 1) % units.length];
+                        let currIdx = STATIC_UNITS.indexOf(e.target.dataset.unit || 'dash');
+                        batchBuilderState.ingredients[idx].unit = STATIC_UNITS[(currIdx + 1) % STATIC_UNITS.length];
                         renderBatchIngredients();
                     });
                 }
@@ -1069,7 +1046,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const SHELF_KEY = 'codex_shelf_v1';
     let shelfData = {};
     let shelfAddState = null;
-    const shelfCatLabels = { 'amber-glow': 'SPIRIT', 'neon-cyan': 'LIQUEUR', 'juice-glow': 'JUICE', 'magenta-glow': 'SYRUP', 'coffee-dark': 'ESPRESSO', 'puree-mango': 'PUREE', 'static-ruby': 'STATIC' };
+    const shelfCatLabels = { 'amber-glow': 'SPIRIT', 'neon-cyan': 'LIQUEUR', 'juice-glow': 'JUICE', 'magenta-glow': 'SYRUP', 'coffee-dark': 'ESPRESSO', 'puree-mango': 'PUREE', 'static-ruby': 'OTHER' };
     const shelfDefaultAbvs = { 'amber-glow': 40, 'neon-cyan': 20, 'juice-glow': 0, 'magenta-glow': 0, 'coffee-dark': 0, 'puree-mango': 0, 'static-ruby': 45 };
 
     function loadShelf() {
@@ -1771,7 +1748,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- OPS MODULE ENGINE ---
     const OPS_KEY = 'codex_ops_v1';
-    let opsData = { opening: [], prep: [], closing: [], weekly: [], monthly: [] };
+    let opsData = { opening: [], prep: [], closing: [], periodic: [] };
     let activeOpsCategory = 'opening';
 
     function loadOps() {
@@ -1787,32 +1764,48 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (now.getHours() < 10) wipeDate.setDate(wipeDate.getDate() - 1);
 
-        if (!lastWipeStr || new Date(parseInt(lastWipeStr)) < wipeDate) {
-            // PER-CATEGORY WIPE BEHAVIOR (intentionally different per bucket):
-            //   opening / closing — completed unticks (SOPs reset daily)
-            //   prep              — completed DELETES; uncompleted carries over
-            //   weekly / monthly  — completed unticks on cadence boundary
-            opsData.opening?.forEach(t => t.completed = false);
-            opsData.closing?.forEach(t => t.completed = false);
-            
-            if (opsData.prep && opsData.prep.length > 0) {
-                opsData.prep = opsData.prep.filter(t => !t.completed);
-            }
-            
-            if (now.getDay() === 1 && (!lastWipeStr || new Date(parseInt(lastWipeStr)).getDay() !== 1)) {
-                opsData.weekly.forEach(t => t.completed = false);
-            }
-            if (now.getDate() === 1 && (!lastWipeStr || new Date(parseInt(lastWipeStr)).getDate() !== 1)) {
-                opsData.monthly.forEach(t => t.completed = false);
-            }
-            localStorage.setItem('codex_ops_last_wipe', Date.now().toString());
-            saveOps();
-        }
-
-        // One-time migration: rename legacy `mid` bucket to `prep`
+        // --- MIGRATIONS (run before wipe so shapes are correct) ---
+        let migrated = false;
+        // mid -> prep
         if (opsData.mid && Array.isArray(opsData.mid)) {
             opsData.prep = [...(opsData.prep || []), ...opsData.mid];
             delete opsData.mid;
+            migrated = true;
+        }
+        // weekly + monthly -> periodic (stamp default interval if missing)
+        if (!opsData.periodic) opsData.periodic = [];
+        if (opsData.weekly && Array.isArray(opsData.weekly)) {
+            opsData.weekly.forEach(t => { if (!t.intervalDays) t.intervalDays = 7; opsData.periodic.push(t); });
+            delete opsData.weekly;
+            migrated = true;
+        }
+        if (opsData.monthly && Array.isArray(opsData.monthly)) {
+            opsData.monthly.forEach(t => { if (!t.intervalDays) t.intervalDays = 30; opsData.periodic.push(t); });
+            delete opsData.monthly;
+            migrated = true;
+        }
+        // subtasks: string[] -> {text, done}[]  (idempotent — skips if already objects)
+        ['opening', 'prep', 'closing', 'periodic'].forEach(cat => {
+            (opsData[cat] || []).forEach(t => {
+                if (Array.isArray(t.subtasks)) {
+                    t.subtasks = t.subtasks.map(s => typeof s === 'string' ? { text: s, done: false } : s);
+                }
+            });
+        });
+        if (migrated) saveOps();
+
+        // --- DAILY WIPE (SOPs untick, PREP completed-deletes; PERIODIC self-manages via interval, no calendar wipe) ---
+        if (!lastWipeStr || new Date(parseInt(lastWipeStr)) < wipeDate) {
+            ['opening', 'closing'].forEach(cat => {
+                (opsData[cat] || []).forEach(t => {
+                    t.completed = false;
+                    if (Array.isArray(t.subtasks)) t.subtasks.forEach(s => s.done = false);
+                });
+            });
+            if (opsData.prep && opsData.prep.length > 0) {
+                opsData.prep = opsData.prep.filter(t => !t.completed);
+            }
+            localStorage.setItem('codex_ops_last_wipe', Date.now().toString());
             saveOps();
         }
     }
@@ -1846,8 +1839,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const tasks = opsData[activeOpsCategory] || [];
         const isNumberedSop = activeOpsCategory === 'opening' || activeOpsCategory === 'closing';
         const isPrep = activeOpsCategory === 'prep';
-        const isPeriodic = activeOpsCategory === 'weekly' || activeOpsCategory === 'monthly';
+        const isPeriodic = activeOpsCategory === 'periodic';
         const isDraggable = isNumberedSop || isPrep;  // PREP draggable for urgency; SOPs draggable for order
+        const DAY_MS = 1000 * 60 * 60 * 24;
+
+        // PERIODIC auto-uncheck: any completed task now past its interval rejoins the active list.
+        // lastCompleted is preserved so history ("Last: Jun 24") survives.
+        if (isPeriodic) {
+            tasks.forEach(t => {
+                if (t.completed && t.lastCompleted) {
+                    const interval = t.intervalDays || 30;
+                    const daysSince = Math.floor((Date.now() - t.lastCompleted) / DAY_MS);
+                    if (daysSince >= interval) t.completed = false;
+                }
+            });
+            saveOps();
+        }
 
         let sortedTasks = [];
         if (isNumberedSop) {
@@ -1860,11 +1867,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                           return 0;
                                       });
         } else {
-            // Periodic: uncompleted by oldest-last-done first, completed sinks to bottom
+            // PERIODIC: uncompleted by days-until-due ascending (most overdue first), completed sink to bottom
             sortedTasks = [...tasks].map((t, i) => ({...t, originalIndex: i}))
                                       .sort((a, b) => {
                                           if (a.completed !== b.completed) return a.completed ? 1 : -1;
-                                          return (a.lastCompleted || 0) - (b.lastCompleted || 0);
+                                          const dueA = (a.intervalDays || 30) - (a.lastCompleted ? Math.floor((Date.now() - a.lastCompleted) / DAY_MS) : -99999);
+                                          const dueB = (b.intervalDays || 30) - (b.lastCompleted ? Math.floor((Date.now() - b.lastCompleted) / DAY_MS) : -99999);
+                                          return dueA - dueB;
                                       });
         }
 
@@ -1873,14 +1882,110 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const defaultInterval = activeOpsCategory === 'weekly' ? 7 : (activeOpsCategory === 'monthly' ? 30 : null);
         const formatDate = (ts) => {
             const d = new Date(ts);
             return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         };
 
+        // Re-render just one task's subtask block in place (no full repaint, keeps row expanded + scroll)
+        function rerenderSubtasks(rowEl, cat, taskIdx) {
+            const task = opsData[cat][taskIdx];
+            const subWrap = rowEl.querySelector('.ops-subtasks');
+            if (!subWrap) return;
+            buildSubtaskBlock(subWrap, rowEl, cat, taskIdx);
+            // update badge count
+            const badge = rowEl.querySelector('.ops-subtask-badge .count');
+            const total = (task.subtasks || []).length;
+            const done = (task.subtasks || []).filter(s => s.done).length;
+            if (badge) badge.innerText = `${done}/${total}`;
+            if (total === 0) { const b = rowEl.querySelector('.ops-subtask-badge'); if (b) b.remove(); }
+        }
+
+        // Build the interactive subtask list inside a wrapper
+        function buildSubtaskBlock(subWrap, rowEl, cat, taskIdx) {
+            const task = opsData[cat][taskIdx];
+            subWrap.innerHTML = '';
+            (task.subtasks || []).forEach((sub, sIdx) => {
+                const sRow = document.createElement('div');
+                sRow.className = `ops-subtask-row ${sub.done ? 'done' : ''}`;
+                sRow.innerHTML = `
+                    <div class="ops-subtask-check ${sub.done ? 'done' : ''}">${sub.done ? '✓' : ''}</div>
+                    <span class="ops-subtask-text">${(sub.text || '').replace(/</g,'&lt;')}</span>
+                    <span class="ops-subtask-del">×</span>
+                `;
+                // tick subtask -> roll-up
+                sRow.querySelector('.ops-subtask-check').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    triggerHaptic('light');
+                    const wasDone = task.subtasks[sIdx].done;
+                    task.subtasks[sIdx].done = !wasDone;
+                    const allDone = task.subtasks.length > 0 && task.subtasks.every(s => s.done);
+                    if (allDone) { task.completed = true; if (isPeriodic || isPrep) task.lastCompleted = Date.now(); }
+                    else if (task.completed) { task.completed = false; }
+                    saveOps();
+                    renderOpsList();
+                });
+                // edit subtask inline
+                sRow.querySelector('.ops-subtask-text').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const span = e.target;
+                    const input = document.createElement('input');
+                    input.type = 'text'; input.className = 'ops-subtask-input'; input.value = task.subtasks[sIdx].text;
+                    span.replaceWith(input); input.focus(); input.select();
+                    const commit = () => {
+                        const v = input.value.trim();
+                        if (v) task.subtasks[sIdx].text = v;
+                        saveOps();
+                        rerenderSubtasks(rowEl, cat, taskIdx);
+                    };
+                    input.addEventListener('keydown', ev => { if (ev.key === 'Enter') commit(); });
+                    input.addEventListener('blur', commit);
+                });
+                // delete subtask
+                sRow.querySelector('.ops-subtask-del').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    triggerHaptic('light');
+                    task.subtasks.splice(sIdx, 1);
+                    saveOps();
+                    rerenderSubtasks(rowEl, cat, taskIdx);
+                });
+                subWrap.appendChild(sRow);
+            });
+            // + add step (reopens blank for rapid entry)
+            const addLine = document.createElement('div');
+            addLine.className = 'ops-subtask-add';
+            addLine.innerHTML = `＋ add step`;
+            addLine.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const input = document.createElement('input');
+                input.type = 'text'; input.className = 'ops-subtask-input'; input.placeholder = 'New step…';
+                addLine.replaceWith(input); input.focus();
+                const commit = (reopen) => {
+                    const v = input.value.trim();
+                    if (v) {
+                        if (!task.subtasks) task.subtasks = [];
+                        task.subtasks.push({ text: v, done: false });
+                        // adding an undone subtask un-completes a rolled-up parent
+                        if (task.completed && !task.subtasks.every(s => s.done)) task.completed = false;
+                        saveOps();
+                    }
+                    rerenderSubtasks(rowEl, cat, taskIdx);
+                    if (v && reopen) {
+                        // immediately reopen a fresh add input
+                        const newAdd = rowEl.querySelector('.ops-subtask-add');
+                        if (newAdd) newAdd.click();
+                    }
+                };
+                input.addEventListener('keydown', ev => { if (ev.key === 'Enter') commit(true); });
+                input.addEventListener('blur', () => commit(false));
+            });
+            subWrap.appendChild(addLine);
+        }
+
         sortedTasks.forEach((taskObj, displayIndex) => {
-            const hasSubtasks = taskObj.subtasks && taskObj.subtasks.length > 0;
+            const subCount = (taskObj.subtasks || []).length;
+            const subDone = (taskObj.subtasks || []).filter(s => s.done).length;
+            const hasSubtasks = subCount > 0;
             const isLinked = !!(taskObj.linkedSpec && taskObj.linkedSection);
             const row = document.createElement('div');
             let rowClasses = `ops-row ${taskObj.completed ? 'completed' : ''}`;
@@ -1902,52 +2007,64 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             labelHtml += taskObj.text;
             
-            // Periodic: due-date countdown / overdue / completed-on display
+            // Periodic: due-date countdown / overdue / completed-on + interval display
             if (isPeriodic) {
-                const interval = taskObj.intervalDays || defaultInterval;
+                const interval = taskObj.intervalDays || 30;
                 if (taskObj.completed && taskObj.lastCompleted) {
-                    labelHtml += `<div class="ops-time-tag">✓ Done ${formatDate(taskObj.lastCompleted)}</div>`;
+                    labelHtml += `<div class="ops-time-tag">✓ Done ${formatDate(taskObj.lastCompleted)} · every ${interval}d</div>`;
                 } else if (taskObj.lastCompleted) {
-                    const daysSince = Math.floor((Date.now() - taskObj.lastCompleted) / (1000 * 60 * 60 * 24));
+                    const daysSince = Math.floor((Date.now() - taskObj.lastCompleted) / DAY_MS);
                     const daysUntilDue = interval - daysSince;
                     const isOverdue = daysUntilDue < 0;
-                    const dueLabel = isOverdue ? `OVERDUE by ${Math.abs(daysUntilDue)} day${Math.abs(daysUntilDue) !== 1 ? 's' : ''}` : `Next due in ${daysUntilDue} day${daysUntilDue !== 1 ? 's' : ''}`;
-                    labelHtml += `<div class="ops-time-tag">Last: ${formatDate(taskObj.lastCompleted)}</div>`;
+                    const dueLabel = isOverdue ? `OVERDUE by ${Math.abs(daysUntilDue)} day${Math.abs(daysUntilDue) !== 1 ? 's' : ''}` : `Due in ${daysUntilDue} day${daysUntilDue !== 1 ? 's' : ''}`;
+                    labelHtml += `<div class="ops-time-tag">Every ${interval}d · Last ${formatDate(taskObj.lastCompleted)}</div>`;
                     labelHtml += `<div class="ops-time-tag ${isOverdue ? 'text-red' : ''}">${dueLabel}</div>`;
+                } else {
+                    labelHtml += `<div class="ops-time-tag">Every ${interval} days · never done</div>`;
                 }
             }
             
-            // PREP linked: show last-batched date if we have one
             if (isPrep && isLinked && taskObj.lastCompleted) {
                 labelHtml += `<div class="ops-time-tag">Last batched: ${formatDate(taskObj.lastCompleted)}</div>`;
             }
             
             html += `<span class="ops-text" style="flex:1;">${labelHtml}</span>`;
             
+            if (hasSubtasks) {
+                html += `<span class="ops-subtask-badge"><span class="chevron">⌄</span><span class="count">${subDone}/${subCount}</span></span>`;
+            }
             if (isDraggable) {
                 html += `<div class="drag-handle-task">≡</div>`;
             }
             html += `</div>`;
-            
-            if (hasSubtasks) {
-                html += `<div class="ops-subtasks">`;
-                taskObj.subtasks.forEach(sub => {
-                    html += `<div style="font-size: 0.8rem; color: var(--text-muted);">• ${sub}</div>`;
-                });
-                html += `</div>`;
-            }
+            html += `<div class="ops-subtasks"></div>`;
             row.innerHTML = html;
+
+            // populate subtask block (always — empty block just shows "+ add step" when expanded)
+            buildSubtaskBlock(row.querySelector('.ops-subtasks'), row, activeOpsCategory, taskObj.originalIndex);
+
+            // badge toggles expansion
+            const badgeEl = row.querySelector('.ops-subtask-badge');
+            if (badgeEl) {
+                badgeEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    triggerHaptic('light');
+                    row.classList.toggle('expanded');
+                });
+            }
 
             const checkTarget = isNumberedSop ? row.querySelector('.ops-number') : row.querySelector('.ops-checkbox');
             if (checkTarget) {
                 checkTarget.addEventListener('click', (e) => {
                     e.stopPropagation();
                     triggerHaptic('light');
-                    const isNowComplete = !opsData[activeOpsCategory][taskObj.originalIndex].completed;
-                    opsData[activeOpsCategory][taskObj.originalIndex].completed = isNowComplete;
-                    // Stamp lastCompleted for periodic AND for prep (so we can show "last batched" on linked items)
+                    const task = opsData[activeOpsCategory][taskObj.originalIndex];
+                    const isNowComplete = !task.completed;
+                    task.completed = isNowComplete;
+                    // manual completion also marks all subtasks done; unchecking clears them
+                    if (Array.isArray(task.subtasks)) task.subtasks.forEach(s => s.done = isNowComplete);
                     if ((isPeriodic || isPrep) && isNowComplete) {
-                        opsData[activeOpsCategory][taskObj.originalIndex].lastCompleted = Date.now();
+                        task.lastCompleted = Date.now();
                     }
                     saveOps();
                     renderOpsList();
@@ -1990,10 +2107,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     }, 100);
                     return;
                 }
-                if (hasSubtasks) {
-                    triggerHaptic('light');
-                    row.classList.toggle('expanded');
-                }
+                triggerHaptic('light');
+                row.classList.toggle('expanded');
             });
 
             if (isDraggable) {
@@ -2039,7 +2154,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (isLinked) actions.push({ label: 'View Spec', value: 'view-spec' });
                     if (isPeriodic) actions.push({ label: 'Set Frequency', value: 'set-freq' });
                     actions.push({ label: 'Edit Task', value: 'edit' });
-                    actions.push({ label: 'Add Sub-Step', value: 'add-sub' });
                     actions.push({ label: 'Delete Task', value: 'delete' });
                     
                     openSelectModal('TASK ACTIONS', actions, (val) => {
@@ -2100,21 +2214,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                     }
                                 });
                             }, 350);
-                        } else if (val === 'add-sub') {
-                            setTimeout(() => {
-                                openSelectModal('ADD SUB-STEP', [], null, {
-                                    placeholder: 'e.g. Backflush groupheads...',
-                                    btnLabel: 'ADD',
-                                    onSubmit: (subText) => {
-                                        if (!opsData[activeOpsCategory][taskObj.originalIndex].subtasks) {
-                                            opsData[activeOpsCategory][taskObj.originalIndex].subtasks = [];
-                                        }
-                                        opsData[activeOpsCategory][taskObj.originalIndex].subtasks.push(subText);
-                                        saveOps();
-                                        renderOpsList();
-                                    }
-                                });
-                            }, 350);
                         }
                     });
                 }, 500);
@@ -2150,7 +2249,7 @@ document.addEventListener('DOMContentLoaded', () => {
         opsAddBtn.addEventListener('click', () => {
             triggerHaptic('light');
             
-            // PREP gets a sub-batch picker (linked tasks); other categories just get the free-text modal
+            // PREP gets a sub-batch picker (linked tasks)
             if (activeOpsCategory === 'prep') {
                 const subBatchOptions = Object.keys(recipeVault || {})
                     .filter(name => name.includes(' — '))
@@ -2162,11 +2261,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 openSelectModal('NEW PREP TASK', subBatchOptions, (val, label, data) => {
                     opsData.prep.push({
-                        text: label,
-                        completed: false,
-                        subtasks: [],
-                        linkedSpec: data.spec,
-                        linkedSection: data.section
+                        text: label, completed: false, subtasks: [],
+                        linkedSpec: data.spec, linkedSection: data.section
                     });
                     saveOps();
                     renderOpsList();
@@ -2177,6 +2273,41 @@ document.addEventListener('DOMContentLoaded', () => {
                         opsData.prep.push({ text: val, completed: false, subtasks: [] });
                         saveOps();
                         renderOpsList();
+                    }
+                });
+                return;
+            }
+
+            // PERIODIC: type name, then pick frequency
+            if (activeOpsCategory === 'periodic') {
+                openSelectModal('NEW UPKEEP TASK', [], null, {
+                    placeholder: 'Task name (e.g. Deep clean well)...',
+                    btnLabel: 'NEXT',
+                    onSubmit: (val) => {
+                        const taskText = val.trim();
+                        if (!taskText) return;
+                        setTimeout(() => {
+                            openSelectModal('FREQUENCY', [
+                                { label: 'Every 7 days', value: 7 },
+                                { label: 'Every 14 days', value: 14 },
+                                { label: 'Every 30 days', value: 30 },
+                                { label: 'Every 60 days', value: 60 },
+                                { label: 'Every 90 days', value: 90 }
+                            ], (days) => {
+                                opsData.periodic.push({ text: taskText, completed: false, subtasks: [], intervalDays: parseInt(days), lastCompleted: null });
+                                saveOps();
+                                renderOpsList();
+                            }, {
+                                placeholder: 'Custom days...',
+                                btnLabel: 'ADD',
+                                onSubmit: (d) => {
+                                    const days = parseInt(d) || 30;
+                                    opsData.periodic.push({ text: taskText, completed: false, subtasks: [], intervalDays: days, lastCompleted: null });
+                                    saveOps();
+                                    renderOpsList();
+                                }
+                            });
+                        }, 350);
                     }
                 });
                 return;
@@ -2247,12 +2378,4 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // --- SESSION TIMEOUT: DEFAULT TO SERVICE MODE ---
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-            document.querySelectorAll('.view-toggle .view-pill[data-view="service"]').forEach(btn => {
-                if (!btn.classList.contains('active')) btn.click();
-            });
-        }
     });
-});
