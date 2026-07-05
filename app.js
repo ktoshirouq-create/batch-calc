@@ -1749,7 +1749,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- OPS MODULE ENGINE ---
     const OPS_KEY = 'codex_ops_v1';
     let opsData = { opening: [], prep: [], closing: [], periodic: [] };
-    let activeOpsCategory = 'opening';
+    let activeOpsCategory = 'prep';
 
     function loadOps() {
         try {
@@ -1911,6 +1911,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 sRow.innerHTML = `
                     <div class="ops-subtask-check ${sub.done ? 'done' : ''}">${sub.done ? '✓' : ''}</div>
                     <span class="ops-subtask-text">${(sub.text || '').replace(/</g,'&lt;')}</span>
+                    <span class="ops-subtask-edit">✎</span>
                     <span class="ops-subtask-del">×</span>
                 `;
                 // tick subtask -> roll-up
@@ -1925,10 +1926,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     saveOps();
                     renderOpsList();
                 });
-                // edit subtask inline
-                sRow.querySelector('.ops-subtask-text').addEventListener('click', (e) => {
+                // edit subtask inline (tap text OR the pencil)
+                const startSubEdit = (e) => {
                     e.stopPropagation();
-                    const span = e.target;
+                    const span = sRow.querySelector('.ops-subtask-text');
+                    if (!span) return;
                     const input = document.createElement('input');
                     input.type = 'text'; input.className = 'ops-subtask-input'; input.value = task.subtasks[sIdx].text;
                     span.replaceWith(input); input.focus(); input.select();
@@ -1940,7 +1942,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     };
                     input.addEventListener('keydown', ev => { if (ev.key === 'Enter') commit(); });
                     input.addEventListener('blur', commit);
-                });
+                };
+                sRow.querySelector('.ops-subtask-text').addEventListener('click', startSubEdit);
+                sRow.querySelector('.ops-subtask-edit').addEventListener('click', startSubEdit);
                 // delete subtask
                 sRow.querySelector('.ops-subtask-del').addEventListener('click', (e) => {
                     e.stopPropagation();
