@@ -21,14 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let editingCocktailName = null;
 
     window.lastUsedRound = 1;
-    let fDrinks = 20; 
-    let fDilution = 20;
     let abvDilution = 20;
-
-    let activeSpecSelect = null; 
-    let activeRevSpec = null;
-    let activeRevIng = null;
-    let activeRevIngAmt = 0;
     let activeAbvSpec = null;
 
    // --- HELPERS ---
@@ -250,26 +243,51 @@ document.addEventListener('DOMContentLoaded', () => {
         dragHandle.addEventListener('touchend', endDrag);
     }
 
-    // --- DB & VAULT ---
+    // --- DB & VAULT (resilient: retry + localStorage cache fallback) ---
+    const VAULT_CACHE_KEY = 'codex_vault_cache_v1';
+    let vaultLive = false;  // true only when recipeVault reflects a successful live fetch
+
     async function loadVault() {
         showLoader("SYNCING CODEX...");
-        try {
+        const attempt = async () => {
             const res = await fetch(API_URL);
             if (!res.ok) throw new Error("Network error");
-            const data = await res.json();
-            recipeVault = {}; 
-            data.forEach(row => {
-                if(!recipeVault[row.cocktailName]) recipeVault[row.cocktailName] = [];
-                recipeVault[row.cocktailName].push({ name: row.ingredientName, amount: row.amount, color: row.categoryTag });
-            });
-            renderVault();
-            hideLoader();
-        } catch (e) {
-            console.error("Sync Failed:", e);
-            const lText = document.querySelector('.loader-text');
-            if (lText) lText.innerText = "OFFLINE MODE";
-            setTimeout(hideLoader, 1500);
+            return res.json();
+        };
+        const backoffs = [0, 600, 1500];  // 3 attempts total — catches Apps Script cold starts
+        for (let i = 0; i < backoffs.length; i++) {
+            try {
+                if (backoffs[i]) await new Promise(r => setTimeout(r, backoffs[i]));
+                const data = await attempt();
+                recipeVault = {};
+                data.forEach(row => {
+                    if(!recipeVault[row.cocktailName]) recipeVault[row.cocktailName] = [];
+                    recipeVault[row.cocktailName].push({ name: row.ingredientName, amount: row.amount, color: row.categoryTag, unit: row.unit });
+                });
+                vaultLive = true;
+                try { localStorage.setItem(VAULT_CACHE_KEY, JSON.stringify(recipeVault)); } catch {}
+                renderVault();
+                hideLoader();
+                return;
+            } catch (e) {
+                console.error(`Sync attempt ${i + 1} failed:`, e);
+            }
         }
+        // All attempts failed — fall back to cached copy if we have one
+        vaultLive = false;
+        const lText = document.querySelector('.loader-text');
+        try {
+            const cached = localStorage.getItem(VAULT_CACHE_KEY);
+            if (cached) {
+                recipeVault = JSON.parse(cached);
+                if (lText) lText.innerText = "OFFLINE — CACHED COPY";
+                renderVault();
+                setTimeout(hideLoader, 1200);
+                return;
+            }
+        } catch {}
+        if (lText) lText.innerText = "OFFLINE MODE";
+        setTimeout(hideLoader, 1500);
     }
     loadVault();
 
@@ -288,7 +306,12 @@ document.addEventListener('DOMContentLoaded', () => {
             mainIngs.forEach(ing => {
                 html += `<div class="result-row ${ing.color}"><span class="ing-name">${ing.name}</span>`;
                 if (ing.color === 'static-ruby') {
-                    html += `<span class="ing-amount">${ing.amount || ''} ${ing.unit || 'dash'}</span></div>`;
+                    // top = no amount ever; other units scale their whole-number count with the round
+                    if ((ing.unit || 'dash') === 'top') {
+                        html += `<span class="ing-amount">top</span></div>`;
+                    } else {
+                        html += `<span class="ing-amount">${Math.round((ing.amount || 0) * round)} ${ing.unit || 'dash'}</span></div>`;
+                    }
                 } else {
                     html += `<span class="ing-amount">${formatAmount(ing.amount * round)}ml</span></div>`;
                 }
@@ -323,7 +346,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 section.className = 'vault-subbatch';
                 let html = `<h4 class="vault-subbatch-title">${label.toUpperCase()}<span class="vault-yield-label">${yieldLabel}</span></h4>`;
                 sbIngs.forEach(ing => {
-                    let amtHtml = ing.color === 'static-ruby' ? `${ing.amount || ''} ${ing.unit || 'dash'}` : `${formatAmount(ing.amount * round)}ml`;
+                    let amtHtml;
+                    if (ing.color === 'static-ruby') {
+                        amtHtml = (ing.unit || 'dash') === 'top' ? 'top' : `${Math.round((ing.amount || 0) * round)} ${ing.unit || 'dash'}`;
+                    } else {
+                        amtHtml = `${formatAmount(ing.amount * round)}ml`;
+                    }
                     html += `<div class="subbatch-row ${ing.color}"><span class="ing-name">${ing.name}</span><span class="ing-amount">${amtHtml}</span></div>`;
                 });
                 section.innerHTML = html;
@@ -435,9 +463,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             list.appendChild(vItem);
         });
-        // Auto-seed the Shelf with any new ingredients pulled in this vault load
+        // Auto-seed the shelf data layer (UI removed; data powers autocomplete + category overrides)
         if (typeof autoSeedShelf === 'function') autoSeedShelf();
-        if (typeof renderShelf === 'function') renderShelf();
     }
 
     // --- SPEC BUILDER ---
@@ -468,9 +495,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 let amountHtml = '';
                 if (ing.cat === 'static-ruby') {
                     const u = ing.unit || 'dash';
+                    // 'top' has no meaningful count — hide the number input entirely
+                    const countInput = u === 'top' ? '' : `<input type="number" class="builder-static-input" value="${ing.amount || ''}" placeholder="0" style="width:30px;">`;
                     amountHtml = `
                         <div style="display:flex; width: 95px; align-items:center; gap:4px; margin-right:4px;">
-                           <input type="number" class="builder-static-input" value="${ing.amount || ''}" placeholder="0" style="width:30px;">
+                           ${countInput}
                            <button class="unit-pill" data-unit="${u}">${u}</button>
                         </div>
                     `;
@@ -486,7 +515,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
                 
                 if (ing.cat === 'static-ruby') {
-                    const staticInput = row.querySelector('.builder-static-input');
+                    const staticInput = row.querySelector('.builder-static-input');  // absent for 'top' rows
                     if (staticInput) {
                         staticInput.addEventListener('input', (e) => {
                             builderState.sections[secIdx].ingredients[ingIdx].amount = parseFloat(e.target.value) || 0;
@@ -497,7 +526,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         unitPill.addEventListener('click', (e) => {
                             triggerHaptic('light');
                             let currIdx = STATIC_UNITS.indexOf(e.target.dataset.unit || 'dash');
-                            builderState.sections[secIdx].ingredients[ingIdx].unit = STATIC_UNITS[(currIdx + 1) % STATIC_UNITS.length];
+                            const nextUnit = STATIC_UNITS[(currIdx + 1) % STATIC_UNITS.length];
+                            builderState.sections[secIdx].ingredients[ingIdx].unit = nextUnit;
+                            // 'top' stores amount:1 internally so the save filter keeps it; display never shows the number
+                            if (nextUnit === 'top') builderState.sections[secIdx].ingredients[ingIdx].amount = 1;
                             renderBuilder();
                         });
                     }
@@ -587,6 +619,78 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof collapseSpecBuilder === 'function') collapseSpecBuilder();
     }
 
+    // Section category rules for auto-sweep pre-ticking (Cream is fuzzy — name-matched)
+    const SECTION_SWEEP_RULES = {
+        'Spirit Batch': (ing) => ['amber-glow', 'neon-cyan', 'magenta-glow'].includes(ing.cat),
+        'Juice Batch':  (ing) => ['juice-glow', 'puree-mango', 'magenta-glow'].includes(ing.cat),
+        'Mocktail':     (ing) => ['juice-glow', 'puree-mango', 'magenta-glow'].includes(ing.cat),
+        'Cream':        (ing) => /cream|milk|coconut|dairy/i.test(ing.name || '') || ing.cat === 'magenta-glow'
+    };
+
+    // Checklist modal: pick MAIN ingredients to move into a new section.
+    // preTicked = indices into MAIN suggested by the sweep rule.
+    function openSectionPicker(sectionName, preTicked) {
+        const mainSec = builderState.sections.find(s => s.name === 'MAIN');
+        const pool = mainSec ? mainSec.ingredients.filter(i => i.name && i.name.trim()) : [];
+        if (pool.length === 0) {
+            // nothing to pick from — just create the empty section
+            builderState.sections.push({ name: sectionName, ingredients: [] });
+            renderBuilder();
+            return;
+        }
+        triggerHaptic();
+        document.getElementById('selection-modal-title').innerText = `MOVE INTO ${sectionName.toUpperCase()}`;
+        const list = document.getElementById('selection-modal-list');
+        list.innerHTML = '';
+        const ticked = new Set(preTicked);
+        pool.forEach((ing, i) => {
+            const item = document.createElement('div');
+            item.className = 'modal-item';
+            item.style.display = 'flex';
+            item.style.justifyContent = 'space-between';
+            item.style.alignItems = 'center';
+            const check = () => `<span style="color: var(--nodee-gold); font-weight: 900;">${ticked.has(i) ? '✓' : ''}</span>`;
+            item.innerHTML = `<span>${ing.name}</span>${check()}`;
+            if (ticked.has(i)) item.style.borderColor = 'rgba(200, 169, 126, 0.5)';
+            item.onclick = () => {
+                triggerHaptic('light');
+                if (ticked.has(i)) ticked.delete(i); else ticked.add(i);
+                item.innerHTML = `<span>${ing.name}</span>${check()}`;
+                item.style.borderColor = ticked.has(i) ? 'rgba(200, 169, 126, 0.5)' : '';
+            };
+            list.appendChild(item);
+        });
+        const actions = document.createElement('div');
+        actions.className = 'modal-actions';
+        actions.innerHTML = `<button class="btn-secondary">SKIP</button><button class="btn-primary">MOVE SELECTED</button>`;
+        actions.children[0].addEventListener('click', () => {
+            triggerHaptic('light');
+            builderState.sections.push({ name: sectionName, ingredients: [] });
+            closeSelectModal();
+            renderBuilder();
+        });
+        actions.children[1].addEventListener('click', () => {
+            triggerHaptic('heavy');
+            const sec = { name: sectionName, ingredients: [] };
+            // splice from MAIN highest-index-first so indices stay valid
+            const chosen = [...ticked].sort((a, b) => b - a);
+            const mainIngs = mainSec.ingredients;
+            // map pool indices back to actual MAIN indices (pool filtered empties)
+            const poolToMain = [];
+            let pi = 0;
+            mainIngs.forEach((ing, mi) => { if (ing.name && ing.name.trim()) { poolToMain[pi] = mi; pi++; } });
+            chosen.forEach(poolIdx => {
+                const mainIdx = poolToMain[poolIdx];
+                sec.ingredients.unshift(mainIngs.splice(mainIdx, 1)[0]);
+            });
+            builderState.sections.push(sec);
+            closeSelectModal();
+            renderBuilder();
+        });
+        list.appendChild(actions);
+        modal.classList.remove('hidden');
+    }
+
     const addSectionBtn = document.getElementById('add-section-btn');
     if (addSectionBtn) {
         addSectionBtn.addEventListener('click', () => {
@@ -599,15 +703,27 @@ document.addEventListener('DOMContentLoaded', () => {
             ];
             openSelectModal('ADD SECTION', presets,
                 (val) => {
-                    builderState.sections.push({ name: val, ingredients: [] });
-                    renderBuilder();
+                    // Known type: auto-sweep suggests ticks, checklist confirms
+                    const mainSec = builderState.sections.find(s => s.name === 'MAIN');
+                    const rule = SECTION_SWEEP_RULES[val];
+                    const pre = [];
+                    if (mainSec && rule) {
+                        let pi = 0;
+                        mainSec.ingredients.forEach(ing => {
+                            if (ing.name && ing.name.trim()) {
+                                if (rule(ing)) pre.push(pi);
+                                pi++;
+                            }
+                        });
+                    }
+                    setTimeout(() => openSectionPicker(val, pre), 350);
                 },
                 {
                     placeholder: 'Or type custom section name...',
                     btnLabel: 'ADD CUSTOM',
                     onSubmit: (val) => {
-                        builderState.sections.push({ name: capitalize(val), ingredients: [] });
-                        renderBuilder();
+                        // Custom: no rule — checklist opens unticked
+                        setTimeout(() => openSectionPicker(capitalize(val), []), 350);
                     }
                 }
             );
@@ -924,9 +1040,10 @@ document.addEventListener('DOMContentLoaded', () => {
             let amountHtml = '';
             if (ing.cat === 'static-ruby') {
                 const u = ing.unit || 'dash';
+                const countInput = u === 'top' ? '' : `<input type="number" class="builder-static-input" value="${ing.amount || ''}" placeholder="0" style="width:30px;">`;
                 amountHtml = `
                     <div style="display:flex; width: 85px; align-items:center; gap:4px; margin-right:4px;">
-                       <input type="number" class="builder-static-input" value="${ing.amount || ''}" placeholder="0" style="width:30px;">
+                       ${countInput}
                        <button class="unit-pill" data-unit="${u}">${u}</button>
                     </div>
                 `;
@@ -953,7 +1070,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     unitPill.addEventListener('click', (e) => {
                         triggerHaptic('light');
                         let currIdx = STATIC_UNITS.indexOf(e.target.dataset.unit || 'dash');
-                        batchBuilderState.ingredients[idx].unit = STATIC_UNITS[(currIdx + 1) % STATIC_UNITS.length];
+                        const nextUnit = STATIC_UNITS[(currIdx + 1) % STATIC_UNITS.length];
+                        batchBuilderState.ingredients[idx].unit = nextUnit;
+                        if (nextUnit === 'top') batchBuilderState.ingredients[idx].amount = 1;
                         renderBatchIngredients();
                     });
                 }
@@ -1100,162 +1219,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (changed) saveShelf();
     };
 
-    function injectShelfCard() {
-        if (document.getElementById('shelf-card')) return;
-        const codexModule = document.getElementById('codex-module');
-        if (!codexModule) return;
-        codexModule.insertAdjacentHTML('beforeend', `
-            <div id="shelf-card" class="card glass-panel">
-                <h2 class="card-title text-gold">THE SHELF</h2>
-                <button id="shelf-add-btn" class="btn-secondary" style="width: 100%; margin-top: 12px;">＋ ADD INGREDIENT</button>
-                <div id="shelf-add-form" class="hidden"></div>
-                <div id="shelf-list"></div>
-            </div>
-        `);
-        document.getElementById('shelf-add-btn').addEventListener('click', () => {
-            triggerHaptic('light');
-            toggleShelfAddForm();
-        });
-    }
-
-    function toggleShelfAddForm() {
-        const form = document.getElementById('shelf-add-form');
-        if (!form) return;
-        if (shelfAddState) {
-            shelfAddState = null;
-            form.classList.add('hidden');
-            form.innerHTML = '';
-            return;
-        }
-        shelfAddState = { name: '', cat: 'amber-glow', abv: 40 };
-        form.classList.remove('hidden');
-        form.innerHTML = `
-            <div class="shelf-add-form-inner">
-                <input type="text" class="shelf-add-name premium-text-input" placeholder="Ingredient name">
-                <div class="shelf-add-controls">
-                    <button class="shelf-add-cat amber-glow">SPIRIT</button>
-                    <input type="number" class="shelf-add-abv" value="40" min="0" max="100">
-                    <span class="shelf-add-abv-suffix">%</span>
-                </div>
-                <div class="shelf-add-actions">
-                    <button class="shelf-add-cancel">CANCEL</button>
-                    <button class="shelf-add-save">SAVE</button>
-                </div>
-            </div>
-        `;
-        form.querySelector('.shelf-add-name').addEventListener('input', e => { shelfAddState.name = e.target.value; });
-        form.querySelector('.shelf-add-cat').addEventListener('click', () => {
-            triggerHaptic('light');
-            const cats = ['amber-glow', 'neon-cyan', 'juice-glow', 'puree-mango', 'magenta-glow', 'coffee-dark', 'static-ruby'];
-            shelfAddState.cat = cats[(cats.indexOf(shelfAddState.cat) + 1) % cats.length];
-            const btn = form.querySelector('.shelf-add-cat');
-            btn.className = `shelf-add-cat ${shelfAddState.cat}`;
-            btn.innerText = shelfCatLabels[shelfAddState.cat];
-            shelfAddState.abv = shelfDefaultAbvs[shelfAddState.cat] || 0;
-            form.querySelector('.shelf-add-abv').value = shelfAddState.abv;
-        });
-        form.querySelector('.shelf-add-abv').addEventListener('input', e => { shelfAddState.abv = parseFloat(e.target.value) || 0; });
-        form.querySelector('.shelf-add-cancel').addEventListener('click', () => {
-            triggerHaptic('light');
-            toggleShelfAddForm();
-        });
-        form.querySelector('.shelf-add-save').addEventListener('click', () => {
-            triggerHaptic('heavy');
-            const name = capitalize(shelfAddState.name.trim());
-            if (!name) return openAlertModal({title:'NOTICE', message:"Ingredient name required."});
-            if (shelfData[name]) return openAlertModal({title:'NOTICE', message:`"${name}" is already on the shelf.`});
-            shelfData[name] = { category: shelfAddState.cat, abv: shelfAddState.abv, inStock: true };
-            saveShelf();
-            toggleShelfAddForm();
-            renderShelf();
-        });
-    }
-
-    window.renderShelf = function() {
-        const list = document.getElementById('shelf-list');
-        if (!list) return;
-        list.innerHTML = '';
-        const catOrder = { 'amber-glow': 1, 'neon-cyan': 2, 'juice-glow': 3, 'magenta-glow': 4, 'coffee-dark': 5, 'puree-mango': 6, 'static-ruby': 7 };
-        const entries = Object.entries(shelfData).sort((a, b) => {
-            const ordA = catOrder[a[1].category] || 10;
-            const ordB = catOrder[b[1].category] || 10;
-            if (ordA !== ordB) return ordA - ordB;
-            return a[0].localeCompare(b[0]);
-        });
-        if (entries.length === 0) {
-            list.innerHTML = '<p class="text-muted text-sm" style="margin-top: 16px; padding: 8px;">No ingredients yet. Add one above, or save a cocktail to auto-seed.</p>';
-            return;
-        }
-        entries.forEach(([name, data]) => {
-            const row = document.createElement('div');
-            row.className = `shelf-row ${data.category}${data.inStock ? '' : ' shelf-row-oos'}`;
-            row.innerHTML = `
-                <button class="shelf-stock-btn ${data.inStock ? 'in-stock' : 'oos'}">${data.inStock ? '●' : '○'}</button>
-                <span class="shelf-ing-name">${name}</span>
-                <button class="shelf-cat-btn ${data.category}">${shelfCatLabels[data.category] || 'SPIRIT'}</button>
-                <input type="number" class="shelf-abv-input" value="${data.abv || 0}" min="0" max="100">
-                <span class="shelf-abv-suffix">%</span>
-            `;
-            row.querySelector('.shelf-stock-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                triggerHaptic('light');
-                shelfData[name].inStock = !shelfData[name].inStock;
-                saveShelf();
-                renderShelf();
-            });
-            row.querySelector('.shelf-abv-input').addEventListener('change', e => {
-                shelfData[name].abv = parseFloat(e.target.value) || 0;
-                saveShelf();
-            });
-            row.querySelector('.shelf-cat-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                triggerHaptic('light');
-                const cats = ['amber-glow', 'neon-cyan', 'juice-glow', 'puree-mango', 'magenta-glow', 'coffee-dark', 'static-ruby'];
-                const current = shelfData[name].category;
-                const next = cats[(cats.indexOf(current) + 1) % cats.length];
-                shelfData[name].category = next;
-                saveShelf();
-                renderShelf();
-            });
-            let pressTimer = null;
-            let pressStart = null;
-            row.addEventListener('pointerdown', (e) => {
-                if (e.target.closest('button') || e.target.closest('input')) return;
-                pressStart = { x: e.clientX, y: e.clientY };
-                pressTimer = setTimeout(() => {
-                    pressTimer = null;
-                    triggerHaptic('medium');
-                    openConfirmModal({
-                        title: 'REMOVE INGREDIENT', 
-                        message: `Remove "${name}" from the shelf?`, 
-                        onConfirm: () => {
-                            delete shelfData[name];
-                            saveShelf();
-                            renderShelf();
-                        }
-                    });
-                }, 500);
-            });
-            row.addEventListener('pointermove', (e) => {
-                if (!pressTimer || !pressStart) return;
-                const dx = Math.abs(e.clientX - pressStart.x);
-                const dy = Math.abs(e.clientY - pressStart.y);
-                if (dx > 10 || dy > 10) { clearTimeout(pressTimer); pressTimer = null; }
-            });
-            row.addEventListener('pointerup', () => {
-                if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-            });
-            row.addEventListener('pointercancel', () => {
-                if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-            });
-            list.appendChild(row);
-        });
-    };
-
     loadShelf();
     refreshShelfDatalist();
-    injectShelfCard();
-    renderShelf();
 
     const legacyLockBtn = document.getElementById('edit-toggle');
     if (legacyLockBtn) legacyLockBtn.remove();
@@ -1618,134 +1583,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- SCALE: BATCHING & STEPPERS ---
-    const updateScaleUI = () => {
-        const fdEl = document.getElementById('fd-val');
-        const dilEl = document.getElementById('dil-val');
-        if (fdEl) fdEl.innerText = fDrinks;
-        if (dilEl) dilEl.innerText = fDilution + '%';
-    };
-
-    const fdMinus = document.getElementById('fd-minus');
-    const fdPlus = document.getElementById('fd-plus');
-    const dilMinus = document.getElementById('dil-minus');
-    const dilPlus = document.getElementById('dil-plus');
-    
-    if (fdMinus) fdMinus.addEventListener('click', () => { triggerHaptic('light'); if(fDrinks > 1) { fDrinks--; updateScaleUI(); } });
-    if (fdPlus) fdPlus.addEventListener('click', () => { triggerHaptic('light'); fDrinks++; updateScaleUI(); });
-    if (dilMinus) dilMinus.addEventListener('click', () => { triggerHaptic('light'); if(fDilution > 0) { fDilution--; updateScaleUI(); } });
-    if (dilPlus) dilPlus.addEventListener('click', () => { triggerHaptic('light'); fDilution++; updateScaleUI(); });
-
-    window.updateDilution = (val) => {
-        triggerHaptic('light');
-        fDilution = val;
-        updateScaleUI();
-    };
-
-    const btnFwdSpec = document.getElementById('btn-forward-spec');
-    if (btnFwdSpec) {
-        btnFwdSpec.addEventListener('click', () => {
-            const specs = Object.keys(recipeVault).map(s => ({label: s, value: s}));
-            openSelectModal('SELECT SPEC FOR BATCH', specs, (val, label) => {
-                activeSpecSelect = val;
-                document.getElementById('btn-forward-spec').innerText = label;
-                document.getElementById('btn-forward-spec').style.color = "var(--text-main)";
-                document.getElementById('btn-forward-spec').classList.remove('text-muted');
-            });
-        });
-    }
-
-    const calcFwdBtn = document.getElementById('calc-forward-btn');
-    if (calcFwdBtn) {
-        calcFwdBtn.addEventListener('click', () => {
-            triggerHaptic('heavy');
-            const res = document.getElementById('forward-results');
-            if(!activeSpecSelect || fDrinks <= 0) return;
-            
-            const spec = recipeVault[activeSpecSelect];
-            let html = '<h3 class="zone-header">BATCH YIELD</h3>';
-            let totalVol = 0;
-
-            spec.forEach(ing => {
-                const amt = ing.amount * fDrinks;
-                if (ing.color !== 'static-ruby') totalVol += amt;
-                let amtDisplay = ing.color === 'static-ruby' ? `${ing.amount * fDrinks} ${ing.unit || 'dash'}` : `${amt.toFixed(0)}ml`;
-                html += `<div class="result-row ${ing.color}"><span class="ing-name">${ing.name}</span><span class="ing-amount">${amtDisplay}</span></div>`;
-            });
-
-            if (fDilution > 0) {
-                const water = totalVol * (fDilution / 100);
-                totalVol += water;
-                html += `<div class="result-row"><span class="ing-name text-muted">Filtered Water (${fDilution}%)</span><span class="ing-amount text-muted">${water.toFixed(0)}ml</span></div>`;
-            }
-            
-            html += `<div class="result-row mt-10"><span class="ing-name text-gold fw-bold">TOTAL LIQUID VOLUME</span><span class="ing-amount">${totalVol.toFixed(0)}ml</span></div>`;
-            res.innerHTML = html;
-        });
-    }
-
-    const btnRevSpec = document.getElementById('btn-reverse-spec');
-    if (btnRevSpec) {
-        btnRevSpec.addEventListener('click', () => {
-            const specs = Object.keys(recipeVault).map(s => ({label: s, value: s}));
-            openSelectModal('SELECT SPEC', specs, (val, label) => {
-                activeRevSpec = val;
-                document.getElementById('btn-reverse-spec').innerText = label;
-                document.getElementById('btn-reverse-spec').style.color = "var(--text-main)";
-                document.getElementById('btn-reverse-spec').classList.remove('text-muted');
-                
-                activeRevIng = null;
-                document.getElementById('btn-reverse-ing').innerText = "Select Limiting Ingredient...";
-                document.getElementById('btn-reverse-ing').classList.add('text-muted');
-                document.getElementById('btn-reverse-ing').classList.remove('hidden');
-                document.getElementById('reverse-vol-container').classList.add('hidden');
-            });
-        });
-    }
-
-    const btnRevIng = document.getElementById('btn-reverse-ing');
-    if (btnRevIng) {
-        btnRevIng.addEventListener('click', () => {
-            if(!activeRevSpec) return;
-            const spec = recipeVault[activeRevSpec].filter(i => i.color !== 'static-ruby');
-            const ings = spec.map(ing => ({label: `${ing.name} (${ing.amount}ml)`, value: ing.name, data: ing.amount}));
-            
-            openSelectModal('LIMITING INGREDIENT', ings, (val, label, amt) => {
-                activeRevIng = val;
-                activeRevIngAmt = amt;
-                document.getElementById('btn-reverse-ing').innerText = label;
-                document.getElementById('btn-reverse-ing').style.color = "var(--text-main)";
-                document.getElementById('btn-reverse-ing').classList.remove('text-muted');
-                document.getElementById('reverse-vol-container').classList.remove('hidden');
-            });
-        });
-    }
-
-    const calcRevBtn = document.getElementById('calc-reverse-btn');
-    if (calcRevBtn) {
-        calcRevBtn.addEventListener('click', () => {
-            triggerHaptic('heavy');
-            const availVol = parseFloat(document.getElementById('reverse-vol').value) || 0;
-            const res = document.getElementById('reverse-results');
-            
-            if(!activeRevSpec || !activeRevIng || availVol <= 0) return;
-
-            const maxDrinks = Math.floor(availVol / activeRevIngAmt);
-            const spec = recipeVault[activeRevSpec];
-            
-            let html = `<h3 class="zone-header">MAX YIELD: ${maxDrinks} DRINKS</h3>`;
-            
-            spec.forEach(ing => {
-                const reqAmt = ing.amount * maxDrinks;
-                let displayAmt = ing.color === 'static-ruby' ? `${reqAmt} ${ing.unit || 'dash'}` : `${reqAmt.toFixed(0)}ml`;
-                if(ing.name === activeRevIng) displayAmt = `${reqAmt.toFixed(0)}ml <span class="text-muted text-sm">(Empty)</span>`;
-                
-                html += `<div class="result-row ${ing.color}"><span class="ing-name">${ing.name}</span><span class="ing-amount">${displayAmt}</span></div>`;
-            });
-            res.innerHTML = html;
-        });
-    }
-
     // --- OPS MODULE ENGINE ---
     const OPS_KEY = 'codex_ops_v1';
     let opsData = { opening: [], prep: [], closing: [], periodic: [] };
@@ -1791,6 +1628,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     t.subtasks = t.subtasks.map(s => typeof s === 'string' ? { text: s, done: false } : s);
                 }
             });
+        });
+        // prep: classify kind (batch vs mise) + default qty — idempotent (only when kind missing)
+        (opsData.prep || []).forEach(t => {
+            if (!t.kind) {
+                const isBatchText = /batch|mix|syrup|infus|cordial|shrub|puree|juice/i.test(t.text || '');
+                t.kind = (t.linkedSpec || isBatchText) ? 'batch' : 'mise';
+                migrated = true;
+            }
+            if (t.kind === 'batch' && !t.qty) { t.qty = 1; migrated = true; }
+        });
+        // periodic: seed log from lastCompleted — idempotent (only when log missing)
+        (opsData.periodic || []).forEach(t => {
+            if (!t.log) {
+                t.log = t.lastCompleted ? [{ ts: t.lastCompleted }] : [];
+                migrated = true;
+            }
         });
         if (migrated) saveOps();
 
@@ -1860,9 +1713,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isNumberedSop) {
             sortedTasks = [...tasks].map((t, i) => ({...t, originalIndex: i}));
         } else if (isPrep) {
-            // PREP: uncompleted in drag-set order, completed sinks to bottom
+            // PREP: grouped — BATCHES first, then MISE; within each group completed sinks, uncompleted keep drag order
+            const groupRank = (t) => (t.kind === 'mise' ? 1 : 0);
             sortedTasks = [...tasks].map((t, i) => ({...t, originalIndex: i}))
                                       .sort((a, b) => {
+                                          if (groupRank(a) !== groupRank(b)) return groupRank(a) - groupRank(b);
                                           if (a.completed !== b.completed) return a.completed ? 1 : -1;
                                           return 0;
                                       });
@@ -1986,11 +1841,59 @@ document.addEventListener('DOMContentLoaded', () => {
             subWrap.appendChild(addLine);
         }
 
+        // Ring builder for UPKEEP rows: fill = elapsed/interval. C = 2πr ≈ 88 at r=14.
+        function buildRing(taskObj) {
+            const interval = taskObj.intervalDays || 30;
+            const C = 88;
+            let dash = 0, color = 'rgba(200,169,126,0.5)', glyph = '';
+            if (taskObj.completed) {
+                dash = C; color = '#C8A97E'; glyph = '<span style="color:#C8A97E;">✓</span>';
+            } else if (taskObj.lastCompleted) {
+                const daysSince = Math.floor((Date.now() - taskObj.lastCompleted) / DAY_MS);
+                const daysUntilDue = interval - daysSince;
+                dash = Math.min(C, Math.max(0, (daysSince / interval) * C));
+                if (daysUntilDue < 0) { dash = C; color = '#d97c8e'; glyph = '<span style="color:#d97c8e;">!</span>'; }
+                else if (daysUntilDue <= 3) { color = '#E5B15D'; }
+            }
+            return `<div class="ops-ring"><svg width="34" height="34"><circle class="track" cx="17" cy="17" r="14"/><circle cx="17" cy="17" r="14" stroke="${color}" fill="none" stroke-width="3" stroke-linecap="round" stroke-dasharray="${dash} ${C}"/></svg><div class="ops-ring-inner">${glyph}</div></div>`;
+        }
+
+        // Countdown block for UPKEEP rows
+        function buildCountdown(taskObj) {
+            const interval = taskObj.intervalDays || 30;
+            if (taskObj.completed && taskObj.lastCompleted) {
+                return `<div class="ops-count"><div class="num done-date">${formatDate(taskObj.lastCompleted)}</div><div class="lbl">DONE</div></div>`;
+            }
+            if (taskObj.lastCompleted) {
+                const daysSince = Math.floor((Date.now() - taskObj.lastCompleted) / DAY_MS);
+                const due = interval - daysSince;
+                if (due < 0) return `<div class="ops-count overdue"><div class="num">−${Math.abs(due)}d</div><div class="lbl">OVERDUE</div></div>`;
+                const cls = due <= 3 ? 'soon' : 'ok';
+                return `<div class="ops-count ${cls}"><div class="num">${due}d</div><div class="lbl">DUE</div></div>`;
+            }
+            return `<div class="ops-count ok"><div class="num">${interval}d</div><div class="lbl">EVERY</div></div>`;
+        }
+
+        let lastPrepGroup = null;  // section header tracker for the PREP loop
+
         sortedTasks.forEach((taskObj, displayIndex) => {
+            // PREP section headers: BATCHES / MISE, emitted at group boundaries
+            if (isPrep) {
+                const grp = taskObj.kind === 'mise' ? 'MISE' : 'BATCHES';
+                if (grp !== lastPrepGroup) {
+                    const header = document.createElement('div');
+                    header.className = 'ops-prep-section';
+                    header.innerText = grp;
+                    container.appendChild(header);
+                    lastPrepGroup = grp;
+                }
+            }
+
             const subCount = (taskObj.subtasks || []).length;
             const subDone = (taskObj.subtasks || []).filter(s => s.done).length;
             const hasSubtasks = subCount > 0;
             const isLinked = !!(taskObj.linkedSpec && taskObj.linkedSection);
+            const isBatchKind = isPrep && taskObj.kind !== 'mise';
             const row = document.createElement('div');
             let rowClasses = `ops-row ${taskObj.completed ? 'completed' : ''}`;
             if (isLinked) rowClasses += ' ops-row-linked';
@@ -2001,6 +1904,8 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (isNumberedSop) {
                 html += `<div class="ops-number">${displayIndex + 1}</div>`;
+            } else if (isPeriodic) {
+                html += buildRing(taskObj);
             } else {
                 html += `<div class="ops-checkbox"></div>`;
             }
@@ -2011,37 +1916,30 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             labelHtml += taskObj.text;
             
-            // Periodic: due-date countdown / overdue / completed-on + interval display
-            if (isPeriodic) {
-                const interval = taskObj.intervalDays || 30;
-                if (taskObj.completed && taskObj.lastCompleted) {
-                    labelHtml += `<div class="ops-time-tag">✓ Done ${formatDate(taskObj.lastCompleted)} · every ${interval}d</div>`;
-                } else if (taskObj.lastCompleted) {
-                    const daysSince = Math.floor((Date.now() - taskObj.lastCompleted) / DAY_MS);
-                    const daysUntilDue = interval - daysSince;
-                    const isOverdue = daysUntilDue < 0;
-                    const dueLabel = isOverdue ? `OVERDUE by ${Math.abs(daysUntilDue)} day${Math.abs(daysUntilDue) !== 1 ? 's' : ''}` : `Due in ${daysUntilDue} day${daysUntilDue !== 1 ? 's' : ''}`;
-                    labelHtml += `<div class="ops-time-tag">Every ${interval}d · Last ${formatDate(taskObj.lastCompleted)}</div>`;
-                    labelHtml += `<div class="ops-time-tag ${isOverdue ? 'text-red' : ''}">${dueLabel}</div>`;
-                } else {
-                    labelHtml += `<div class="ops-time-tag">Every ${interval} days · never done</div>`;
-                }
-            }
-            
             if (isPrep && isLinked && taskObj.lastCompleted) {
                 labelHtml += `<div class="ops-time-tag">Last batched: ${formatDate(taskObj.lastCompleted)}</div>`;
             }
             
             html += `<span class="ops-text" style="flex:1;">${labelHtml}</span>`;
             
+            // PREP batch rows: qty chip (always visible, doubles as the batch marker)
+            if (isBatchKind && !taskObj.completed) {
+                html += `<span class="ops-qty-chip" data-qty="${taskObj.qty || 1}">×${taskObj.qty || 1}</span>`;
+            }
             if (hasSubtasks) {
                 html += `<span class="ops-subtask-badge"><span class="chevron">⌄</span><span class="count">${subDone}/${subCount}</span></span>`;
+            }
+            if (isPeriodic) {
+                html += buildCountdown(taskObj);
             }
             if (isDraggable) {
                 html += `<div class="drag-handle-task">≡</div>`;
             }
             html += `</div>`;
             html += `<div class="ops-subtasks"></div>`;
+            if (isPeriodic) {
+                html += `<div class="ops-history"></div>`;
+            }
             row.innerHTML = html;
 
             // populate subtask block (always — empty block just shows "+ add step" when expanded)
@@ -2057,7 +1955,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            const checkTarget = isNumberedSop ? row.querySelector('.ops-number') : row.querySelector('.ops-checkbox');
+            const checkTarget = isNumberedSop ? row.querySelector('.ops-number')
+                              : isPeriodic ? row.querySelector('.ops-ring')
+                              : row.querySelector('.ops-checkbox');
             if (checkTarget) {
                 checkTarget.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -2067,12 +1967,115 @@ document.addEventListener('DOMContentLoaded', () => {
                     task.completed = isNowComplete;
                     // manual completion also marks all subtasks done; unchecking clears them
                     if (Array.isArray(task.subtasks)) task.subtasks.forEach(s => s.done = isNowComplete);
-                    if ((isPeriodic || isPrep) && isNowComplete) {
+                    if (isPrep && isNowComplete) {
                         task.lastCompleted = Date.now();
+                    }
+                    if (isPeriodic) {
+                        // MANUAL tick pushes to the log; MANUAL untick pops it (accidental-tap safety).
+                        // Render-time auto-uncheck (task come due again) never touches the log.
+                        if (!task.log) task.log = [];
+                        if (isNowComplete) {
+                            task.lastCompleted = Date.now();
+                            task.log.push({ ts: task.lastCompleted });
+                            if (task.log.length > 20) task.log.shift();
+                        } else {
+                            task.log.pop();
+                            task.lastCompleted = task.log.length ? task.log[task.log.length - 1].ts : null;
+                        }
                     }
                     saveOps();
                     renderOpsList();
                 });
+            }
+
+            // PREP batch rows: qty chip → inline − N + stepper (auto-collapses)
+            const qtyChip = row.querySelector('.ops-qty-chip');
+            if (qtyChip) {
+                qtyChip.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    triggerHaptic('light');
+                    // collapse any other open stepper first
+                    document.querySelectorAll('.ops-qty-stepper').forEach(s => s.dispatchEvent(new Event('forceCollapse')));
+                    const task = opsData[activeOpsCategory][taskObj.originalIndex];
+                    const stepper = document.createElement('span');
+                    stepper.className = 'ops-qty-stepper';
+                    stepper.innerHTML = `<span class="qs-btn" data-d="-1">−</span><span class="qs-n">${task.qty || 1}</span><span class="qs-btn" data-d="1">＋</span>`;
+                    qtyChip.replaceWith(stepper);
+                    let collapseTimer = null;
+                    const collapse = () => {
+                        clearTimeout(collapseTimer);
+                        document.removeEventListener('pointerdown', outside, true);
+                        // full re-render restores the chip with all handlers wired
+                        renderOpsList();
+                    };
+                    const armTimer = () => { clearTimeout(collapseTimer); collapseTimer = setTimeout(collapse, 4000); };
+                    const outside = (ev) => { if (!stepper.contains(ev.target)) collapse(); };
+                    stepper.addEventListener('forceCollapse', collapse);
+                    stepper.querySelectorAll('.qs-btn').forEach(b => {
+                        b.addEventListener('click', (ev) => {
+                            ev.stopPropagation();
+                            triggerHaptic('light');
+                            const d = parseInt(b.getAttribute('data-d'));
+                            task.qty = Math.min(9, Math.max(1, (task.qty || 1) + d));
+                            stepper.querySelector('.qs-n').innerText = task.qty;
+                            saveOps();
+                            armTimer();
+                        });
+                    });
+                    document.addEventListener('pointerdown', outside, true);
+                    armTimer();
+                });
+            }
+
+            // UPKEEP history block (rendered collapsed; shown when row expands)
+            if (isPeriodic) {
+                const histWrap = row.querySelector('.ops-history');
+                if (histWrap) {
+                    const buildHistory = (visibleCount) => {
+                        const task = opsData[activeOpsCategory][taskObj.originalIndex];
+                        const log = (task.log || []).slice().reverse();  // newest first
+                        const interval = task.intervalDays || 30;
+                        histWrap.innerHTML = '';
+                        if (log.length === 0) {
+                            histWrap.innerHTML = `<div class="ops-hist-cadence">EVERY <b>${interval}d</b> · no history yet</div>`;
+                            return;
+                        }
+                        // real average gap (needs >= 2 entries)
+                        let cadence = `EVERY <b>${interval}d</b>`;
+                        if (log.length >= 2) {
+                            let gaps = [];
+                            for (let i = 0; i < log.length - 1; i++) gaps.push((log[i].ts - log[i + 1].ts) / DAY_MS);
+                            const avg = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+                            const avgCls = avg > interval * 1.2 ? ' style="color: var(--due-amber, #E5B15D);"' : '';
+                            cadence += ` · REAL AVG <b${avgCls}>${avg.toFixed(1)}d</b>`;
+                        }
+                        let html = `<div class="ops-hist-cadence">${cadence}</div>`;
+                        const shown = log.slice(0, visibleCount);
+                        shown.forEach((entry, i) => {
+                            const older = log[i + 1];
+                            let gap = '';
+                            if (older) {
+                                const g = Math.round((entry.ts - older.ts) / DAY_MS);
+                                const long = g > interval * 1.3;
+                                gap = `<span class="ops-hist-gap${long ? ' long' : ''}">+${g}d</span>`;
+                            }
+                            html += `<div class="ops-hist-row"><span class="ops-hist-check">✓</span><span class="ops-hist-date">${formatDate(entry.ts)}</span>${gap}</div>`;
+                        });
+                        if (log.length > visibleCount) {
+                            html += `<div class="ops-hist-older">${shown.length} OF ${log.length} · <span data-more="1">OLDER</span></div>`;
+                        } else if (log.length > 4) {
+                            html += `<div class="ops-hist-older">${log.length} OF ${log.length}</div>`;
+                        }
+                        histWrap.innerHTML = html;
+                        const more = histWrap.querySelector('[data-more]');
+                        if (more) more.addEventListener('click', (ev) => {
+                            ev.stopPropagation();
+                            triggerHaptic('light');
+                            buildHistory(visibleCount + 4);
+                        });
+                    };
+                    buildHistory(4);
+                }
             }
 
             row.querySelector('.ops-text').addEventListener('click', (e) => {
@@ -2080,6 +2083,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Linked PREP item — tap jumps to the Codex spec
                 if (isLinked) {
                     const specName = taskObj.linkedSpec;
+                    // Never offer destructive break-link when the vault isn't live —
+                    // an empty/cached vault means "couldn't load", not "spec deleted".
+                    if (!recipeVault[specName] && !vaultLive) {
+                        openAlertModal({ title: 'OFFLINE', message: "Can't reach the Codex right now. Pull to refresh and try again." });
+                        return;
+                    }
                     if (!recipeVault[specName]) {
                         openConfirmModal({
                             title: 'SPEC NOT FOUND',
@@ -2157,12 +2166,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     const actions = [];
                     if (isLinked) actions.push({ label: 'View Spec', value: 'view-spec' });
                     if (isPeriodic) actions.push({ label: 'Set Frequency', value: 'set-freq' });
+                    if (isPrep) actions.push({ label: taskObj.kind === 'mise' ? 'Move to Batches' : 'Move to Mise', value: 'move-kind' });
                     actions.push({ label: 'Edit Task', value: 'edit' });
                     actions.push({ label: 'Delete Task', value: 'delete' });
                     
                     openSelectModal('TASK ACTIONS', actions, (val) => {
                         if (val === 'delete') {
                             opsData[activeOpsCategory].splice(taskObj.originalIndex, 1);
+                            saveOps();
+                            renderOpsList();
+                        } else if (val === 'move-kind') {
+                            const t = opsData[activeOpsCategory][taskObj.originalIndex];
+                            t.kind = t.kind === 'mise' ? 'batch' : 'mise';
+                            if (t.kind === 'batch' && !t.qty) t.qty = 1;
                             saveOps();
                             renderOpsList();
                         } else if (val === 'edit') {
@@ -2248,37 +2264,143 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    const opsAddBtn = document.getElementById('ops-add-btn');
+    // --- PREP ADD SHEET (type-first, suggestions from Codex sub-batches + past entries, qty parsing) ---
+    const PREP_HISTORY_KEY = 'codex_prep_history_v1';
+    function loadPrepHistory() {
+        try { return JSON.parse(localStorage.getItem(PREP_HISTORY_KEY)) || []; } catch { return []; }
+    }
+    function pushPrepHistory(entry) {
+        let h = loadPrepHistory().filter(e => e.text.toLowerCase() !== entry.text.toLowerCase());
+        h.unshift({ ...entry, lastUsed: Date.now() });
+        if (h.length > 30) h = h.slice(0, 30);
+        try { localStorage.setItem(PREP_HISTORY_KEY, JSON.stringify(h)); } catch {}
+    }
+
+    const BATCH_TEXT_RE = /batch|mix|syrup|infus|cordial|shrub|puree|juice/i;
+
+    function commitPrepTask({ text, linkedSpec, linkedSection, qty }) {
+        const kind = (linkedSpec || BATCH_TEXT_RE.test(text)) ? 'batch' : 'mise';
+        const task = { text, completed: false, subtasks: [], kind };
+        if (kind === 'batch') task.qty = qty || 1;
+        if (linkedSpec) { task.linkedSpec = linkedSpec; task.linkedSection = linkedSection; }
+        opsData.prep.push(task);
+        saveOps();
+        pushPrepHistory({ text, linkedSpec, linkedSection });
+        renderOpsList();
+    }
+
+    function openPrepAddSheet() {
+        let sheet = document.getElementById('prep-add-sheet');
+        if (!sheet) {
+            document.body.insertAdjacentHTML('beforeend', `
+                <div id="prep-add-sheet" class="modal-overlay hidden">
+                    <div class="prep-sheet">
+                        <div class="prep-sheet-head">
+                            <span class="prep-sheet-title">NEW PREP TASK</span>
+                            <button class="prep-sheet-x">✕</button>
+                        </div>
+                        <input type="text" id="prep-add-input" class="premium-text-input" placeholder="Type task — e.g. 2x sky colada…" autocomplete="off" style="margin-bottom: 0;">
+                        <div id="prep-add-sugs"></div>
+                    </div>
+                </div>
+            `);
+            sheet = document.getElementById('prep-add-sheet');
+            sheet.addEventListener('click', (e) => { if (e.target === sheet) closePrepAddSheet(); });
+            sheet.querySelector('.prep-sheet-x').addEventListener('click', closePrepAddSheet);
+            const input = document.getElementById('prep-add-input');
+            input.addEventListener('input', renderPrepSuggestions);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const { qty, query } = parsePrepInput(input.value);
+                    if (!query.trim()) return;
+                    // Enter commits typed text as ad-hoc (qty honored for batch-y text; re-prefixed for mise so nothing typed is lost)
+                    const isBatchy = BATCH_TEXT_RE.test(query);
+                    const text = (!isBatchy && qty > 1) ? `${qty}x ${capitalize(query.trim())}` : capitalize(query.trim());
+                    commitPrepTask({ text, qty: isBatchy ? qty : 1 });
+                    input.value = '';
+                    renderPrepSuggestions();
+                }
+            });
+        }
+        sheet.classList.remove('hidden');
+        renderPrepSuggestions();
+        setTimeout(() => document.getElementById('prep-add-input')?.focus(), 300);
+    }
+
+    function closePrepAddSheet() {
+        const sheet = document.getElementById('prep-add-sheet');
+        if (sheet) sheet.classList.add('hidden');
+        const input = document.getElementById('prep-add-input');
+        if (input) input.value = '';
+    }
+
+    function parsePrepInput(raw) {
+        const m = (raw || '').match(/^(?:x\s*(\d+)|(\d+)\s*x?)\s+(.*)$/i);
+        if (m) return { qty: parseInt(m[1] || m[2]) || 1, query: m[3] || '' };
+        return { qty: 1, query: raw || '' };
+    }
+
+    function renderPrepSuggestions() {
+        const wrap = document.getElementById('prep-add-sugs');
+        const input = document.getElementById('prep-add-input');
+        if (!wrap || !input) return;
+        const { qty, query } = parsePrepInput(input.value);
+        const q = query.trim().toLowerCase();
+        wrap.innerHTML = '';
+
+        const history = loadPrepHistory();
+        let rows = [];
+
+        if (!q) {
+            // Empty input → 3 most recent as one-tap re-adds
+            rows = history.slice(0, 3).map(h => ({ ...h, glyph: h.linkedSpec ? '🔗' : '↺' }));
+            if (rows.length) wrap.insertAdjacentHTML('beforeend', '<div class="prep-sug-label">RECENT</div>');
+        } else {
+            // Codex sub-batches, matched against the full "Cocktail — Section" string
+            const vaultMatches = Object.keys(recipeVault || {})
+                .filter(n => n.includes(' — ') && n.toLowerCase().includes(q))
+                .sort((a, b) => {
+                    const ap = a.toLowerCase().startsWith(q) ? 0 : 1;
+                    const bp = b.toLowerCase().startsWith(q) ? 0 : 1;
+                    return ap - bp || a.localeCompare(b);
+                })
+                .map(n => {
+                    const [spec, section] = n.split(' — ');
+                    return { text: n, linkedSpec: spec, linkedSection: section, glyph: '🔗' };
+                });
+            // History matches (skip ones duplicating a vault match)
+            const seen = new Set(vaultMatches.map(v => v.text.toLowerCase()));
+            const histMatches = history
+                .filter(h => h.text.toLowerCase().includes(q) && !seen.has(h.text.toLowerCase()))
+                .map(h => ({ ...h, glyph: h.linkedSpec ? '🔗' : '↺' }));
+            rows = [...vaultMatches, ...histMatches].slice(0, 4);
+        }
+
+        rows.forEach(r => {
+            const el = document.createElement('div');
+            el.className = 'prep-sug';
+            const qtyChip = (qty > 1) ? `<span class="prep-sug-qty">×${qty}</span>` : '';
+            el.innerHTML = `<span class="prep-sug-glyph">${r.glyph}</span><span class="prep-sug-text">${r.text}</span>${qtyChip}`;
+            el.addEventListener('click', () => {
+                triggerHaptic('light');
+                commitPrepTask({ text: r.text, linkedSpec: r.linkedSpec, linkedSection: r.linkedSection, qty });
+                const input = document.getElementById('prep-add-input');
+                input.value = '';
+                renderPrepSuggestions();
+                input.focus();
+            });
+            wrap.appendChild(el);
+        });
+    }
+
+        const opsAddBtn = document.getElementById('ops-add-btn');
     if (opsAddBtn) {
         opsAddBtn.addEventListener('click', () => {
             triggerHaptic('light');
             
-            // PREP gets a sub-batch picker (linked tasks)
+            // PREP: dedicated add-sheet — type-first with live suggestions + history + qty parsing
             if (activeOpsCategory === 'prep') {
-                const subBatchOptions = Object.keys(recipeVault || {})
-                    .filter(name => name.includes(' — '))
-                    .sort((a, b) => a.localeCompare(b))
-                    .map(name => {
-                        const [spec, section] = name.split(' — ');
-                        return { label: name, value: name, data: { spec, section } };
-                    });
-                
-                openSelectModal('NEW PREP TASK', subBatchOptions, (val, label, data) => {
-                    opsData.prep.push({
-                        text: label, completed: false, subtasks: [],
-                        linkedSpec: data.spec, linkedSection: data.section
-                    });
-                    saveOps();
-                    renderOpsList();
-                }, {
-                    placeholder: 'Or type an ad-hoc task...',
-                    btnLabel: 'ADD',
-                    onSubmit: (val) => {
-                        opsData.prep.push({ text: val, completed: false, subtasks: [] });
-                        saveOps();
-                        renderOpsList();
-                    }
-                });
+                openPrepAddSheet();
                 return;
             }
 
