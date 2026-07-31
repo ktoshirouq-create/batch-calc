@@ -39,7 +39,7 @@
 
     <main class="content-area" id="scroll-area">
         
-        <section id="codex-module" class="module active">
+        <section id="codex-module" class="module">
             <div id="admin-parser-ui" class="card glass-panel edit-panel">
                 <button id="new-spec-btn" class="btn-primary new-spec-btn-collapsed">＋ NEW SPEC</button>
                 <div id="builder-content" class="hidden">
@@ -142,54 +142,7 @@
             </div>
         </section>
 
-        <section id="scale-module" class="module">
-            <div class="card glass-panel">
-                <h2 class="card-title text-gold">FORWARD BATCH (EVENTS)</h2>
-                <button id="btn-forward-spec" class="premium-basic-input custom-select-btn w-100 mb-20 text-muted">Select Spec...</button>
-                <div class="flex-row">
-                    <div class="half-width">
-                        <label class="text-muted text-sm">Target Drinks</label>
-                        <div class="stepper-control mt-10">
-                            <button id="fd-minus" class="stepper-btn">−</button>
-                            <span id="fd-val" class="stepper-value">20</span>
-                            <button id="fd-plus" class="stepper-btn">+</button>
-                        </div>
-                    </div>
-                    <div class="half-width">
-                        <label class="text-muted text-sm">Dilution %</label>
-                        <div class="stepper-control mt-10">
-                            <button id="dil-minus" class="stepper-btn">−</button>
-                            <span id="dil-val" class="stepper-value">20%</span>
-                            <button id="dil-plus" class="stepper-btn">+</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="quick-pills flex-row mb-20 mt-20">
-                    <button class="quick-pill-btn" onclick="updateDilution(0)">0% (None)</button>
-                    <button class="quick-pill-btn" onclick="updateDilution(20)">20% (Stirred)</button>
-                    <button class="quick-pill-btn" onclick="updateDilution(25)">25% (Shaken)</button>
-                </div>
-                <button id="calc-forward-btn" class="btn-primary mt-20">CALCULATE BATCH</button>
-                <div id="forward-results" class="output-container mt-20"></div>
-            </div>
-
-            <div class="card glass-panel">
-                <h2 class="card-title text-gold">REVERSE BATCH (LIMITING FACTOR)</h2>
-                <button id="btn-reverse-spec" class="premium-basic-input custom-select-btn w-100 mb-20 text-muted">Select Spec...</button>
-                <button id="btn-reverse-ing" class="premium-basic-input custom-select-btn w-100 mb-20 hidden text-muted">Select Limiting Ingredient...</button>
-                
-                <div id="reverse-vol-container" class="hidden">
-                    <div class="input-group">
-                        <label class="text-muted text-sm mb-10" style="display:block">Available Volume (ml)</label>
-                        <div class="massive-input"><input type="number" id="reverse-vol" placeholder="700" value=""></div>
-                    </div>
-                    <button id="calc-reverse-btn" class="btn-primary burgundy-btn mt-20">CALCULATE MAX YIELD</button>
-                    <div id="reverse-results" class="output-container mt-20"></div>
-                </div>
-            </div>
-        </section>
-
-        <section id="ops-module" class="module">
+        <section id="ops-module" class="module active">
             <div class="card glass-panel">
                 <h2 class="card-title text-gold" style="letter-spacing: 2px;">OPERATIONS & SOPS</h2>
             
@@ -280,13 +233,24 @@
     </main>
 
     <nav class="bottom-nav">
-        <button class="nav-tab active" data-target="codex-module"><span class="nav-icon">📖</span><span class="nav-label">CODEX</span></button>
-        <button class="nav-tab" data-target="ops-module"><span class="nav-icon">📋</span><span class="nav-label">OPS</span></button>
-        <button class="nav-tab" data-target="scale-module"><span class="nav-icon">⚖️</span><span class="nav-label">SCALE</span></button>
-        <button class="nav-tab" data-target="lab-module"><span class="nav-icon">🧪</span><span class="nav-label">LAB</span></button>
-        <button class="nav-tab" data-target="law-module"><span class="nav-icon">📜</span><span class="nav-label">LAW</span></button>
+        <button class="nav-tab active" data-target="ops-module">
+            <svg class="nav-svg" width="24" height="24" viewBox="0 0 24 24"><path d="M4 6l1.5 1.5L8 5"/><path d="M11 6h9"/><path d="M4 12l1.5 1.5L8 11"/><path d="M11 12h9"/><path d="M4 18l1.5 1.5L8 17"/><path d="M11 18h6"/></svg>
+            <span class="nav-label">OPS</span>
+        </button>
+        <button class="nav-tab" data-target="lab-module">
+            <svg class="nav-svg" width="24" height="24" viewBox="0 0 24 24"><path d="M10 3h4M10 3v6L5 19a1.5 1.5 0 0 0 1.4 2h11.2a1.5 1.5 0 0 0 1.4-2L14 9V3"/><path d="M7.5 15h9"/></svg>
+            <span class="nav-label">LAB</span>
+        </button>
+        <button class="nav-tab" data-target="codex-module">
+            <svg class="nav-svg" width="24" height="24" viewBox="0 0 24 24"><path d="M12 6c-1.5-1.6-3.8-2-6.5-2v14c2.7 0 5 .4 6.5 2 1.5-1.6 3.8-2 6.5-2V4c-2.7 0-5 .4-6.5 2z"/><path d="M12 6v14"/></svg>
+            <span class="nav-label">CODEX</span>
+        </button>
+        <button class="nav-tab" data-target="law-module">
+            <svg class="nav-svg" width="24" height="24" viewBox="0 0 24 24"><path d="M12 3v18M8 21h8"/><path d="M12 6H6M12 6h6"/><path d="M6 6l-2.5 6a3 3 0 0 0 5 0L6 6zM18 6l-2.5 6a3 3 0 0 0 5 0L18 6z"/></svg>
+            <span class="nav-label">LAW</span>
+        </button>
     </nav>
 
-    <script src="app.js?v=30"></script>
+    <script src="app.js?v=32"></script>
 </body>
 </html>
