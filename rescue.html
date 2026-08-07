@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codex — Data Rescue</title>
+<style>
+body { background:#000; color:#eee; font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif; padding:18px; line-height:1.5; }
+h1 { font-size:1rem; letter-spacing:3px; color:#C8A97E; margin-bottom:16px; }
+h2 { font-size:0.75rem; letter-spacing:2px; color:#C8A97E; margin:22px 0 8px; border-bottom:1px solid #333; padding-bottom:6px; }
+.k { background:#111; border:1px solid #222; border-radius:10px; padding:12px; margin-bottom:10px; }
+.kn { color:#C8A97E; font-weight:800; font-size:0.8rem; word-break:break-all; }
+.kv { color:#888; font-size:0.72rem; margin-top:6px; word-break:break-all; white-space:pre-wrap; max-height:220px; overflow:auto; }
+.ok { color:#9EC4A8; font-weight:800; }
+.bad { color:#d97c8e; font-weight:800; }
+.sum { background:#111; border:1px solid #C8A97E; border-radius:10px; padding:14px; margin-bottom:18px; font-size:0.85rem; }
+button { background:#C8A97E; color:#000; border:none; border-radius:10px; padding:14px; font-weight:900; letter-spacing:1px; width:100%; margin-top:10px; font-size:0.8rem; }
+textarea { width:100%; height:120px; background:#111; color:#eee; border:1px solid #333; border-radius:8px; padding:10px; font-size:0.7rem; margin-top:8px; }
+</style>
+</head>
+<body>
+<h1>CODEX — DATA RESCUE</h1>
+<div id="summary" class="sum">Reading…</div>
+<h2>ALL STORED KEYS</h2>
+<div id="keys"></div>
+<h2>MANUAL RESTORE</h2>
+<p style="font-size:0.75rem;color:#888;">Paste a backup blob here and press RESTORE to write it back to the OPS key.</p>
+<textarea id="blob" placeholder='{"opening":[],"prep":[],...}'></textarea>
+<button onclick="restore()">RESTORE OPS DATA</button>
+<button onclick="copyAll()" style="background:#222;color:#C8A97E;">COPY EVERYTHING (BACKUP)</button>
+
+<script>
+const OPS='codex_ops_v1';
+function render(){
+  const keys=[]; for(let i=0;i<localStorage.length;i++) keys.push(localStorage.key(i));
+  const box=document.getElementById('keys'); box.innerHTML='';
+  keys.sort().forEach(k=>{
+    const v=localStorage.getItem(k)||'';
+    const d=document.createElement('div'); d.className='k';
+    d.innerHTML=`<div class="kn">${k}</div><div class="kv">${(v.length>1200?v.slice(0,1200)+' …[truncated, '+v.length+' chars]':v).replace(/</g,'&lt;')}</div>`;
+    box.appendChild(d);
+  });
+  let s='';
+  const raw=localStorage.getItem(OPS);
+  if(!raw){ s=`<span class="bad">codex_ops_v1 is MISSING.</span><br>Your task data is not under this key. Check the list below — if you see it under another key, copy its value into the box at the bottom and press RESTORE.`; }
+  else{
+    try{
+      const d=JSON.parse(raw);
+      const c=o=>Array.isArray(o)?o.length:0;
+      const tot=c(d.opening)+c(d.prep)+c(d.closing)+c(d.periodic)+c(d.weekly)+c(d.monthly)+c(d.mid);
+      s=`<span class="${tot?'ok':'bad'}">codex_ops_v1 found — ${tot} task(s) total.</span><br>`+
+        `opening: <b>${c(d.opening)}</b> · prep: <b>${c(d.prep)}</b> · closing: <b>${c(d.closing)}</b> · periodic/UPKEEP: <b>${c(d.periodic)}</b>`+
+        (c(d.weekly)||c(d.monthly)||c(d.mid)?`<br><span class="bad">Legacy keys still present — weekly: ${c(d.weekly)} · monthly: ${c(d.monthly)} · mid: ${c(d.mid)}</span>`:'');
+    }catch(e){ s=`<span class="bad">codex_ops_v1 exists but is corrupt:</span> ${e.message}`; }
+  }
+  document.getElementById('summary').innerHTML=s;
+}
+function restore(){
+  const v=document.getElementById('blob').value.trim();
+  if(!v) return alert('Paste a backup first.');
+  try{ JSON.parse(v); }catch(e){ return alert('Not valid JSON: '+e.message); }
+  localStorage.setItem(OPS,v); alert('Restored. Reopen the app.'); render();
+}
+function copyAll(){
+  const o={}; for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i); o[k]=localStorage.getItem(k);}
+  const t=JSON.stringify(o,null,2);
+  navigator.clipboard?.writeText(t).then(()=>alert('Full backup copied to clipboard.'),()=>{
+    document.getElementById('blob').value=t; alert('Copy failed — full backup dumped into the text box instead.');
+  });
+}
+render();
+</script>
+</body>
+</html>
