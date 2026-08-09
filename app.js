@@ -1592,7 +1592,20 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const raw = localStorage.getItem(OPS_KEY);
             if (raw) opsData = JSON.parse(raw);
-        } catch (e) { console.error('Failed to load OPS data'); }
+            opsLoadedOk = true;
+        } catch (e) {
+            console.error('Failed to load OPS data — trying backup');
+        }
+        // If the primary is missing/empty/corrupt but a backup holds tasks, restore from it
+        if (opsTaskCount(opsData) === 0) {
+            try {
+                const backup = JSON.parse(localStorage.getItem(OPS_BACKUP_KEY) || 'null');
+                if (opsTaskCount(backup) > 0) {
+                    opsData = backup;
+                    console.warn('Restored OPS data from backup.');
+                }
+            } catch {}
+        }
 
         const now = new Date();
         let lastWipeStr = localStorage.getItem('codex_ops_last_wipe');
@@ -1663,8 +1676,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    const OPS_BACKUP_KEY = 'codex_ops_backup_v1';
+    let opsLoadedOk = false;   // true once we've successfully read (or confirmed empty) storage
+
+    function opsTaskCount(d) {
+        if (!d) return 0;
+        return ['opening', 'prep', 'closing', 'periodic']
+            .reduce((n, k) => n + (Array.isArray(d[k]) ? d[k].length : 0), 0);
+    }
+
     function saveOps() {
-        localStorage.setItem(OPS_KEY, JSON.stringify(opsData));
+        // SAFETY: never let an empty in-memory state overwrite real stored data.
+        // If we hold zero tasks but storage has some, the load failed — bail out instead of wiping.
+        if (opsTaskCount(opsData) === 0) {
+            try {
+                const existing = JSON.parse(localStorage.getItem(OPS_KEY) || 'null');
+                if (opsTaskCount(existing) > 0) {
+                    console.error('saveOps aborted: refusing to overwrite stored tasks with an empty state.');
+                    return;
+                }
+            } catch {}
+        }
+        const payload = JSON.stringify(opsData);
+        localStorage.setItem(OPS_KEY, payload);
+        // Rolling backup — only ever written when there is something worth keeping
+        if (opsTaskCount(opsData) > 0) {
+            try { localStorage.setItem(OPS_BACKUP_KEY, payload); } catch {}
+        }
     }
 
     window.renderOpsList = function() {
