@@ -1588,6 +1588,91 @@ document.addEventListener('DOMContentLoaded', () => {
     let opsData = { opening: [], prep: [], closing: [], periodic: [] };
     let activeOpsCategory = 'prep';
 
+    // --- OPS CLOUD SYNC (append-only snapshots in the Ops sheet) ---
+    // Local-first: every change saves to localStorage instantly and the UI never
+    // waits on the network. A debounced push mirrors state to the sheet, which
+    // keeps an append-only history — nothing on the server is ever overwritten.
+    const OPS_DEVICE_KEY = 'codex_device_name';
+    let opsPushTimer = null;
+    let opsDirty = false;
+    let opsSyncState = 'idle';   // idle | syncing | ok | offline
+
+    function getDeviceName() {
+        let d = localStorage.getItem(OPS_DEVICE_KEY);
+        if (!d) {
+            d = 'device-' + Math.random().toString(36).slice(2, 7);
+            try { localStorage.setItem(OPS_DEVICE_KEY, d); } catch {}
+        }
+        return d;
+    }
+
+    function setOpsSyncBadge(state) {
+        opsSyncState = state;
+        const el = document.getElementById('ops-sync-badge');
+        if (!el) return;
+        const map = {
+            idle:    ['', ''],
+            syncing: ['SYNCING…', 'syncing'],
+            ok:      ['SYNCED', 'ok'],
+            offline: ['OFFLINE — SAVED LOCALLY', 'offline']
+        };
+        const [text, cls] = map[state] || ['', ''];
+        el.innerText = text;
+        el.className = 'ops-sync-badge ' + cls;
+    }
+
+    function scheduleOpsPush() {
+        opsDirty = true;
+        clearTimeout(opsPushTimer);
+        opsPushTimer = setTimeout(pushOpsToCloud, 2500);   // debounce a flurry of ticks into one write
+    }
+
+    async function pushOpsToCloud() {
+        if (!opsDirty) return;
+        // Never push an empty state over a non-empty cloud copy
+        if (opsTaskCount(opsData) === 0) { opsDirty = false; return; }
+        setOpsSyncBadge('syncing');
+        try {
+            await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify({ type: 'ops', device: getDeviceName(), data: opsData })
+            });
+            opsDirty = false;
+            setOpsSyncBadge('ok');
+            setTimeout(() => { if (opsSyncState === 'ok') setOpsSyncBadge('idle'); }, 2000);
+        } catch (e) {
+            console.error('OPS push failed — will retry on next change/open', e);
+            setOpsSyncBadge('offline');   // stays dirty; retries later
+        }
+    }
+
+    async function pullOpsFromCloud() {
+        setOpsSyncBadge('syncing');
+        try {
+            const res = await fetch(API_URL + '?type=ops');
+            if (!res.ok) throw new Error('bad response');
+            const payload = await res.json();
+            const cloud = payload && payload.data;
+            const cloudCount = opsTaskCount(cloud);
+            const localCount = opsTaskCount(opsData);
+
+            if (cloudCount > 0 && !opsDirty) {
+                // Trust the cloud unless we have unpushed local changes
+                opsData = cloud;
+                saveOpsLocalOnly();
+                renderOpsList();
+            } else if (localCount > 0 && cloudCount === 0) {
+                // Cloud is empty (first run) — seed it from local
+                scheduleOpsPush();
+            }
+            setOpsSyncBadge('ok');
+            setTimeout(() => { if (opsSyncState === 'ok') setOpsSyncBadge('idle'); }, 2000);
+        } catch (e) {
+            console.error('OPS pull failed — using local copy', e);
+            setOpsSyncBadge('offline');
+        }
+    }
+
     function loadOps() {
         try {
             const raw = localStorage.getItem(OPS_KEY);
@@ -1697,6 +1782,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } catch {}
         }
+        saveOpsLocalOnly();
+        scheduleOpsPush();
+    }
+
+    // Write to localStorage without triggering a cloud push (used when applying
+    // state that just CAME from the cloud — avoids a pointless echo).
+    function saveOpsLocalOnly() {
         const payload = JSON.stringify(opsData);
         localStorage.setItem(OPS_KEY, payload);
         // Rolling backup — only ever written when there is something worth keeping
@@ -2291,6 +2383,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadOps();
     renderOpsList();
+    pullOpsFromCloud();   // reconcile with the sheet; local render already happened
+
+    // Re-pull when returning to the app, and flush anything unpushed
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            if (opsDirty) pushOpsToCloud();
+            else pullOpsFromCloud();
+        }
+    });
+    window.addEventListener('online', () => { if (opsDirty) pushOpsToCloud(); });
 
     document.querySelectorAll('.ops-pill').forEach(pill => {
         pill.addEventListener('click', (e) => {
