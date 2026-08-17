@@ -1797,6 +1797,91 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- BATCH PREP CARD ---
+    // Batch bottles are 700ml unless a task says otherwise. Ingredient bottle
+    // sizes default to 700ml and are overridable per ingredient (tap the figure).
+    const BATCH_BOTTLE_ML = 700;
+    const ING_BOTTLE_KEY = 'codex_ing_bottles_v1';
+    function loadIngBottles() {
+        try { return JSON.parse(localStorage.getItem(ING_BOTTLE_KEY)) || {}; } catch { return {}; }
+    }
+    function getIngBottleSize(name) {
+        const m = loadIngBottles();
+        return m[(name || '').toLowerCase().trim()] || 700;
+    }
+    function setIngBottleSize(name, ml) {
+        const m = loadIngBottles();
+        m[(name || '').toLowerCase().trim()] = ml;
+        try { localStorage.setItem(ING_BOTTLE_KEY, JSON.stringify(m)); } catch {}
+    }
+    // Only things that COME in a bottle get a bottle count; in-house stuff shows ml.
+    const BOTTLED_CATS = ['amber-glow', 'neon-cyan'];
+
+    // Renders the per-bottle recipe + shopping totals for a linked batch task.
+    function buildBatchCard(wrap, rowEl, cat, taskIdx) {
+        const task = opsData[cat][taskIdx];
+        const specName = task.linkedSpec;
+        const ings = (recipeVault[specName] || []).filter(i => i.color !== 'static-ruby');
+        wrap.innerHTML = '';
+        if (!ings.length) {
+            wrap.innerHTML = `<div class="batch-card-note">${vaultLive ? 'No ingredients found for this batch.' : "Can't reach the Codex — pull to refresh."}</div>`;
+            return;
+        }
+        const perDrinkTotal = ings.reduce((s, i) => s + (i.amount || 0), 0);
+        if (perDrinkTotal <= 0) {
+            wrap.innerHTML = `<div class="batch-card-note">Batch has no measurable amounts.</div>`;
+            return;
+        }
+        const bottleML = task.bottleML || BATCH_BOTTLE_ML;
+        const factor = bottleML / perDrinkTotal;   // scale the recipe up to fill one bottle
+        const qty = task.qty || 1;
+
+        let html = `<div class="batch-card-label">PER BOTTLE (${bottleML}ml)</div>`;
+        ings.forEach(i => {
+            const per = Math.round((i.amount || 0) * factor);
+            html += `<div class="batch-card-row"><span class="bc-name">${i.name}</span><span class="bc-amt ${i.color}">${per}ml</span></div>`;
+        });
+
+        if (qty > 1) {
+            html += `<div class="batch-card-label" style="margin-top:12px;">YOU NEED (${qty} bottles)</div>`;
+            ings.forEach(i => {
+                const total = Math.round((i.amount || 0) * factor * qty);
+                let extra = '';
+                if (BOTTLED_CATS.includes(i.color)) {
+                    const size = getIngBottleSize(i.name);
+                    const bottles = (total / size).toFixed(1).replace(/\.0$/, '');
+                    extra = ` <span class="bc-bottles" data-ing="${(i.name || '').replace(/"/g, '&quot;')}">· ${bottles} bottle${bottles === '1' ? '' : 's'}</span>`;
+                }
+                html += `<div class="batch-card-row"><span class="bc-name">${i.name}</span><span class="bc-amt">${total}ml${extra}</span></div>`;
+            });
+        }
+        wrap.innerHTML = html;
+
+        wrap.querySelectorAll('.bc-bottles').forEach(el => {
+            el.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                const ingName = el.getAttribute('data-ing');
+                triggerHaptic('light');
+                openSelectModal(`${ingName.toUpperCase()} BOTTLE SIZE`, [
+                    { label: '500 ml', value: 500 },
+                    { label: '700 ml', value: 700 },
+                    { label: '1000 ml (1L)', value: 1000 },
+                    { label: '1500 ml', value: 1500 }
+                ], (ml) => {
+                    setIngBottleSize(ingName, parseInt(ml));
+                    buildBatchCard(wrap, rowEl, cat, taskIdx);
+                }, {
+                    placeholder: 'Custom size in ml…',
+                    btnLabel: 'SET',
+                    onSubmit: (v) => {
+                        const ml = parseInt(v);
+                        if (ml > 0) { setIngBottleSize(ingName, ml); buildBatchCard(wrap, rowEl, cat, taskIdx); }
+                    }
+                });
+            });
+        });
+    }
+
     window.renderOpsList = function() {
         const container = document.getElementById('ops-list-container');
         if (!container) return;
@@ -2070,10 +2155,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isPeriodic) {
                 html += `<div class="ops-history"></div>`;
             }
+            if (isPrep && isLinked) {
+                html += `<div class="ops-batch-card"></div>`;
+            }
             row.innerHTML = html;
 
             // populate subtask block (always — empty block just shows "+ add step" when expanded)
             buildSubtaskBlock(row.querySelector('.ops-subtasks'), row, activeOpsCategory, taskObj.originalIndex);
+
+            // linked prep rows get the per-bottle batch card
+            const batchWrap = row.querySelector('.ops-batch-card');
+            if (batchWrap) buildBatchCard(batchWrap, row, activeOpsCategory, taskObj.originalIndex);
 
             // badge toggles expansion
             const badgeEl = row.querySelector('.ops-subtask-badge');
@@ -2149,6 +2241,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             task.qty = Math.min(9, Math.max(1, (task.qty || 1) + d));
                             stepper.querySelector('.qs-n').innerText = task.qty;
                             saveOps();
+                            const bw = row.querySelector('.ops-batch-card');
+                            if (bw) buildBatchCard(bw, row, activeOpsCategory, taskObj.originalIndex);
                             armTimer();
                         });
                     });
@@ -2210,44 +2304,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             row.querySelector('.ops-text').addEventListener('click', (e) => {
                 e.stopPropagation();
-                // Linked PREP item — tap jumps to the Codex spec
-                if (isLinked) {
-                    const specName = taskObj.linkedSpec;
-                    // Never offer destructive break-link when the vault isn't live —
-                    // an empty/cached vault means "couldn't load", not "spec deleted".
-                    if (!recipeVault[specName] && !vaultLive) {
-                        openAlertModal({ title: 'OFFLINE', message: "Can't reach the Codex right now. Pull to refresh and try again." });
-                        return;
-                    }
-                    if (!recipeVault[specName]) {
-                        openConfirmModal({
-                            title: 'SPEC NOT FOUND',
-                            message: `"${specName}" no longer exists in the Codex. Break the link, or delete this task?`,
-                            confirmLabel: 'BREAK LINK',
-                            cancelLabel: 'KEEP',
-                            onConfirm: () => {
-                                delete opsData[activeOpsCategory][taskObj.originalIndex].linkedSpec;
-                                delete opsData[activeOpsCategory][taskObj.originalIndex].linkedSection;
-                                saveOps();
-                                renderOpsList();
-                            }
-                        });
-                        return;
-                    }
+                // Linked PREP item — tap expands the per-bottle batch card in place.
+                // (Long-press → View Spec still jumps to the Codex.)
+                if (isLinked && isPrep) {
                     triggerHaptic('light');
-                    // Jump to CODEX tab and expand the linked spec
-                    const codexTab = document.querySelector('.nav-tab[data-target="codex-module"]');
-                    if (codexTab) codexTab.click();
-                    setTimeout(() => {
-                        const items = document.querySelectorAll('#managed-vault-list .vault-item');
-                        items.forEach(item => {
-                            const title = item.querySelector('.cocktail-title');
-                            if (title && title.innerText === specName) {
-                                item.classList.add('expanded');
-                                item.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            }
-                        });
-                    }, 100);
+                    row.classList.toggle('expanded');
                     return;
                 }
                 triggerHaptic('light');

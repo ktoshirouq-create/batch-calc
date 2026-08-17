@@ -280,7 +280,7 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .ops-row.completed .ops-checkbox, .ops-row.completed .ops-number { border-color: var(--nodee-gold); background: var(--nodee-gold); color: #000; text-decoration: line-through; }
 .ops-row.completed .ops-checkbox::after { content: '✓'; color: #000; font-size: 0.8rem; font-weight: 900; }
 .ops-row.completed .ops-text { text-decoration: line-through; color: var(--text-muted); }
-.ops-row.completed .ops-time-tag { text-decoration: none; display: inline-block; }
+.ops-row.completed .ops-time-tag { text-decoration: none; display: block; width: fit-content; }
 .ops-row-linked .ops-text { color: var(--nodee-gold); }
 .ops-link-glyph { margin-right: 6px; font-size: 0.85em; opacity: 0.85; }
 .ops-row-linked.completed .ops-text { color: var(--text-muted); }
@@ -530,3 +530,19 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .prep-sug-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prep-sug-qty { color: var(--nodee-gold); font-weight: 800; font-size: 0.72rem; background: rgba(200,169,126,0.12); border: 1px solid rgba(200,169,126,0.3); padding: 2px 7px; border-radius: 6px; flex-shrink: 0; }
 #prep-add-sheet { align-items: flex-end; padding: 0; }
+
+/* --- BATCH PREP CARD --- */
+.ops-batch-card { display: none; padding: 10px 14px 14px 48px; border-top: 1px dashed rgba(255,255,255,0.08); }
+.ops-row.expanded .ops-batch-card { display: block; }
+.batch-card-label { font-size: 0.58rem; font-weight: 900; letter-spacing: 2px; color: var(--nodee-gold); margin-bottom: 8px; }
+.batch-card-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 5px 0; font-size: 0.82rem; }
+.bc-name { color: var(--text-muted); flex: 1; min-width: 0; }
+.bc-amt { color: var(--text-main); font-weight: 700; flex-shrink: 0; font-family: 'JetBrains Mono', monospace; }
+.bc-amt.amber-glow { color: var(--amber-glow); }
+.bc-amt.neon-cyan { color: var(--neon-cyan); }
+.bc-amt.juice-glow { color: var(--juice-glow); }
+.bc-amt.magenta-glow { color: var(--magenta-glow); }
+.bc-amt.puree-mango { color: var(--puree-mango); }
+.bc-amt.coffee-dark { color: var(--coffee-dark); }
+.bc-bottles { color: var(--nodee-gold); font-weight: 800; font-size: 0.75rem; cursor: pointer; border-bottom: 1px dotted rgba(200,169,126,0.5); }
+.batch-card-note { font-size: 0.78rem; color: var(--text-muted); padding: 4px 0; }
