@@ -2309,6 +2309,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const t = opsData[activeOpsCategory][taskObj.originalIndex];
                             t.kind = t.kind === 'mise' ? 'batch' : 'mise';
                             if (t.kind === 'batch' && !t.qty) t.qty = 1;
+                            rememberPrepKind(t.text, t.kind);   // learn the correction
                             saveOps();
                             renderOpsList();
                         } else if (val === 'edit') {
@@ -2418,8 +2419,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const BATCH_TEXT_RE = /batch|mix|syrup|infus|cordial|shrub|puree|juice/i;
 
+    // Remembers which section you filed a task under, so next time you type the
+    // same name it lands there automatically (overrides keyword guessing).
+    const PREP_KIND_KEY = 'codex_prep_kinds_v1';
+    function loadPrepKinds() {
+        try { return JSON.parse(localStorage.getItem(PREP_KIND_KEY)) || {}; } catch { return {}; }
+    }
+    function rememberPrepKind(text, kind) {
+        const m = loadPrepKinds();
+        m[(text || '').toLowerCase().trim()] = kind;
+        try { localStorage.setItem(PREP_KIND_KEY, JSON.stringify(m)); } catch {}
+    }
+    function recallPrepKind(text) {
+        return loadPrepKinds()[(text || '').toLowerCase().trim()] || null;
+    }
+
     function commitPrepTask({ text, linkedSpec, linkedSection, qty }) {
-        const kind = (linkedSpec || BATCH_TEXT_RE.test(text)) ? 'batch' : 'mise';
+        const remembered = recallPrepKind(text);
+        const kind = linkedSpec ? 'batch'
+                   : remembered ? remembered
+                   : (BATCH_TEXT_RE.test(text) ? 'batch' : 'mise');
         const task = { text, completed: false, subtasks: [], kind };
         if (kind === 'batch') task.qty = qty || 1;
         if (linkedSpec) { task.linkedSpec = linkedSpec; task.linkedSection = linkedSection; }
@@ -2439,7 +2458,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="prep-sheet-title">NEW PREP TASK</span>
                             <button class="prep-sheet-x">✕</button>
                         </div>
-                        <input type="text" id="prep-add-input" class="premium-text-input" placeholder="Type task — e.g. 2x sky colada…" autocomplete="off" style="margin-bottom: 0;">
+                        <div class="prep-input-row">
+                            <input type="text" id="prep-add-input" class="premium-text-input" placeholder="Type task — e.g. 2x sky colada…" autocomplete="off" style="margin-bottom: 0;">
+                            <button id="prep-add-save" class="prep-save-btn">SAVE</button>
+                        </div>
                         <div id="prep-add-sugs"></div>
                     </div>
                 </div>
@@ -2447,24 +2469,35 @@ document.addEventListener('DOMContentLoaded', () => {
             sheet = document.getElementById('prep-add-sheet');
             sheet.addEventListener('click', (e) => { if (e.target === sheet) closePrepAddSheet(); });
             sheet.querySelector('.prep-sheet-x').addEventListener('click', closePrepAddSheet);
+            document.getElementById('prep-add-save').addEventListener('click', () => {
+                triggerHaptic('heavy');
+                commitTypedPrepTask();
+            });
             const input = document.getElementById('prep-add-input');
             input.addEventListener('input', renderPrepSuggestions);
             input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    const { qty, query } = parsePrepInput(input.value);
-                    if (!query.trim()) return;
-                    // Enter commits typed text as ad-hoc (qty honored for batch-y text; re-prefixed for mise so nothing typed is lost)
-                    const isBatchy = BATCH_TEXT_RE.test(query);
-                    const text = (!isBatchy && qty > 1) ? `${qty}x ${capitalize(query.trim())}` : capitalize(query.trim());
-                    commitPrepTask({ text, qty: isBatchy ? qty : 1 });
-                    input.value = '';
-                    renderPrepSuggestions();
-                }
+                if (e.key === 'Enter') commitTypedPrepTask();
             });
         }
         sheet.classList.remove('hidden');
         renderPrepSuggestions();
         setTimeout(() => document.getElementById('prep-add-input')?.focus(), 300);
+    }
+
+    // Commit whatever is typed (Enter or SAVE). Honours remembered section choice.
+    function commitTypedPrepTask() {
+        const input = document.getElementById('prep-add-input');
+        if (!input) return;
+        const { qty, query } = parsePrepInput(input.value);
+        if (!query.trim()) return;
+        const clean = capitalize(query.trim());
+        const remembered = recallPrepKind(clean);
+        const isBatchy = remembered ? (remembered === 'batch') : BATCH_TEXT_RE.test(query);
+        const text = (!isBatchy && qty > 1) ? `${qty}x ${clean}` : clean;
+        commitPrepTask({ text, qty: isBatchy ? qty : 1 });
+        input.value = '';
+        renderPrepSuggestions();
+        input.focus();
     }
 
     function closePrepAddSheet() {

@@ -516,7 +516,13 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .prep-sheet-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .prep-sheet-title { color: var(--nodee-gold); font-size: 0.8rem; letter-spacing: 2px; font-weight: 900; }
 .prep-sheet-x { color: #666; font-size: 1.2rem; padding: 4px 8px; cursor: pointer; }
-#prep-add-sugs { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; min-height: 10px; }
+.prep-input-row { display: flex; gap: 8px; align-items: stretch; }
+.prep-input-row .premium-text-input { flex: 1; min-width: 0; }
+.prep-save-btn { background: var(--nodee-gold); color: var(--bg-oled); border: none; border-radius: 12px; padding: 0 18px; font-size: 0.75rem; font-weight: 900; letter-spacing: 1.5px; flex-shrink: 0; cursor: pointer; }
+#prep-add-sugs { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; min-height: 10px; max-height: 33vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.ops-sync-badge { font-size: 0.58rem; font-weight: 800; letter-spacing: 1.5px; color: var(--text-muted); margin-top: 6px; min-height: 12px; }
+.ops-sync-badge.ok { color: var(--juice-glow); }
+.ops-sync-badge.offline { color: var(--due-amber, #E5B15D); }
 .prep-sug-label { font-size: 0.58rem; font-weight: 900; letter-spacing: 1.5px; color: #666; margin: 2px 0 2px 4px; }
 .prep-sug { display: flex; align-items: center; gap: 9px; padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; font-size: 0.85rem; color: var(--text-main); cursor: pointer; }
 .prep-sug:active { background: rgba(200,169,126,0.12); border-color: rgba(200,169,126,0.4); }
