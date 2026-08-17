@@ -546,3 +546,14 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .bc-amt.coffee-dark { color: var(--coffee-dark); }
 .bc-bottles { color: var(--nodee-gold); font-weight: 800; font-size: 0.75rem; cursor: pointer; border-bottom: 1px dotted rgba(200,169,126,0.5); }
 .batch-card-note { font-size: 0.78rem; color: var(--text-muted); padding: 4px 0; }
+
+/* --- BATCH MODE TOGGLE (per bottle / per drink) --- */
+.batch-mode-pills { display: flex; gap: 6px; margin-bottom: 12px; }
+.batch-mode-pill { flex: 1; padding: 10px 6px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: var(--text-muted); font-size: 0.65rem; font-weight: 900; letter-spacing: 1px; cursor: pointer; }
+.batch-mode-pill.active { background: var(--nodee-gold); color: var(--bg-oled); border-color: var(--nodee-gold); }
+.batch-bottle-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.batch-drinks-readout { font-size: 0.68rem; color: var(--nodee-gold); font-weight: 700; letter-spacing: 0.5px; margin-top: 10px; text-align: right; }
+.batch-drinks-readout .bdr-warn { color: var(--due-amber, #E5B15D); font-weight: 600; }
+
+/* PREP section headers as drop targets */
+.ops-prep-section.drop-hover { background: rgba(200,169,126,0.15); border-radius: 6px; color: var(--text-main); }

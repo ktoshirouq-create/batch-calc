@@ -398,7 +398,7 @@ document.addEventListener('DOMContentLoaded', () => {
             mult.className = 'service-multiplier';
             mult.onclick = (e) => e.stopPropagation();
             mult.innerHTML = `
-                <span class="text-sm fw-bold text-muted">ROUND MULTIPLIER:</span>
+                <span class="text-sm fw-bold text-muted">SERVES:</span>
                 <div class="stepper-control mini-stepper" style="width: auto;">
                     <button class="stepper-btn" data-action="round-minus">−</button>
                     <span class="stepper-value">1</span>
@@ -792,7 +792,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Smart default: open to the first unused batch type (Spirit → Juice → Espresso → Mocktail)
         const typeOrder = ['Spirit Batch', 'Juice Batch', 'Espresso Batch', 'Mocktail'];
         const defaultType = typeOrder.find(t => !builderState.sections.find(s => s.name === t)) || 'Spirit Batch';
-        batchBuilderState = { type: defaultType, customType: '', ingredients: [], perDrink: 0 };
+        batchBuilderState = { type: defaultType, customType: '', ingredients: [], perDrink: 0, mode: 'bottle', bottleML: BATCH_BOTTLE_ML };
         
         const addBtn = document.getElementById('add-batch-btn');
         if (addBtn) addBtn.classList.add('hidden');
@@ -903,6 +903,13 @@ document.addEventListener('DOMContentLoaded', () => {
             ? capitalize(batchBuilderState.customType.trim())
             : batchBuilderState.type;
         if (!batchName) return openAlertModal("Pick a batch type or enter a custom name.");
+        // Remember how this batch was defined so the prep card renders it correctly
+        const cocktailNameNow = capitalize((document.getElementById('builder-name').value || '').trim());
+        if (cocktailNameNow) {
+            const fullBatchName = `${cocktailNameNow} — ${batchBuilderState.type === 'Custom' ? capitalize(batchBuilderState.customType.trim()) : batchBuilderState.type}`;
+            setBatchMode(fullBatchName, batchBuilderState.mode);
+            if (batchBuilderState.mode === 'bottle') setBatchSize(fullBatchName, batchBuilderState.bottleML || BATCH_BOTTLE_ML);
+        }
         const categoryMap = { 'Spirit Batch': 'amber-glow', 'Juice Batch': 'juice-glow', 'Espresso Batch': 'coffee-dark', 'Mocktail': 'juice-glow' };
         const mainCat = categoryMap[batchName] || 'amber-glow';
         let subSection = builderState.sections.find(s => s.name === batchName);
@@ -945,13 +952,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     ${types.map(t => `<button class="batch-type-pill ${batchBuilderState.type === t ? 'active' : ''}" data-type="${t}">${t.replace(' Batch', '')}</button>`).join('')}
                 </div>
                 ${batchBuilderState.type === 'Custom' ? `<input type="text" class="premium-text-input batch-custom-input" placeholder="Batch name" value="${batchBuilderState.customType.replace(/"/g, '&quot;')}">` : ''}
-                <h5 class="batch-section-label">CONSTITUENTS (1-COCKTAIL RATIO)</h5>
+                <div class="batch-mode-pills">
+                    <button class="batch-mode-pill ${batchBuilderState.mode === 'bottle' ? 'active' : ''}" data-mode="bottle">PER BOTTLE</button>
+                    <button class="batch-mode-pill ${batchBuilderState.mode === 'drink' ? 'active' : ''}" data-mode="drink">PER DRINK</button>
+                </div>
+                ${batchBuilderState.mode === 'bottle' ? `
+                <div class="batch-bottle-row">
+                    <span class="text-muted text-xs">BOTTLE SIZE:</span>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <input type="number" id="batch-bottle-input" class="batch-per-drink-input" value="${batchBuilderState.bottleML}">
+                        <span class="batch-per-drink-suffix">ml</span>
+                    </div>
+                </div>` : ''}
+                <h5 class="batch-section-label">${batchBuilderState.mode === 'bottle' ? 'CONSTITUENTS (PER BOTTLE)' : 'CONSTITUENTS (1-COCKTAIL RATIO)'}</h5>
                 <div id="batch-ingredients-list"></div>
                 <button id="batch-add-ing-btn" class="builder-add-ing">＋ INGREDIENT</button>
                 
                 <div class="batch-per-drink-row" style="flex-direction: column; align-items: stretch; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 15px;">
                     <div style="display:flex; justify-content: space-between; margin-bottom: 12px; align-items: center;">
-                        <span class="text-muted text-xs">RATIO SUM:</span>
+                        <span class="text-muted text-xs">${batchBuilderState.mode === 'bottle' ? 'BATCH TOTAL:' : 'RATIO SUM:'}</span>
                         <span id="batch-auto-sum" class="text-muted text-xs" style="font-size: 0.9rem;">0 ml</span>
                     </div>
                     <div style="display:flex; justify-content: space-between; align-items: center;">
@@ -963,6 +982,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="batch-per-drink-suffix">ml</span>
                         </div>
                     </div>
+                    <div id="batch-drinks-readout" class="batch-drinks-readout"></div>
                 </div>
 
                 <div class="batch-form-actions" style="margin-top: 20px;">
@@ -993,6 +1013,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderBuilder();
                 renderBatchForm();
             });
+        });
+
+        // Mode toggle — converts the numbers so you never retype them
+        container.querySelectorAll('.batch-mode-pill').forEach(pill => {
+            pill.addEventListener('click', () => {
+                const newMode = pill.getAttribute('data-mode');
+                if (newMode === batchBuilderState.mode) return;
+                triggerHaptic('light');
+                const sum = batchBuilderState.ingredients
+                    .filter(i => i.cat !== 'static-ruby')
+                    .reduce((s, i) => s + (i.amount || 0), 0);
+                const bottle = batchBuilderState.bottleML || BATCH_BOTTLE_ML;
+                if (sum > 0) {
+                    // drink -> bottle: scale the ratio up to fill the bottle
+                    // bottle -> drink: scale back down to the pour size (or keep ratio if no pour)
+                    const f = (newMode === 'bottle')
+                        ? (bottle / sum)
+                        : ((batchBuilderState.perDrink > 0 ? batchBuilderState.perDrink : sum) / sum);
+                    batchBuilderState.ingredients.forEach(i => {
+                        if (i.cat !== 'static-ruby') i.amount = Math.round((i.amount || 0) * f);
+                    });
+                }
+                batchBuilderState.mode = newMode;
+                renderBatchForm();
+            });
+        });
+
+        const bottleInput = document.getElementById('batch-bottle-input');
+        if (bottleInput) bottleInput.addEventListener('input', e => {
+            batchBuilderState.bottleML = parseFloat(e.target.value) || BATCH_BOTTLE_ML;
+            updateBatchYieldDisplay();
         });
 
         const customInput = container.querySelector('.batch-custom-input');
@@ -1148,6 +1199,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!autoSum || !batchBuilderState) return;
         const total = batchBuilderState.ingredients.filter(i => i.cat !== 'static-ruby').reduce((s, i) => s + (i.amount || 0), 0);
         autoSum.innerText = `${total.toFixed(1).replace(/\.0$/, '')} ml`;
+        const readout = document.getElementById('batch-drinks-readout');
+        if (readout) {
+            const pour = batchBuilderState.perDrink;
+            if (batchBuilderState.mode === 'bottle' && total > 0 && pour > 0) {
+                const drinks = Math.floor(total / pour);
+                const bottle = batchBuilderState.bottleML || BATCH_BOTTLE_ML;
+                const off = Math.abs(total - bottle);
+                readout.innerHTML = `${drinks} drinks per bottle` +
+                    (off > 5 ? ` <span class="bdr-warn">· total is ${total > bottle ? 'over' : 'under'} ${bottle}ml by ${Math.round(off)}ml</span>` : '');
+            } else {
+                readout.innerText = '';
+            }
+        }
     }
 
     const addBatchBtn = document.getElementById('add-batch-btn');
@@ -1802,6 +1866,33 @@ document.addEventListener('DOMContentLoaded', () => {
     // sizes default to 700ml and are overridable per ingredient (tap the figure).
     const BATCH_BOTTLE_ML = 700;
     const ING_BOTTLE_KEY = 'codex_ing_bottles_v1';
+    // Batch definition mode, keyed by full batch name ("Cocktail — Section").
+    // 'bottle' = amounts are literal for one bottle. 'drink' = legacy ratio, scaled up.
+    // Stored locally until the sheet gains a mode column.
+    const BATCH_MODE_KEY = 'codex_batch_modes_v1';
+    const BATCH_SIZE_KEY = 'codex_batch_sizes_v1';
+    function loadBatchModes() {
+        try { return JSON.parse(localStorage.getItem(BATCH_MODE_KEY)) || {}; } catch { return {}; }
+    }
+    function getBatchMode(fullName) {
+        return loadBatchModes()[(fullName || '').toLowerCase().trim()] || 'drink';
+    }
+    function setBatchMode(fullName, mode) {
+        const m = loadBatchModes();
+        m[(fullName || '').toLowerCase().trim()] = mode;
+        try { localStorage.setItem(BATCH_MODE_KEY, JSON.stringify(m)); } catch {}
+    }
+    function loadBatchSizes() {
+        try { return JSON.parse(localStorage.getItem(BATCH_SIZE_KEY)) || {}; } catch { return {}; }
+    }
+    function getBatchSize(fullName) {
+        return loadBatchSizes()[(fullName || '').toLowerCase().trim()] || BATCH_BOTTLE_ML;
+    }
+    function setBatchSize(fullName, ml) {
+        const m = loadBatchSizes();
+        m[(fullName || '').toLowerCase().trim()] = ml;
+        try { localStorage.setItem(BATCH_SIZE_KEY, JSON.stringify(m)); } catch {}
+    }
     function loadIngBottles() {
         try { return JSON.parse(localStorage.getItem(ING_BOTTLE_KEY)) || {}; } catch { return {}; }
     }
@@ -1820,7 +1911,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Renders the per-bottle recipe + shopping totals for a linked batch task.
     function buildBatchCard(wrap, rowEl, cat, taskIdx) {
         const task = opsData[cat][taskIdx];
-        const specName = task.linkedSpec;
+        // Look up the SUB-BATCH row ("Cocktail — Section"), not the parent cocktail.
+        // The parent only holds batch references (e.g. "Spirit Batch 60ml"), which
+        // tells you nothing about what actually goes in the bottle.
+        const specName = task.linkedSection
+            ? `${task.linkedSpec} — ${task.linkedSection}`
+            : task.linkedSpec;
         const ings = (recipeVault[specName] || []).filter(i => i.color !== 'static-ruby');
         wrap.innerHTML = '';
         if (!ings.length) {
@@ -1832,8 +1928,10 @@ document.addEventListener('DOMContentLoaded', () => {
             wrap.innerHTML = `<div class="batch-card-note">Batch has no measurable amounts.</div>`;
             return;
         }
-        const bottleML = task.bottleML || BATCH_BOTTLE_ML;
-        const factor = bottleML / perDrinkTotal;   // scale the recipe up to fill one bottle
+        const bottleML = task.bottleML || getBatchSize(specName);
+        // In 'bottle' mode the stored amounts ARE the bottle recipe — no scaling.
+        const mode = getBatchMode(specName);
+        const factor = (mode === 'bottle') ? 1 : (bottleML / perDrinkTotal);
         const qty = task.qty || 1;
 
         let html = `<div class="batch-card-label">PER BOTTLE (${bottleML}ml)</div>`;
@@ -1846,13 +1944,17 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<div class="batch-card-label" style="margin-top:12px;">YOU NEED (${qty} bottles)</div>`;
             ings.forEach(i => {
                 const total = Math.round((i.amount || 0) * factor * qty);
-                let extra = '';
+                let val;
                 if (BOTTLED_CATS.includes(i.color)) {
+                    // Bottled goods: show bottle-equivalents only (decimal), tap to set size
                     const size = getIngBottleSize(i.name);
                     const bottles = (total / size).toFixed(1).replace(/\.0$/, '');
-                    extra = ` <span class="bc-bottles" data-ing="${(i.name || '').replace(/"/g, '&quot;')}">· ${bottles} bottle${bottles === '1' ? '' : 's'}</span>`;
+                    val = `<span class="bc-bottles" data-ing="${(i.name || '').replace(/"/g, '&quot;')}">${bottles} bottle${bottles === '1' ? '' : 's'}</span>`;
+                } else {
+                    // In-house stuff (syrup/juice/puree) isn't bottled — show ml
+                    val = `${total}ml`;
                 }
-                html += `<div class="batch-card-row"><span class="bc-name">${i.name}</span><span class="bc-amt">${total}ml${extra}</span></div>`;
+                html += `<div class="batch-card-row"><span class="bc-name">${i.name}</span><span class="bc-amt">${val}</span></div>`;
             });
         }
         wrap.innerHTML = html;
@@ -1928,6 +2030,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isNumberedSop) {
             sortedTasks = [...tasks].map((t, i) => ({...t, originalIndex: i}));
         } else if (isPrep) {
+            // Shared batches: two cocktails using an identically-named section
+            // (e.g. "Passion+Lem") are the same bottle — collapse to one task.
+            const seenSection = new Map();
+            for (let i = tasks.length - 1; i >= 0; i--) {
+                const t = tasks[i];
+                if (!t.linkedSection) continue;
+                const key = t.linkedSection.toLowerCase().trim();
+                if (/^(spirit|juice|espresso)\s*batch$|^mocktail$|^cream$/.test(key)) continue;  // generic names aren't shared
+                if (seenSection.has(key)) {
+                    const keep = seenSection.get(key);
+                    keep.qty = Math.max(keep.qty || 1, t.qty || 1);
+                    tasks.splice(i, 1);
+                } else {
+                    seenSection.set(key, t);
+                }
+            }
             // PREP: grouped — BATCHES first, then MISE; within each group completed sinks, uncompleted keep drag order
             const groupRank = (t) => (t.kind === 'mise' ? 1 : 0);
             sortedTasks = [...tasks].map((t, i) => ({...t, originalIndex: i}))
@@ -2025,7 +2143,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 subWrap.appendChild(sRow);
             });
-            // + add step (reopens blank for rapid entry)
+            // + add step — SOPs only (OPEN/CLOSE). Prep batches and upkeep don't use sub-steps.
+            if (cat !== 'opening' && cat !== 'closing') return;
             const addLine = document.createElement('div');
             addLine.className = 'ops-subtask-add';
             addLine.innerHTML = `＋ add step`;
@@ -2091,15 +2210,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let lastPrepGroup = null;  // section header tracker for the PREP loop
 
+        // PREP section headers double as drop targets so you can drag a task
+        // into a section even when it's empty.
+        function makePrepHeader(label) {
+            const header = document.createElement('div');
+            header.className = 'ops-prep-section';
+            header.innerText = label;
+            header.addEventListener('dragover', (e) => { e.preventDefault(); header.classList.add('drop-hover'); });
+            header.addEventListener('dragleave', () => header.classList.remove('drop-hover'));
+            header.addEventListener('drop', (e) => {
+                e.preventDefault();
+                header.classList.remove('drop-hover');
+                const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+                if (isNaN(fromIdx)) return;
+                const wantKind = label === 'MISE' ? 'mise' : 'batch';
+                const item = opsData[activeOpsCategory].splice(fromIdx, 1)[0];
+                if (!item) return;
+                if (item.kind !== wantKind) {
+                    item.kind = wantKind;
+                    if (wantKind === 'batch' && !item.qty) item.qty = 1;
+                    rememberPrepKind(item.text, wantKind);
+                }
+                opsData[activeOpsCategory].push(item);
+                saveOps();
+                renderOpsList();
+            });
+            return header;
+        }
+
         sortedTasks.forEach((taskObj, displayIndex) => {
             // PREP section headers: BATCHES / MISE, emitted at group boundaries
             if (isPrep) {
                 const grp = taskObj.kind === 'mise' ? 'MISE' : 'BATCHES';
                 if (grp !== lastPrepGroup) {
-                    const header = document.createElement('div');
-                    header.className = 'ops-prep-section';
-                    header.innerText = grp;
-                    container.appendChild(header);
+                    container.appendChild(makePrepHeader(grp));
                     lastPrepGroup = grp;
                 }
             }
@@ -2141,7 +2285,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isBatchKind && !taskObj.completed) {
                 html += `<span class="ops-qty-chip" data-qty="${taskObj.qty || 1}">×${taskObj.qty || 1}</span>`;
             }
-            if (hasSubtasks) {
+            if (hasSubtasks && isNumberedSop) {
                 html += `<span class="ops-subtask-badge"><span class="chevron">⌄</span><span class="count">${subDone}/${subCount}</span></span>`;
             }
             if (isPeriodic) {
@@ -2334,6 +2478,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     const toIdx = taskObj.originalIndex;
                     if (fromIdx !== toIdx && !isNaN(fromIdx)) {
                         const item = opsData[activeOpsCategory].splice(fromIdx, 1)[0];
+                        // PREP: dropping across the BATCHES/MISE divider re-files the task
+                        if (isPrep && item.kind !== taskObj.kind) {
+                            item.kind = taskObj.kind === 'mise' ? 'mise' : 'batch';
+                            if (item.kind === 'batch' && !item.qty) item.qty = 1;
+                            rememberPrepKind(item.text, item.kind);
+                        }
                         opsData[activeOpsCategory].splice(toIdx, 0, item);
                         saveOps();
                         renderOpsList();
@@ -2358,6 +2508,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (isLinked) actions.push({ label: 'View Spec', value: 'view-spec' });
                     if (isPeriodic) actions.push({ label: 'Set Frequency', value: 'set-freq' });
                     if (isPrep) actions.push({ label: taskObj.kind === 'mise' ? 'Move to Batches' : 'Move to Mise', value: 'move-kind' });
+                    if (isPrep && isLinked) actions.push({ label: 'Batch Bottle Size', value: 'batch-size' });
                     actions.push({ label: 'Edit Task', value: 'edit' });
                     actions.push({ label: 'Delete Task', value: 'delete' });
                     
@@ -2366,6 +2517,30 @@ document.addEventListener('DOMContentLoaded', () => {
                             opsData[activeOpsCategory].splice(taskObj.originalIndex, 1);
                             saveOps();
                             renderOpsList();
+                        } else if (val === 'batch-size') {
+                            setTimeout(() => {
+                                openSelectModal('BATCH BOTTLE SIZE', [
+                                    { label: '500 ml', value: 500 },
+                                    { label: '700 ml (standard)', value: 700 },
+                                    { label: '1000 ml (1L)', value: 1000 },
+                                    { label: '1500 ml', value: 1500 }
+                                ], (ml) => {
+                                    opsData[activeOpsCategory][taskObj.originalIndex].bottleML = parseInt(ml);
+                                    saveOps();
+                                    renderOpsList();
+                                }, {
+                                    placeholder: 'Custom size in ml…',
+                                    btnLabel: 'SET',
+                                    onSubmit: (v) => {
+                                        const ml = parseInt(v);
+                                        if (ml > 0) {
+                                            opsData[activeOpsCategory][taskObj.originalIndex].bottleML = ml;
+                                            saveOps();
+                                            renderOpsList();
+                                        }
+                                    }
+                                });
+                            }, 350);
                         } else if (val === 'move-kind') {
                             const t = opsData[activeOpsCategory][taskObj.originalIndex];
                             t.kind = t.kind === 'mise' ? 'batch' : 'mise';
@@ -2441,6 +2616,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             container.appendChild(row);
         });
+
+        // Ensure both PREP headers exist even when a section is empty (drop targets)
+        if (isPrep) {
+            ['BATCHES', 'MISE'].forEach(label => {
+                const present = [...container.querySelectorAll('.ops-prep-section')]
+                    .some(h => h.innerText === label);
+                if (!present) container.appendChild(makePrepHeader(label));
+            });
+        }
     }
 
     loadOps();
