@@ -316,6 +316,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     html += `<span class="ing-amount">${formatAmount(ing.amount * round)}ml</span></div>`;
                 }
             });
+            // Total yield for the round (static items excluded — dashes aren't volume)
+            const mainTotal = mainIngs
+                .filter(i => i.color !== 'static-ruby')
+                .reduce((s, i) => s + (i.amount || 0) * round, 0);
+            if (mainTotal > 0) {
+                const perDrink = round > 0 ? mainTotal / round : mainTotal;
+                html += `<div class="result-row vault-total-row"><span class="ing-name">TOTAL</span><span class="ing-amount">${formatAmount(mainTotal)}ml<span class="vt-sub"> · ${formatAmount(perDrink)}ml each</span></span></div>`;
+            }
             mainSection.innerHTML = html;
             container.appendChild(mainSection);
         }

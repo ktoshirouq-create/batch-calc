@@ -557,3 +557,12 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 
 /* PREP section headers as drop targets */
 .ops-prep-section.drop-hover { background: rgba(200,169,126,0.15); border-radius: 6px; color: var(--text-main); }
+
+/* --- COMPACT VAULT MAIN ROWS (was stacked name-over-amount, wasted height) --- */
+.vault-main-section .result-row { flex-direction: row; justify-content: space-between; align-items: baseline; gap: 12px; padding: 9px 0; }
+.vault-main-section .ing-name { font-size: 0.88rem; font-weight: 600; color: var(--text-main); margin-bottom: 0; flex: 1; min-width: 0; }
+.vault-main-section .ing-amount { font-size: 1rem; font-weight: 700; flex-shrink: 0; font-family: 'JetBrains Mono', monospace; }
+.vault-total-row { border-bottom: none !important; margin-top: 6px; padding-top: 12px !important; border-top: 1px solid rgba(200,169,126,0.25); }
+.vault-total-row .ing-name { color: var(--nodee-gold) !important; font-size: 0.65rem !important; font-weight: 900 !important; letter-spacing: 2px; }
+.vault-total-row .ing-amount { color: var(--text-main); }
+.vault-total-row .vt-sub { color: var(--text-muted); font-size: 0.7rem; font-weight: 600; }
