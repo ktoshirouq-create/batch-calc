@@ -109,6 +109,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (d20El) d20El.innerText = date20.toLocaleDateString('en-US', options).toUpperCase();
     };
     updateBouncer();
+    // Recompute on focus and hourly — otherwise the legal dates go stale past
+    // midnight while the app sits open, which is exactly when they're used.
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') updateBouncer();
+    });
+    setInterval(updateBouncer, 60 * 60 * 1000);
 
     // --- PULL TO REFRESH ---
     let touchStartY = 0;
@@ -223,6 +229,37 @@ document.addEventListener('DOMContentLoaded', () => {
         actions.children[1].addEventListener('click', () => { triggerHaptic('heavy'); closeSelectModal(); if (onConfirm) onConfirm(); });
         list.appendChild(actions);
         modal.classList.remove('hidden');
+    }
+
+    // One typed-number pattern for every numeric setting — replaces the
+    // mix of pickers, cycles and steppers that made the app feel inconsistent.
+    function openNumberModal(title, current, suffix, onSet) {
+        triggerHaptic();
+        document.getElementById('selection-modal-title').innerText = title;
+        const list = document.getElementById('selection-modal-list');
+        list.innerHTML = '';
+        const wrap = document.createElement('div');
+        wrap.className = 'num-modal';
+        wrap.innerHTML = `
+            <div class="num-modal-row">
+                <input type="number" class="num-modal-input" value="${current || ''}" inputmode="numeric">
+                <span class="num-modal-suffix">${suffix || ''}</span>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary">CANCEL</button>
+                <button class="btn-primary">SET</button>
+            </div>`;
+        const input = wrap.querySelector('.num-modal-input');
+        wrap.querySelectorAll('button')[0].addEventListener('click', () => { triggerHaptic('light'); closeSelectModal(); });
+        const commit = () => {
+            const v = parseFloat(input.value);
+            if (!isNaN(v) && v > 0) { triggerHaptic('heavy'); closeSelectModal(); onSet(v); }
+        };
+        wrap.querySelectorAll('button')[1].addEventListener('click', commit);
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); });
+        list.appendChild(wrap);
+        modal.classList.remove('hidden');
+        setTimeout(() => { input.focus(); input.select(); }, 350);
     }
 
     function openAlertModal({ title = 'NOTICE', message, onClose }) {
@@ -364,30 +401,47 @@ document.addEventListener('DOMContentLoaded', () => {
                 const label = isStandaloneName(sbName)
                     ? standaloneLabel(sbName)
                     : sbName.replace(cocktail + ' — ', '');
-                
-                // MULTIPLIER MATH: Scale the total yield bypassing static elements
-                const baseBatchYield = sbIngs.filter(i => i.color !== 'static-ruby').reduce((s, i) => s + (i.amount || 0), 0);
-                const batchYield = baseBatchYield * round;
+
+                // Sub-batches are built BY THE BOTTLE, not per drink — the stored
+                // amounts are a ratio, and the pour is set to taste. So always show
+                // the recipe scaled to fill one bottle, regardless of SERVES.
+                const ratioSum = sbIngs.filter(i => i.color !== 'static-ruby')
+                                       .reduce((s, i) => s + (i.amount || 0), 0);
+                const bottleML = getBatchSize(sbName);
+                const mode = getBatchMode(sbName);
+                const factor = (mode === 'bottle' || ratioSum <= 0) ? 1 : (bottleML / ratioSum);
+
                 const mainRef = mainIngs.find(i => i.name === label);
-                let yieldLabel = `${formatAmount(batchYield)}ml`;
-                
-                if (mainRef && mainRef.amount > 0) {
-                    const drinks = Math.floor(batchYield / mainRef.amount);
-                    yieldLabel += ` · ${drinks} drinks`;
-                }
+                const perBottle = ratioSum > 0 ? Math.round(ratioSum * factor) : bottleML;
+
                 const section = document.createElement('div');
                 section.className = 'vault-subbatch';
-                let html = `<h4 class="vault-subbatch-title">${label.toUpperCase()}<span class="vault-yield-label">${yieldLabel}</span></h4>`;
+                let html = `<h4 class="vault-subbatch-title">${label.toUpperCase()}` +
+                    `<button class="sb-size" data-batch="${sbName.replace(/"/g, '&quot;')}" aria-label="Bottle size for ${label}">${bottleML}ml</button></h4>`;
                 sbIngs.forEach(ing => {
                     let amtHtml;
                     if (ing.color === 'static-ruby') {
-                        amtHtml = (ing.unit || 'dash') === 'top' ? 'top' : `${Math.round((ing.amount || 0) * round)} ${ing.unit || 'dash'}`;
+                        amtHtml = (ing.unit || 'dash') === 'top' ? 'top' : `${ing.amount || 0} ${ing.unit || 'dash'}`;
                     } else {
-                        amtHtml = `${formatAmount(ing.amount * round)}ml`;
+                        amtHtml = `${formatAmount(Math.round((ing.amount || 0) * factor))}ml`;
                     }
                     html += `<div class="subbatch-row ${ing.color}"><span class="ing-name">${ing.name}</span><span class="ing-amount">${amtHtml}</span></div>`;
                 });
+                // Fixed bottle-worth: doesn't move with SERVES
+                if (mainRef && mainRef.amount > 0) {
+                    const cocktails = Math.floor(perBottle / mainRef.amount);
+                    html += `<div class="sb-worth">1 bottle (${perBottle}ml) = ${cocktails} cocktails at ${formatAmount(mainRef.amount)}ml</div>`;
+                }
                 section.innerHTML = html;
+                const sizeBtn = section.querySelector('.sb-size');
+                if (sizeBtn) sizeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    triggerHaptic('light');
+                    openNumberModal('BOTTLE SIZE', bottleML, 'ml', (ml) => {
+                        setBatchSize(sbName, ml);
+                        renderVaultContent(container, cocktail, subBatches, round);
+                    });
+                });
                 container.appendChild(section);
             });
         }
@@ -1415,7 +1469,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (changed) saveShelf();
     };
 
-    const SHELF_BOTTLE_CYCLE = [500, 700, 1000, 1500];
     const shelfCats = ['amber-glow', 'neon-cyan', 'juice-glow', 'puree-mango', 'magenta-glow', 'coffee-dark', 'static-ruby'];
 
     function toggleShelfAddForm() {
@@ -1493,8 +1546,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 <button class="row-more" aria-label="Actions for ${name}">⋯</button>`;
             row.querySelector('.shelf-stock-btn').addEventListener('click', e => {
                 e.stopPropagation(); triggerHaptic('light');
-                shelfData[name].inStock = (data.inStock === false);
-                saveShelf(); renderShelf();
+                const nowIn = (shelfData[name].inStock === false);
+                shelfData[name].inStock = nowIn;
+                saveShelf();
+                const btn = e.target;
+                btn.innerText = nowIn ? '●' : '○';
+                btn.className = `shelf-stock-btn ${nowIn ? 'in-stock' : 'oos'}`;
+                row.classList.toggle('shelf-row-oos', !nowIn);
             });
             row.querySelector('.shelf-abv-input').addEventListener('change', e => {
                 shelfData[name].abv = parseFloat(e.target.value) || 0; saveShelf();
@@ -1502,30 +1560,47 @@ document.addEventListener('DOMContentLoaded', () => {
             row.querySelector('.shelf-cat-btn').addEventListener('click', e => {
                 e.stopPropagation(); triggerHaptic('light');
                 const cur = shelfData[name].category;
-                shelfData[name].category = shelfCats[(shelfCats.indexOf(cur) + 1) % shelfCats.length];
-                saveShelf(); renderShelf();
+                const next = shelfCats[(shelfCats.indexOf(cur) + 1) % shelfCats.length];
+                shelfData[name].category = next;
+                saveShelf();
+                // Update in place — a full re-render re-sorts and the row jumps
+                // away mid-edit, so you end up chasing it down the list.
+                const btn = e.target;
+                btn.className = `shelf-cat-btn ${next}`;
+                btn.innerText = shelfCatLabels[next] || 'SPIRIT';
+                row.className = `shelf-row ${next}${shelfData[name].inStock === false ? ' shelf-row-oos' : ''}`;
             });
-            // Bottle size cycles 500 → 700 → 1000 → 1500
             row.querySelector('.shelf-bottle-btn').addEventListener('click', e => {
                 e.stopPropagation(); triggerHaptic('light');
-                const cur = getIngBottleSize(name);
-                const idx = SHELF_BOTTLE_CYCLE.indexOf(cur);
-                setIngBottleSize(name, SHELF_BOTTLE_CYCLE[(idx + 1) % SHELF_BOTTLE_CYCLE.length]);
-                renderShelf();
+                const btn = e.target;
+                openNumberModal(`${name.toUpperCase()} BOTTLE`, getIngBottleSize(name), 'ml', (ml) => {
+                    setIngBottleSize(name, ml);
+                    btn.innerText = `${ml}ml`;   // in place, no jump
+                });
             });
             const shelfActions = () => {
                 triggerHaptic('medium');
+                openSelectModal(name.toUpperCase(), [
+                    { label: 'Rename / Merge', value: 'rename' },
+                    { label: 'Remove from shelf', value: 'remove' }
+                ], (val) => {
+                    if (val === 'rename') setTimeout(() => renameShelfIngredient(name), 350);
+                    else setTimeout(() => confirmRemoveShelf(name), 350);
+                });
+            };
+
+            const confirmRemoveShelf = (nm) => {
                 openConfirmModal({
                     title: 'REMOVE INGREDIENT',
-                    message: `Remove "${name}" from the shelf?`,
+                    message: `Remove "${nm}" from the shelf?`,
                     confirmLabel: 'REMOVE',
                     danger: true,
                     onConfirm: () => {
-                        const removed = shelfData[name];
-                        delete shelfData[name];
+                        const removed = shelfData[nm];
+                        delete shelfData[nm];
                         saveShelf(); renderShelf();
-                        showToast(`Removed "${name}"`, () => {
-                            shelfData[name] = removed; saveShelf(); renderShelf();
+                        showToast(`Removed "${nm}"`, () => {
+                            shelfData[nm] = removed; saveShelf(); renderShelf();
                         });
                     }
                 });
@@ -1534,6 +1609,85 @@ document.addEventListener('DOMContentLoaded', () => {
             list.appendChild(row);
         });
     };
+
+    // Rename an ingredient everywhere it appears. If the new name already exists,
+    // this becomes a MERGE — the two shelf entries collapse into one and every
+    // spec row is rewritten. Fixes twins like "Simple" vs "Simple Syrup".
+    async function renameShelfIngredient(oldName) {
+        openSelectModal('RENAME INGREDIENT', [], null, {
+            placeholder: 'New name…',
+            btnLabel: 'NEXT',
+            prefill: oldName,
+            onSubmit: async (val) => {
+                const newName = capitalize((val || '').trim());
+                if (!newName || newName === oldName) return;
+                const isMerge = !!shelfData[newName];
+
+                // Which specs mention the old name?
+                const affected = [];
+                Object.keys(recipeVault).forEach(specName => {
+                    if ((recipeVault[specName] || []).some(i => i.name === oldName)) affected.push(specName);
+                });
+
+                const doIt = async () => {
+                    showLoader(isMerge ? "MERGING..." : "RENAMING...");
+                    try {
+                        for (const specName of affected) {
+                            const rows = [];
+                            const seen = new Set();
+                            (recipeVault[specName] || []).forEach(ing => {
+                                const nm = ing.name === oldName ? newName : ing.name;
+                                // merging can create a duplicate line in one spec — combine amounts
+                                if (seen.has(nm.toLowerCase())) {
+                                    const prev = rows.find(r => r.ingredientName.toLowerCase() === nm.toLowerCase());
+                                    if (prev) prev.amount += (ing.amount || 0);
+                                    return;
+                                }
+                                seen.add(nm.toLowerCase());
+                                rows.push({
+                                    cocktailName: specName, ingredientName: nm, amount: ing.amount,
+                                    bottleSize: 0, categoryTag: ing.color, unit: ing.unit || ''
+                                });
+                            });
+                            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'delete', cocktailName: specName }) });
+                            await fetch(API_URL, { method: 'POST', body: JSON.stringify(rows) });
+                        }
+                        // Shelf side: carry settings over, drop the old entry
+                        const oldEntry = shelfData[oldName];
+                        if (!shelfData[newName] && oldEntry) shelfData[newName] = oldEntry;
+                        const oldBottle = getIngBottleSize(oldName);
+                        if (oldBottle && !isMerge) setIngBottleSize(newName, oldBottle);
+                        delete shelfData[oldName];
+                        saveShelf();
+                        await loadVault();
+                        renderShelf();
+                        showToast(isMerge ? `Merged into "${newName}"` : `Renamed to "${newName}"`);
+                    } catch (e) {
+                        hideLoader();
+                        showToast("Rename failed — check connection");
+                    }
+                };
+
+                if (isMerge) {
+                    setTimeout(() => openConfirmModal({
+                        title: 'MERGE INGREDIENTS',
+                        message: `"${newName}" already exists. Merge "${oldName}" into it?\n\n${affected.length} spec${affected.length === 1 ? '' : 's'} will be updated.`,
+                        confirmLabel: 'MERGE',
+                        onConfirm: doIt
+                    }), 350);
+                } else if (affected.length) {
+                    setTimeout(() => openConfirmModal({
+                        title: 'RENAME INGREDIENT',
+                        message: `Rename "${oldName}" to "${newName}" in ${affected.length} spec${affected.length === 1 ? '' : 's'}?`,
+                        confirmLabel: 'RENAME',
+                        onConfirm: doIt
+                    }), 350);
+                } else {
+                    doIt();
+                }
+            }
+        });
+    }
 
     loadShelf();
     refreshShelfDatalist();
@@ -2910,7 +3064,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const task = opsData[activeOpsCategory][taskObj.originalIndex];
                     const stepper = document.createElement('span');
                     stepper.className = 'ops-qty-stepper';
-                    stepper.innerHTML = `<span class="qs-btn" data-d="-1">−</span><span class="qs-n">${task.qty || 1}</span><span class="qs-btn" data-d="1">＋</span>`;
+                    stepper.innerHTML = `<span class="qs-btn" data-d="-1">−</span><input type="number" class="qs-n qs-input" value="${task.qty || 1}" inputmode="numeric"><span class="qs-btn" data-d="1">＋</span>`;
                     qtyChip.replaceWith(stepper);
                     let collapseTimer = null;
                     const collapse = () => {
@@ -2927,14 +3081,28 @@ document.addEventListener('DOMContentLoaded', () => {
                             ev.stopPropagation();
                             triggerHaptic('light');
                             const d = parseInt(b.getAttribute('data-d'));
-                            task.qty = Math.min(9, Math.max(1, (task.qty || 1) + d));
-                            stepper.querySelector('.qs-n').innerText = task.qty;
+                            task.qty = Math.min(99, Math.max(1, (task.qty || 1) + d));
+                            stepper.querySelector('.qs-n').value = task.qty;
                             saveOps();
                             const bw = row.querySelector('.ops-batch-card');
                             if (bw) buildBatchCard(bw, row, activeOpsCategory, taskObj.originalIndex);
                             armTimer();
                         });
                     });
+                    const qi = stepper.querySelector('.qs-input');
+                    if (qi) {
+                        qi.addEventListener('click', ev => ev.stopPropagation());
+                        qi.addEventListener('input', () => {
+                            const v = parseInt(qi.value);
+                            if (!isNaN(v) && v > 0) {
+                                task.qty = Math.min(99, v);
+                                saveOps();
+                                const bw2 = row.querySelector('.ops-batch-card');
+                                if (bw2) buildBatchCard(bw2, row, activeOpsCategory, taskObj.originalIndex);
+                            }
+                            armTimer();
+                        });
+                    }
                     document.addEventListener('pointerdown', outside, true);
                     armTimer();
                 });

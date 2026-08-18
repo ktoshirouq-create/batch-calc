@@ -641,3 +641,17 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .empty-state { text-align: center; padding: 28px 16px; }
 .empty-state p { font-size: 0.9rem; color: var(--text-main); font-weight: 600; margin-bottom: 6px; }
 .empty-state span { font-size: 0.75rem; color: var(--text-muted); line-height: 1.5; display: block; }
+
+/* --- TYPED NUMBER MODAL (one pattern for every numeric setting) --- */
+.num-modal { padding: 8px 0 4px; }
+.num-modal-row { display: flex; align-items: baseline; justify-content: center; gap: 8px; margin-bottom: 6px; }
+.num-modal-input { width: 140px; background: rgba(255,255,255,0.04); border: 1px solid rgba(200,169,126,0.35); border-radius: 12px; padding: 14px 10px; color: var(--nodee-gold); font-size: 1.8rem; font-weight: 300; text-align: center; }
+.num-modal-suffix { color: var(--text-muted); font-size: 0.9rem; }
+
+/* --- SUB-BATCH: tappable bottle size + fixed bottle-worth line --- */
+.sb-size { background: rgba(255,255,255,0.05); border: 1px solid rgba(200,169,126,0.3); color: var(--nodee-gold); border-radius: 6px; padding: 3px 7px; font-size: 0.58rem; font-weight: 800; letter-spacing: 0.5px; cursor: pointer; }
+.sb-worth { font-size: 0.62rem; color: var(--nodee-gold); font-weight: 700; letter-spacing: 0.5px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.06); opacity: 0.85; }
+
+/* qty stepper value becomes a typed field */
+.qs-input { width: 30px; background: transparent; border: none; color: var(--text-main); font-weight: 800; font-size: 0.8rem; text-align: center; -moz-appearance: textfield; }
+.qs-input::-webkit-outer-spin-button, .qs-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
