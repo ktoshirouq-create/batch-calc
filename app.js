@@ -25,7 +25,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeAbvSpec = null;
 
    // --- HELPERS ---
-    const LONG_PRESS_MS = 350;   // was 500 — every tap paid that delay
     const capitalize = (str) => str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
     const triggerHaptic = (t = 'light') => {
         if (!navigator.vibrate) return;
@@ -493,33 +492,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderVaultContent(content, cocktail, subBatches, next);
             });
 
-            // Quick tap → toggle expand. Long-press → action sheet (edit/delete).
-            let pressTimer = null;
-            let pressStart = null;
-            vItem.addEventListener('pointerdown', (e) => {
+            // Tap toggles expand. Actions live on the ⋯ button — no hidden long-press.
+            vItem.addEventListener('click', (e) => {
                 if (e.target.closest('button') || e.target.closest('input')) return;
-                pressStart = { x: e.clientX, y: e.clientY };
-                pressTimer = setTimeout(() => {
-                    pressTimer = null;
-                    triggerHaptic('medium');
-                    if (typeof window.openActionSheet === 'function') window.openActionSheet(cocktail);
-                }, LONG_PRESS_MS);
-            });
-            vItem.addEventListener('pointermove', (e) => {
-                if (!pressTimer || !pressStart) return;
-                const dx = Math.abs(e.clientX - pressStart.x);
-                const dy = Math.abs(e.clientY - pressStart.y);
-                if (dx > 10 || dy > 10) { clearTimeout(pressTimer); pressTimer = null; }
-            });
-            vItem.addEventListener('pointerup', () => {
-                if (!pressTimer) return;
-                clearTimeout(pressTimer);
-                pressTimer = null;
                 triggerHaptic('light');
                 vItem.classList.toggle('expanded');
-            });
-           vItem.addEventListener('pointercancel', () => {
-                if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
             });
             list.appendChild(vItem);
         });
@@ -1554,18 +1531,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             };
             row.querySelector('.row-more').addEventListener('click', e => { e.stopPropagation(); shelfActions(); });
-            let pt = null, ps = null;
-            row.addEventListener('pointerdown', e => {
-                if (e.target.closest('button') || e.target.closest('input')) return;
-                ps = { x: e.clientX, y: e.clientY };
-                pt = setTimeout(() => { pt = null; shelfActions(); }, LONG_PRESS_MS);
-            });
-            row.addEventListener('pointermove', e => {
-                if (!pt || !ps) return;
-                if (Math.abs(e.clientX - ps.x) > 10 || Math.abs(e.clientY - ps.y) > 10) { clearTimeout(pt); pt = null; }
-            });
-            row.addEventListener('pointerup', () => { if (pt) { clearTimeout(pt); pt = null; } });
-            row.addEventListener('pointercancel', () => { if (pt) { clearTimeout(pt); pt = null; } });
             list.appendChild(row);
         });
     };
@@ -1618,6 +1583,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="action-sheet">
                     <div class="action-sheet-title"></div>
                     <button class="action-sheet-btn" data-action="edit">EDIT SPEC</button>
+                    <button class="action-sheet-btn" data-action="rename">RENAME</button>
                     <button class="action-sheet-btn action-sheet-danger" data-action="delete">DELETE</button>
                     <button class="action-sheet-btn action-sheet-cancel" data-action="cancel">CANCEL</button>
                 </div>
@@ -1631,6 +1597,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const cocktailName = sheet.dataset.cocktailName;
             sheet.classList.add('hidden');
             if (action === 'edit' && cocktailName) editSpec(cocktailName);
+            else if (action === 'rename' && cocktailName) renameSpec(cocktailName);
             else if (action === 'delete' && cocktailName) deleteSpec(cocktailName);
         });
     }
@@ -1679,6 +1646,70 @@ document.addEventListener('DOMContentLoaded', () => {
         renderBuilder();
         if (typeof expandSpecBuilder === 'function') expandSpecBuilder();
         document.getElementById('scroll-area').scrollTop = 0;
+    };
+
+    // Rename a cocktail (or standalone batch) and carry every sub-batch,
+    // linked prep task and stored batch setting across to the new name.
+    window.renameSpec = (name) => {
+        const isStandalone = isStandaloneName(name);
+        const currentLabel = isStandalone ? standaloneLabel(name) : name;
+        openSelectModal('RENAME', [], null, {
+            placeholder: 'New name…',
+            btnLabel: 'RENAME',
+            prefill: currentLabel,
+            onSubmit: async (val) => {
+                const newLabel = capitalize((val || '').trim());
+                if (!newLabel || newLabel === currentLabel) return;
+                const newFull = isStandalone ? `${STANDALONE_OWNER} — ${newLabel}` : newLabel;
+                if (recipeVault[newFull]) {
+                    openAlertModal({ title: 'NAME TAKEN', message: `"${newLabel}" already exists.` });
+                    return;
+                }
+                const related = [name, ...Object.keys(recipeVault).filter(n => n.startsWith(name + ' — '))];
+                const payload = [];
+                related.forEach(secName => {
+                    const suffix = secName === name ? '' : secName.slice(name.length);   // " — Spirit Batch"
+                    const target = newFull + suffix;
+                    // carry batch mode/size across to the new key
+                    const mode = getBatchMode(secName);
+                    if (mode) setBatchMode(target, mode);
+                    const size = getBatchSize(secName);
+                    if (size) setBatchSize(target, size);
+                    (recipeVault[secName] || []).forEach(ing => {
+                        payload.push({
+                            cocktailName: target, ingredientName: ing.name, amount: ing.amount,
+                            bottleSize: 0, categoryTag: ing.color, unit: ing.unit || ''
+                        });
+                    });
+                });
+                showLoader("RENAMING...");
+                try {
+                    for (const n of related) {
+                        await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'delete', cocktailName: n }) });
+                    }
+                    await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+
+                    // Re-point any prep task that linked to the old name
+                    let tasksTouched = false;
+                    ['opening', 'prep', 'closing', 'periodic'].forEach(cat => {
+                        (opsData[cat] || []).forEach(t => {
+                            if (t.linkedSpec === name) { t.linkedSpec = newFull; tasksTouched = true; }
+                            if (t.linkedSpec === STANDALONE_OWNER && t.linkedSection === currentLabel && isStandalone) {
+                                t.linkedSection = newLabel; tasksTouched = true;
+                            }
+                            if (t.text === currentLabel || t.text === name) { t.text = newLabel; tasksTouched = true; }
+                        });
+                    });
+                    if (tasksTouched) { saveOps(); renderOpsList(); }
+
+                    await loadVault();
+                    showToast(`Renamed to "${newLabel}"`);
+                } catch (e) {
+                    hideLoader();
+                    showToast("Rename failed — check connection");
+                }
+            }
+        });
     };
 
     window.deleteSpec = (name) => {
@@ -3017,8 +3048,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            let pressTimer = null;
-            let pressStart = null;
             const openTaskActions = () => {
                     triggerHaptic('medium');
                     
@@ -3132,19 +3161,6 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             const moreBtn = row.querySelector('.row-more');
             if (moreBtn) moreBtn.addEventListener('click', (e) => { e.stopPropagation(); openTaskActions(); });
-            row.addEventListener('pointerdown', (e) => {
-                if (e.target.closest('.drag-handle-task') || e.target.closest('.row-more')) return;
-                pressStart = { x: e.clientX, y: e.clientY };
-                pressTimer = setTimeout(() => { pressTimer = null; openTaskActions(); }, LONG_PRESS_MS);
-            });
-            row.addEventListener('pointermove', (e) => {
-                if (!pressTimer || !pressStart) return;
-                if (Math.abs(e.clientX - pressStart.x) > 10 || Math.abs(e.clientY - pressStart.y) > 10) {
-                    clearTimeout(pressTimer); pressTimer = null;
-                }
-            });
-            row.addEventListener('pointerup', () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } });
-            row.addEventListener('pointercancel', () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } });
 
             container.appendChild(row);
         });
