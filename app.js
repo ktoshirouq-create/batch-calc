@@ -338,7 +338,9 @@ document.addEventListener('DOMContentLoaded', () => {
             subBatches.forEach(sbName => {
                 const sbIngs = recipeVault[sbName] || [];
                 if (sbIngs.length === 0) return;
-                const label = sbName.replace(cocktail + ' — ', '');
+                const label = isStandaloneName(sbName)
+                    ? standaloneLabel(sbName)
+                    : sbName.replace(cocktail + ' — ', '');
                 
                 // MULTIPLIER MATH: Scale the total yield bypassing static elements
                 const baseBatchYield = sbIngs.filter(i => i.color !== 'static-ruby').reduce((s, i) => s + (i.amount || 0), 0);
@@ -377,14 +379,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const catOrder = { 'amber-glow': 1, 'neon-cyan': 2, 'juice-glow': 3, 'magenta-glow': 4, 'coffee-dark': 5, 'puree-mango': 6, 'static-ruby': 7 };
         const mains = specs.filter(s => !s.includes(' — '));
-        const orphans = specs.filter(s => s.includes(' — ') && !mains.some(m => s.startsWith(m + ' — ')));
-        const toRender = [...mains, ...orphans];
+        const standalones = specs.filter(s => isStandaloneName(s));
+        const orphans = specs.filter(s => s.includes(' — ') && !isStandaloneName(s)
+            && !mains.some(m => s.startsWith(m + ' — ')));
+        const toRender = [...mains, ...orphans, ...standalones];
 
         toRender.forEach(cocktail => {
             recipeVault[cocktail].sort((a, b) => (catOrder[a.color] || 10) - (catOrder[b.color] || 10));
             const subBatches = specs.filter(s => s.startsWith(cocktail + ' — '));
+            // Pull in any standalone batch this cocktail references from MAIN
+            (recipeVault[cocktail] || []).forEach(ing => {
+                const ref = `${STANDALONE_OWNER} — ${ing.name}`;
+                if (recipeVault[ref] && !subBatches.includes(ref)) subBatches.push(ref);
+            });
             subBatches.forEach(sb => recipeVault[sb].sort((a, b) => (catOrder[a.color] || 10) - (catOrder[b.color] || 10)));
 
+            // Divider before the first standalone batch
+            if (isStandaloneName(cocktail) && !list.querySelector('.vault-batches-header')) {
+                const bh = document.createElement('div');
+                bh.className = 'vault-batches-header';
+                bh.innerText = 'BATCHES';
+                list.appendChild(bh);
+            }
             const id = cocktail.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
 
             const vItem = document.createElement('div');
@@ -392,7 +408,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const header = document.createElement('div');
             header.className = 'vault-header';
-            header.innerHTML = `<span class="cocktail-title">${cocktail}</span>`;
+            const displayName = isStandaloneName(cocktail) ? standaloneLabel(cocktail) : cocktail;
+            header.innerHTML = `<span class="cocktail-title">${displayName}</span>`;
             vItem.appendChild(header);
 
             const details = document.createElement('div');
@@ -473,10 +490,34 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         // Auto-seed the shelf data layer (UI removed; data powers autocomplete + category overrides)
         if (typeof autoSeedShelf === 'function') autoSeedShelf();
+        if (typeof renderShelf === 'function') renderShelf();
     }
 
     // --- SPEC BUILDER ---
     let builderState = { name: '', sections: [{ name: 'MAIN', ingredients: [] }] };
+    // 'cocktail' = a drink with MAIN + optional sub-batches.
+    // 'batch'    = a standalone batch that isn't owned by any one cocktail;
+    //              stored under the reserved owner "Batch — <name>".
+    let builderKind = 'cocktail';
+    const STANDALONE_OWNER = 'Batch';
+    let standaloneBottleML = 700;
+    const isStandaloneName = (n) => (n || '').startsWith(STANDALONE_OWNER + ' — ');
+    const standaloneLabel  = (n) => (n || '').replace(STANDALONE_OWNER + ' — ', '');
+
+    function applyBuilderKind() {
+        const isBatch = builderKind === 'batch';
+        document.querySelectorAll('.spec-kind-pill').forEach(p => {
+            p.classList.toggle('active', p.getAttribute('data-kind') === builderKind);
+        });
+        const nameInput = document.getElementById('builder-name');
+        if (nameInput) nameInput.placeholder = isBatch ? 'Batch Name (e.g. Passion+Lem)' : 'Cocktail Name';
+        const note = document.getElementById('builder-yield-note');
+        if (note) note.innerText = isBatch ? 'STANDALONE BATCH — NOT TIED TO ONE COCKTAIL' : 'STANDARD YIELD: 1 COCKTAIL';
+        document.getElementById('standalone-bottle-row')?.classList.toggle('hidden', !isBatch);
+        // A standalone batch IS the batch — no sub-batches or extra sections
+        document.getElementById('add-batch-btn')?.classList.toggle('hidden', isBatch);
+        document.getElementById('add-section-btn')?.classList.toggle('hidden', isBatch);
+    }
     const catLabels = { 'amber-glow': 'SPIRIT', 'neon-cyan': 'LIQUEUR', 'juice-glow': 'JUICE', 'magenta-glow': 'SYRUP', 'coffee-dark': 'ESPRESSO', 'puree-mango': 'PUREE', 'static-ruby': 'OTHER' };
     const STATIC_UNITS = ['dash', 'squeeze', 'top'];;
 
@@ -619,6 +660,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function resetBuilder() {
         builderState = { name: '', sections: [{ name: 'MAIN', ingredients: [] }] };
+        builderKind = 'cocktail';
+        standaloneBottleML = 700;
+        const sbi = document.getElementById('standalone-bottle-input');
+        if (sbi) sbi.value = 700;
+        applyBuilderKind();
         const nameInput = document.getElementById('builder-name');
         if (nameInput) nameInput.value = '';
         editingCocktailName = null;
@@ -748,6 +794,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             const payload = [];
+            // Standalone batch: everything lands under "Batch — <name>"
+            if (builderKind === 'batch') {
+                const fullName = `${STANDALONE_OWNER} — ${name}`;
+                const mainSec = builderState.sections.find(s => s.name === 'MAIN') || builderState.sections[0];
+                (mainSec ? mainSec.ingredients : []).forEach(ing => {
+                    if (!ing.name.trim() || !ing.amount) return;
+                    payload.push({
+                        cocktailName: fullName,
+                        ingredientName: capitalize(ing.name.trim()),
+                        amount: parseFloat(ing.amount),
+                        bottleSize: 0,
+                        categoryTag: ing.cat,
+                        unit: ing.cat === 'static-ruby' ? (ing.unit || 'dash') : ''
+                    });
+                });
+                setBatchMode(fullName, 'bottle');
+                setBatchSize(fullName, standaloneBottleML || 700);
+                if (payload.length === 0) {
+                    openAlertModal({ title: 'NO INGREDIENTS', message: 'Add at least one ingredient with name and amount.' });
+                    return;
+                }
+                showLoader("SAVING BATCH...");
+                try {
+                    const toDelete = editingCocktailName ? [editingCocktailName] : [fullName];
+                    for (const n of toDelete) {
+                        await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'delete', cocktailName: n }) });
+                    }
+                    await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+                    resetBuilder();
+                    await loadVault();
+                } catch (e) {
+                    hideLoader();
+                    openAlertModal({ title: 'SAVE FAILED', message: 'Something went wrong. Please try again.' });
+                }
+                return;
+            }
             builderState.sections.forEach(sec => {
                 const sectionName = sec.name === 'MAIN' ? name : `${name} — ${sec.name}`;
                 sec.ingredients.forEach(ing => {
@@ -784,14 +866,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const toggleBulkBtn = document.getElementById('toggle-bulk-import');
-    if (toggleBulkBtn) {
-        toggleBulkBtn.addEventListener('click', () => {
-            triggerHaptic('light');
-            const ui = document.getElementById('bulk-import-ui');
-            if (ui) ui.classList.toggle('hidden');
-        });
-    }
 
     // --- BATCH BUILDER ---
     let batchBuilderState = null;
@@ -1226,9 +1300,45 @@ document.addEventListener('DOMContentLoaded', () => {
     if (addBatchBtn) {
         addBatchBtn.addEventListener('click', () => {
             triggerHaptic('light');
-            if (batchBuilderState) closeBatchBuilder();
-            else openBatchBuilder();
+            if (batchBuilderState) { closeBatchBuilder(); return; }
+            // Offer existing standalone batches before building a new one
+            const shared = Object.keys(recipeVault || {}).filter(isStandaloneName);
+            if (shared.length) {
+                const opts = shared.map(n => ({ label: standaloneLabel(n), value: n }));
+                opts.push({ label: '＋ Build a new batch…', value: '__new__' });
+                openSelectModal('ADD BATCH', opts, (val, label) => {
+                    if (val === '__new__') { openBatchBuilder(); return; }
+                    // Reference it from MAIN with a pour amount
+                    setTimeout(() => {
+                        openSelectModal(`POUR OF ${label.toUpperCase()}`, [
+                            { label: '30 ml', value: 30 }, { label: '40 ml', value: 40 },
+                            { label: '50 ml', value: 50 }, { label: '60 ml', value: 60 },
+                            { label: '70 ml', value: 70 }
+                        ], (ml) => addSharedBatchRef(val, parseFloat(ml)), {
+                            placeholder: 'Custom pour in ml…',
+                            btnLabel: 'ADD',
+                            onSubmit: (v) => { const ml = parseFloat(v); if (ml > 0) addSharedBatchRef(val, ml); }
+                        });
+                    }, 350);
+                });
+            } else {
+                openBatchBuilder();
+            }
         });
+    }
+
+    // Adds a MAIN row pointing at a standalone batch (the recipe stays in one place)
+    function addSharedBatchRef(fullName, ml) {
+        const mainSec = builderState.sections.find(s => s.name === 'MAIN');
+        if (!mainSec) return;
+        const label = standaloneLabel(fullName);
+        const existing = mainSec.ingredients.find(i => (i.name || '').toLowerCase() === label.toLowerCase());
+        const ings = recipeVault[fullName] || [];
+        const juicey = ings.some(i => ['juice-glow', 'puree-mango'].includes(i.color));
+        const cat = juicey ? 'juice-glow' : 'amber-glow';
+        if (existing) { existing.amount = ml; existing.cat = cat; }
+        else mainSec.ingredients.push({ amount: ml, name: label, cat, sharedBatch: fullName });
+        renderBuilder();
     }
 
     renderBuilder();
@@ -1292,8 +1402,133 @@ document.addEventListener('DOMContentLoaded', () => {
         if (changed) saveShelf();
     };
 
+    const SHELF_BOTTLE_CYCLE = [500, 700, 1000, 1500];
+    const shelfCats = ['amber-glow', 'neon-cyan', 'juice-glow', 'puree-mango', 'magenta-glow', 'coffee-dark', 'static-ruby'];
+
+    function toggleShelfAddForm() {
+        const form = document.getElementById('shelf-add-form');
+        if (!form) return;
+        if (shelfAddState) {
+            shelfAddState = null;
+            form.classList.add('hidden');
+            form.innerHTML = '';
+            return;
+        }
+        shelfAddState = { name: '', cat: 'amber-glow', abv: 40 };
+        form.classList.remove('hidden');
+        form.innerHTML = `
+            <div class="shelf-add-form-inner">
+                <input type="text" class="shelf-add-name premium-text-input" placeholder="Ingredient name">
+                <div class="shelf-add-controls">
+                    <button class="shelf-add-cat amber-glow">SPIRIT</button>
+                    <input type="number" class="shelf-add-abv" value="40" min="0" max="100">
+                    <span class="shelf-add-abv-suffix">%</span>
+                </div>
+                <div class="shelf-add-actions">
+                    <button class="shelf-add-cancel">CANCEL</button>
+                    <button class="shelf-add-save">SAVE</button>
+                </div>
+            </div>`;
+        form.querySelector('.shelf-add-name').addEventListener('input', e => { shelfAddState.name = e.target.value; });
+        form.querySelector('.shelf-add-cat').addEventListener('click', () => {
+            triggerHaptic('light');
+            shelfAddState.cat = shelfCats[(shelfCats.indexOf(shelfAddState.cat) + 1) % shelfCats.length];
+            const btn = form.querySelector('.shelf-add-cat');
+            btn.className = `shelf-add-cat ${shelfAddState.cat}`;
+            btn.innerText = shelfCatLabels[shelfAddState.cat];
+            shelfAddState.abv = shelfDefaultAbvs[shelfAddState.cat] || 0;
+            form.querySelector('.shelf-add-abv').value = shelfAddState.abv;
+        });
+        form.querySelector('.shelf-add-abv').addEventListener('input', e => { shelfAddState.abv = parseFloat(e.target.value) || 0; });
+        form.querySelector('.shelf-add-cancel').addEventListener('click', () => { triggerHaptic('light'); toggleShelfAddForm(); });
+        form.querySelector('.shelf-add-save').addEventListener('click', () => {
+            triggerHaptic('heavy');
+            const name = capitalize(shelfAddState.name.trim());
+            if (!name) return openAlertModal({ title: 'NOTICE', message: 'Ingredient name required.' });
+            if (shelfData[name]) return openAlertModal({ title: 'NOTICE', message: `"${name}" is already on the shelf.` });
+            shelfData[name] = { category: shelfAddState.cat, abv: shelfAddState.abv, inStock: true };
+            saveShelf();
+            toggleShelfAddForm();
+            renderShelf();
+        });
+    }
+
+    window.renderShelf = function() {
+        const list = document.getElementById('shelf-list');
+        if (!list) return;
+        list.innerHTML = '';
+        const catOrder = { 'amber-glow': 1, 'neon-cyan': 2, 'juice-glow': 3, 'magenta-glow': 4, 'coffee-dark': 5, 'puree-mango': 6, 'static-ruby': 7 };
+        const entries = Object.entries(shelfData).sort((a, b) => {
+            const oa = catOrder[a[1].category] || 10, ob = catOrder[b[1].category] || 10;
+            return oa !== ob ? oa - ob : a[0].localeCompare(b[0]);
+        });
+        if (!entries.length) {
+            list.innerHTML = '<p class="text-muted text-sm" style="margin-top:16px; padding:8px;">No ingredients yet. Add one above, or save a cocktail to auto-seed.</p>';
+            return;
+        }
+        entries.forEach(([name, data]) => {
+            const row = document.createElement('div');
+            row.className = `shelf-row ${data.category}${data.inStock === false ? ' shelf-row-oos' : ''}`;
+            const bottle = getIngBottleSize(name);
+            row.innerHTML = `
+                <button class="shelf-stock-btn ${data.inStock === false ? 'oos' : 'in-stock'}">${data.inStock === false ? '○' : '●'}</button>
+                <span class="shelf-ing-name">${name}</span>
+                <button class="shelf-cat-btn ${data.category}">${shelfCatLabels[data.category] || 'SPIRIT'}</button>
+                <input type="number" class="shelf-abv-input" value="${data.abv || 0}" min="0" max="100">
+                <span class="shelf-abv-suffix">%</span>
+                <button class="shelf-bottle-btn">${bottle}ml</button>`;
+            row.querySelector('.shelf-stock-btn').addEventListener('click', e => {
+                e.stopPropagation(); triggerHaptic('light');
+                shelfData[name].inStock = (data.inStock === false);
+                saveShelf(); renderShelf();
+            });
+            row.querySelector('.shelf-abv-input').addEventListener('change', e => {
+                shelfData[name].abv = parseFloat(e.target.value) || 0; saveShelf();
+            });
+            row.querySelector('.shelf-cat-btn').addEventListener('click', e => {
+                e.stopPropagation(); triggerHaptic('light');
+                const cur = shelfData[name].category;
+                shelfData[name].category = shelfCats[(shelfCats.indexOf(cur) + 1) % shelfCats.length];
+                saveShelf(); renderShelf();
+            });
+            // Bottle size cycles 500 → 700 → 1000 → 1500
+            row.querySelector('.shelf-bottle-btn').addEventListener('click', e => {
+                e.stopPropagation(); triggerHaptic('light');
+                const cur = getIngBottleSize(name);
+                const idx = SHELF_BOTTLE_CYCLE.indexOf(cur);
+                setIngBottleSize(name, SHELF_BOTTLE_CYCLE[(idx + 1) % SHELF_BOTTLE_CYCLE.length]);
+                renderShelf();
+            });
+            let pt = null, ps = null;
+            row.addEventListener('pointerdown', e => {
+                if (e.target.closest('button') || e.target.closest('input')) return;
+                ps = { x: e.clientX, y: e.clientY };
+                pt = setTimeout(() => {
+                    pt = null; triggerHaptic('medium');
+                    openConfirmModal({
+                        title: 'REMOVE INGREDIENT',
+                        message: `Remove "${name}" from the shelf?`,
+                        onConfirm: () => { delete shelfData[name]; saveShelf(); renderShelf(); }
+                    });
+                }, 500);
+            });
+            row.addEventListener('pointermove', e => {
+                if (!pt || !ps) return;
+                if (Math.abs(e.clientX - ps.x) > 10 || Math.abs(e.clientY - ps.y) > 10) { clearTimeout(pt); pt = null; }
+            });
+            row.addEventListener('pointerup', () => { if (pt) { clearTimeout(pt); pt = null; } });
+            row.addEventListener('pointercancel', () => { if (pt) { clearTimeout(pt); pt = null; } });
+            list.appendChild(row);
+        });
+    };
+
     loadShelf();
     refreshShelfDatalist();
+    renderShelf();
+    document.getElementById('shelf-add-btn')?.addEventListener('click', () => {
+        triggerHaptic('light');
+        toggleShelfAddForm();
+    });
 
     const legacyLockBtn = document.getElementById('edit-toggle');
     if (legacyLockBtn) legacyLockBtn.remove();
@@ -1308,6 +1543,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     window.expandSpecBuilder = expandSpecBuilder;
     window.collapseSpecBuilder = collapseSpecBuilder;
+    document.querySelectorAll('.spec-kind-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+            triggerHaptic('light');
+            builderKind = pill.getAttribute('data-kind');
+            applyBuilderKind();
+        });
+    });
+    document.getElementById('standalone-bottle-input')?.addEventListener('input', (e) => {
+        standaloneBottleML = parseFloat(e.target.value) || 700;
+    });
+    applyBuilderKind();
+
     document.getElementById('new-spec-btn')?.addEventListener('click', () => {
         triggerHaptic('light');
         expandSpecBuilder();
@@ -1351,6 +1598,24 @@ document.addEventListener('DOMContentLoaded', () => {
     window.editSpec = (name) => {
         triggerHaptic('heavy');
         editingCocktailName = name;
+        if (isStandaloneName(name)) {
+            builderKind = 'batch';
+            standaloneBottleML = getBatchSize(name);
+            const sbi = document.getElementById('standalone-bottle-input');
+            if (sbi) sbi.value = standaloneBottleML;
+            builderState = { name: standaloneLabel(name), sections: [{ name: 'MAIN', ingredients: [] }] };
+            (recipeVault[name] || []).forEach(ing => {
+                builderState.sections[0].ingredients.push({ amount: ing.amount, name: ing.name, cat: ing.color, unit: ing.unit });
+            });
+            document.getElementById('builder-name').value = standaloneLabel(name);
+            applyBuilderKind();
+            renderBuilder();
+            if (typeof expandSpecBuilder === 'function') expandSpecBuilder();
+            document.getElementById('scroll-area').scrollTop = 0;
+            return;
+        }
+        builderKind = 'cocktail';
+        applyBuilderKind();
         const related = [name, ...Object.keys(recipeVault).filter(n => n.startsWith(name + ' — '))];
         builderState = { name: name, sections: [] };
         related.forEach(sectionName => {
@@ -2968,7 +3233,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 })
                 .map(n => {
                     const [spec, section] = n.split(' — ');
-                    return { text: n, linkedSpec: spec, linkedSection: section, glyph: '🔗' };
+                    return { text: isStandaloneName(n) ? section : n, linkedSpec: spec, linkedSection: section, glyph: '🔗' };
                 });
             // History matches (skip ones duplicating a vault match)
             const seen = new Set(vaultMatches.map(v => v.text.toLowerCase()));

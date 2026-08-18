@@ -14,7 +14,7 @@
     <link rel="icon" type="image/png" href="icon-512.png">
     <link rel="apple-touch-icon" href="icon-512.png">
     
-    <link rel="stylesheet" href="styles.css?v=41">
+    <link rel="stylesheet" href="styles.css?v=43">
 </head>
 <body>
     <div id="loader" class="loader-overlay"><span class="loader-text">SYNCING CODEX...</span></div>
@@ -47,24 +47,26 @@
                         <h2 class="card-title text-gold" style="margin: 0;">SPEC BUILDER</h2>
                         <button id="cancel-spec-btn" class="builder-cancel">✕</button>
                     </div>
+                    <div class="spec-kind-pills">
+                        <button class="spec-kind-pill active" data-kind="cocktail">COCKTAIL</button>
+                        <button class="spec-kind-pill" data-kind="batch">BATCH</button>
+                    </div>
                     <input type="text" id="builder-name" class="premium-text-input" placeholder="Cocktail Name" style="margin-bottom: 5px;">
-                    <div class="text-muted text-xs" style="text-align: center; margin-bottom: 20px; letter-spacing: 2px;">STANDARD YIELD: 1 COCKTAIL</div>
+                    <div id="builder-yield-note" class="text-muted text-xs" style="text-align: center; margin-bottom: 20px; letter-spacing: 2px;">STANDARD YIELD: 1 COCKTAIL</div>
+                    <div id="standalone-bottle-row" class="hidden" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; padding-bottom:14px; border-bottom:1px solid rgba(255,255,255,0.06);">
+                        <span class="text-muted text-xs">BOTTLE SIZE:</span>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <input type="number" id="standalone-bottle-input" class="batch-per-drink-input" value="700">
+                            <span class="batch-per-drink-suffix">ml</span>
+                        </div>
+                    </div>
                     <div id="builder-sections"></div>
                     <div id="batch-form-container"></div>
                     <button id="add-batch-btn" class="btn-secondary" style="margin-top: 12px;">＋ ADD BATCH</button>
                     <button id="add-section-btn" class="btn-secondary" style="margin-top: 12px;">＋ ADD SECTION</button>
                     <button id="save-spec-btn" class="btn-primary" style="margin-top: 20px;">SAVE SPEC</button>
 
-                <button id="toggle-bulk-import" class="btn-secondary" style="background: rgba(255,255,255,0.02); color: var(--text-muted); font-size: 0.7rem; font-weight: 700; margin-top: 30px; letter-spacing: 2px;">＋ BULK IMPORT (FROM KEEP)</button>
-                <div id="bulk-import-ui" class="hidden" style="margin-top: 18px;">
-                    <input type="text" id="spec-title-input" class="premium-text-input" placeholder="Cocktail Title">
-                    <textarea id="keep-paste-area" class="premium-text-input" placeholder="Paste Keep recipe here..." rows="4"></textarea>
-                    <button id="parse-btn" class="btn-secondary">PARSE SPEC</button>
-                    <div id="staging-area" class="hidden" style="margin-top: 20px;">
-                        <h3 class="zone-header">STAGING REVIEW</h3>
-                        <div id="staging-list"></div>
-                        <button id="sync-vault-btn" class="btn-primary burgundy-btn" style="margin-top: 20px;">SYNC TO VAULT</button>
-                    </div>
+                </div>
                 </div>
                 </div>
             </div>
@@ -73,6 +75,13 @@
                 <h2 class="card-title text-muted border-bottom pb-10" style="padding-left: 5px;">DATABASE</h2>
                 <input type="text" id="vault-search" class="search-pill w-100" placeholder="Search Specs & Batches...">
                 <div id="managed-vault-list"></div>
+            </div>
+
+            <div id="shelf-card" class="card glass-panel">
+                <h2 class="card-title text-gold">THE SHELF</h2>
+                <button id="shelf-add-btn" class="btn-secondary" style="width: 100%; margin-top: 12px;">＋ ADD INGREDIENT</button>
+                <div id="shelf-add-form" class="hidden"></div>
+                <div id="shelf-list"></div>
             </div>
         </section>
 
@@ -253,6 +262,6 @@
         </button>
     </nav>
 
-    <script src="app.js?v=41"></script>
+    <script src="app.js?v=43"></script>
 </body>
 </html>
