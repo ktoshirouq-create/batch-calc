@@ -100,8 +100,10 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 /* Vault & Rows */
 .vault-item { border-bottom: 1px solid #222; padding: 10px 0; cursor: pointer; }
 .vault-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; }
-.vault-details { max-height: 0; overflow: hidden; opacity: 0; transition: all 0.3s ease; }
-.vault-item.expanded .vault-details { max-height: 4000px; opacity: 1; padding: 15px 10px; background: rgba(255,255,255,0.02); border-left: 2px solid var(--nodee-gold); }
+/* Instant open/close — the old max-height:4000px sweep spent most of the
+   animation collapsing empty space, which read as lag. */
+.vault-details { display: none; }
+.vault-item.expanded .vault-details { display: block; padding: 15px 10px; background: rgba(255,255,255,0.02); border-left: 2px solid var(--nodee-gold); }
 
 .vault-subsection { margin-top: 22px; }
 .vault-subsection:first-child { margin-top: 4px; }
@@ -621,3 +623,21 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .shelf-abv-input::-webkit-outer-spin-button, .shelf-abv-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .shelf-abv-suffix { color: var(--text-muted); font-size: 0.6rem; flex-shrink: 0; margin-left: -3px; }
 .shelf-bottle-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: var(--nodee-gold); border-radius: 5px; padding: 4px 4px; font-size: 0.58rem; font-weight: 800; cursor: pointer; flex-shrink: 0; width: 48px; text-align: center; }
+
+/* --- TOASTS --- */
+.codex-toast { position: fixed; left: 16px; right: 16px; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 2500; background: #161616; border: 1px solid rgba(200,169,126,0.4); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; box-shadow: 0 6px 24px rgba(0,0,0,0.6); animation: toast-in 0.22s ease; }
+.codex-toast.hidden { display: none; }
+.toast-msg { font-size: 0.85rem; color: var(--text-main); flex: 1; min-width: 0; }
+.toast-undo { background: none; border: none; color: var(--nodee-gold); font-size: 0.75rem; font-weight: 900; letter-spacing: 1.5px; padding: 4px 6px; cursor: pointer; flex-shrink: 0; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* --- ⋯ ROW MENUS (makes long-press actions discoverable) --- */
+.row-more { background: none; border: none; color: var(--text-muted); font-size: 1.15rem; line-height: 1; padding: 8px 6px; min-width: 32px; min-height: 32px; cursor: pointer; flex-shrink: 0; }
+.row-more:active { color: var(--nodee-gold); }
+.vault-header { align-items: center; }
+.vault-header .cocktail-title { flex: 1; min-width: 0; }
+
+/* --- EMPTY STATES --- */
+.empty-state { text-align: center; padding: 28px 16px; }
+.empty-state p { font-size: 0.9rem; color: var(--text-main); font-weight: 600; margin-bottom: 6px; }
+.empty-state span { font-size: 0.75rem; color: var(--text-muted); line-height: 1.5; display: block; }

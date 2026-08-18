@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeAbvSpec = null;
 
    // --- HELPERS ---
+    const LONG_PRESS_MS = 350;   // was 500 — every tap paid that delay
     const capitalize = (str) => str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
     const triggerHaptic = (t = 'light') => {
         if (!navigator.vibrate) return;
@@ -51,6 +52,29 @@ document.addEventListener('DOMContentLoaded', () => {
         if (LIQUEUR_KEYS.some(k => low.includes(k))) return 'neon-cyan';
         if (JUICE_KEYS.some(k => low.includes(k))) return 'juice-glow';
         return 'amber-glow';
+    }
+
+    // --- TOASTS (brief confirmation, with optional undo) ---
+    let toastTimer = null;
+    function showToast(message, undoFn) {
+        let el = document.getElementById('codex-toast');
+        if (!el) {
+            document.body.insertAdjacentHTML('beforeend', '<div id="codex-toast" class="codex-toast hidden"></div>');
+            el = document.getElementById('codex-toast');
+        }
+        el.innerHTML = `<span class="toast-msg"></span>` + (undoFn ? `<button class="toast-undo">UNDO</button>` : '');
+        el.querySelector('.toast-msg').innerText = message;
+        if (undoFn) {
+            el.querySelector('.toast-undo').addEventListener('click', () => {
+                triggerHaptic('heavy');
+                clearTimeout(toastTimer);
+                el.classList.add('hidden');
+                undoFn();
+            });
+        }
+        el.classList.remove('hidden');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => el.classList.add('hidden'), undoFn ? 5000 : 2600);
     }
 
     const showLoader = (m) => {
@@ -375,7 +399,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!list) return;
         list.innerHTML = '';
         const specs = Object.keys(recipeVault);
-        if (specs.length === 0) { list.innerHTML = '<p class="text-muted text-sm">Database empty.</p>'; return; }
+        if (specs.length === 0) {
+            list.innerHTML = vaultLive
+                ? '<div class="empty-state"><p>No specs yet.</p><span>Tap ＋ NEW SPEC above to add your first cocktail.</span></div>'
+                : '<div class="empty-state"><p>Can\'t reach the Codex.</p><span>No cached copy on this device yet — pull down to refresh.</span></div>';
+            return;
+        }
 
         const catOrder = { 'amber-glow': 1, 'neon-cyan': 2, 'juice-glow': 3, 'magenta-glow': 4, 'coffee-dark': 5, 'puree-mango': 6, 'static-ruby': 7 };
         const mains = specs.filter(s => !s.includes(' — '));
@@ -409,7 +438,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const header = document.createElement('div');
             header.className = 'vault-header';
             const displayName = isStandaloneName(cocktail) ? standaloneLabel(cocktail) : cocktail;
-            header.innerHTML = `<span class="cocktail-title">${displayName}</span>`;
+            header.innerHTML = `<span class="cocktail-title">${displayName}</span>` +
+                `<button class="row-more" aria-label="Actions for ${displayName}">⋯</button>`;
+            header.querySelector('.row-more').addEventListener('click', (e) => {
+                e.stopPropagation();
+                triggerHaptic('light');
+                if (typeof window.openActionSheet === 'function') window.openActionSheet(cocktail);
+            });
             vItem.appendChild(header);
 
             const details = document.createElement('div');
@@ -468,7 +503,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     pressTimer = null;
                     triggerHaptic('medium');
                     if (typeof window.openActionSheet === 'function') window.openActionSheet(cocktail);
-                }, 500);
+                }, LONG_PRESS_MS);
             });
             vItem.addEventListener('pointermove', (e) => {
                 if (!pressTimer || !pressStart) return;
@@ -859,6 +894,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
                 resetBuilder();
                 await loadVault();
+                showToast(`Saved "${name}"`);
             } catch (e) {
                 hideLoader();
                 openAlertModal({ title: 'SAVE FAILED', message: 'Something went wrong. Please try again.' });
@@ -1471,12 +1507,13 @@ document.addEventListener('DOMContentLoaded', () => {
             row.className = `shelf-row ${data.category}${data.inStock === false ? ' shelf-row-oos' : ''}`;
             const bottle = getIngBottleSize(name);
             row.innerHTML = `
-                <button class="shelf-stock-btn ${data.inStock === false ? 'oos' : 'in-stock'}">${data.inStock === false ? '○' : '●'}</button>
+                <button class="shelf-stock-btn ${data.inStock === false ? 'oos' : 'in-stock'}" aria-label="Toggle stock for ${name}">${data.inStock === false ? '○' : '●'}</button>
                 <span class="shelf-ing-name">${name}</span>
-                <button class="shelf-cat-btn ${data.category}">${shelfCatLabels[data.category] || 'SPIRIT'}</button>
-                <input type="number" class="shelf-abv-input" value="${data.abv || 0}" min="0" max="100">
+                <button class="shelf-cat-btn ${data.category}" aria-label="Category for ${name}">${shelfCatLabels[data.category] || 'SPIRIT'}</button>
+                <input type="number" class="shelf-abv-input" value="${data.abv || 0}" min="0" max="100" aria-label="ABV for ${name}">
                 <span class="shelf-abv-suffix">%</span>
-                <button class="shelf-bottle-btn">${bottle}ml</button>`;
+                <button class="shelf-bottle-btn" aria-label="Bottle size for ${name}">${bottle}ml</button>
+                <button class="row-more" aria-label="Actions for ${name}">⋯</button>`;
             row.querySelector('.shelf-stock-btn').addEventListener('click', e => {
                 e.stopPropagation(); triggerHaptic('light');
                 shelfData[name].inStock = (data.inStock === false);
@@ -1499,18 +1536,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 setIngBottleSize(name, SHELF_BOTTLE_CYCLE[(idx + 1) % SHELF_BOTTLE_CYCLE.length]);
                 renderShelf();
             });
+            const shelfActions = () => {
+                triggerHaptic('medium');
+                openConfirmModal({
+                    title: 'REMOVE INGREDIENT',
+                    message: `Remove "${name}" from the shelf?`,
+                    confirmLabel: 'REMOVE',
+                    danger: true,
+                    onConfirm: () => {
+                        const removed = shelfData[name];
+                        delete shelfData[name];
+                        saveShelf(); renderShelf();
+                        showToast(`Removed "${name}"`, () => {
+                            shelfData[name] = removed; saveShelf(); renderShelf();
+                        });
+                    }
+                });
+            };
+            row.querySelector('.row-more').addEventListener('click', e => { e.stopPropagation(); shelfActions(); });
             let pt = null, ps = null;
             row.addEventListener('pointerdown', e => {
                 if (e.target.closest('button') || e.target.closest('input')) return;
                 ps = { x: e.clientX, y: e.clientY };
-                pt = setTimeout(() => {
-                    pt = null; triggerHaptic('medium');
-                    openConfirmModal({
-                        title: 'REMOVE INGREDIENT',
-                        message: `Remove "${name}" from the shelf?`,
-                        onConfirm: () => { delete shelfData[name]; saveShelf(); renderShelf(); }
-                    });
-                }, 500);
+                pt = setTimeout(() => { pt = null; shelfActions(); }, LONG_PRESS_MS);
             });
             row.addEventListener('pointermove', e => {
                 if (!pt || !ps) return;
@@ -1636,16 +1684,37 @@ document.addEventListener('DOMContentLoaded', () => {
     window.deleteSpec = (name) => {
         openConfirmModal({
             title: 'DELETE SPEC',
-            message: `Delete "${name}"? This can't be undone.`,
+            message: `Delete "${name}"?`,
             confirmLabel: 'DELETE',
             danger: true,
             onConfirm: async () => {
                 triggerHaptic('heavy');
+                // Snapshot every row so UNDO can put it back exactly
+                const related = [name, ...Object.keys(recipeVault).filter(n => n.startsWith(name + ' — '))];
+                const snapshot = [];
+                related.forEach(secName => {
+                    (recipeVault[secName] || []).forEach(ing => {
+                        snapshot.push({
+                            cocktailName: secName, ingredientName: ing.name, amount: ing.amount,
+                            bottleSize: 0, categoryTag: ing.color, unit: ing.unit || ''
+                        });
+                    });
+                });
                 showLoader("DELETING...");
                 try {
-                    await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'delete', cocktailName: name }) });
+                    for (const n of related) {
+                        await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'delete', cocktailName: n }) });
+                    }
                     await loadVault();
-                } catch (e) { hideLoader(); }
+                    showToast(`Deleted "${isStandaloneName(name) ? standaloneLabel(name) : name}"`, async () => {
+                        showLoader("RESTORING...");
+                        try {
+                            await fetch(API_URL, { method: 'POST', body: JSON.stringify(snapshot) });
+                            await loadVault();
+                            showToast('Restored');
+                        } catch (e) { hideLoader(); showToast("Couldn't restore — check connection"); }
+                    });
+                } catch (e) { hideLoader(); showToast("Delete failed — check connection"); }
             }
         });
     };
@@ -2504,7 +2573,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (sortedTasks.length === 0) {
-            container.innerHTML = '<p class="text-muted text-sm text-center" style="padding: 20px;">No tasks. Tap ＋ ADD TASK below to begin.</p>';
+            const emptyMsg = {
+                opening: ['No opening tasks yet.', 'Add the steps you run at the start of every shift.'],
+                closing: ['No closing tasks yet.', 'Add the steps you run at the end of every shift.'],
+                prep:    ['Nothing to prep.', 'Tap ＋ ADD TASK to add a batch or a mise job.'],
+                periodic:['No upkeep tasks yet.', 'Add recurring jobs like deep cleans, with how often they’re due.']
+            }[activeOpsCategory] || ['No tasks yet.', 'Tap ＋ ADD TASK below to begin.'];
+            container.innerHTML = `<div class="empty-state"><p>${emptyMsg[0]}</p><span>${emptyMsg[1]}</span></div>`;
             return;
         }
 
@@ -2729,8 +2804,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isPeriodic) {
                 html += buildCountdown(taskObj);
             }
+            html += `<button class="row-more" aria-label="Task actions">⋯</button>`;
             if (isDraggable) {
-                html += `<div class="drag-handle-task">≡</div>`;
+                html += `<div class="drag-handle-task" aria-label="Drag to reorder">≡</div>`;
             }
             html += `</div>`;
             html += `<div class="ops-subtasks"></div>`;
@@ -2943,11 +3019,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let pressTimer = null;
             let pressStart = null;
-            row.addEventListener('pointerdown', (e) => {
-                if (e.target.closest('.drag-handle-task')) return; 
-                pressStart = { x: e.clientX, y: e.clientY };
-                pressTimer = setTimeout(() => {
-                    pressTimer = null;
+            const openTaskActions = () => {
                     triggerHaptic('medium');
                     
                     const actions = [];
@@ -2960,9 +3032,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     openSelectModal('TASK ACTIONS', actions, (val) => {
                         if (val === 'delete') {
-                            opsData[activeOpsCategory].splice(taskObj.originalIndex, 1);
+                            const cat = activeOpsCategory;
+                            const idx = taskObj.originalIndex;
+                            const removed = JSON.parse(JSON.stringify(opsData[cat][idx]));
+                            opsData[cat].splice(idx, 1);
                             saveOps();
                             renderOpsList();
+                            showToast(`Deleted "${removed.text}"`, () => {
+                                opsData[cat].splice(Math.min(idx, opsData[cat].length), 0, removed);
+                                saveOps();
+                                renderOpsList();
+                            });
                         } else if (val === 'batch-size') {
                             setTimeout(() => {
                                 openSelectModal('BATCH BOTTLE SIZE', [
@@ -3049,7 +3129,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             }, 350);
                         }
                     });
-                }, 500);
+            };
+            const moreBtn = row.querySelector('.row-more');
+            if (moreBtn) moreBtn.addEventListener('click', (e) => { e.stopPropagation(); openTaskActions(); });
+            row.addEventListener('pointerdown', (e) => {
+                if (e.target.closest('.drag-handle-task') || e.target.closest('.row-more')) return;
+                pressStart = { x: e.clientX, y: e.clientY };
+                pressTimer = setTimeout(() => { pressTimer = null; openTaskActions(); }, LONG_PRESS_MS);
             });
             row.addEventListener('pointermove', (e) => {
                 if (!pressTimer || !pressStart) return;
