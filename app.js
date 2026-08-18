@@ -1250,6 +1250,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function saveShelf() {
         try { localStorage.setItem(SHELF_KEY, JSON.stringify(shelfData)); } catch {}
         refreshShelfDatalist();
+        if (typeof scheduleSettingsPush === 'function') scheduleSettingsPush();
     }
 
     function refreshShelfDatalist() {
@@ -1660,25 +1661,92 @@ document.addEventListener('DOMContentLoaded', () => {
     let opsData = { opening: [], prep: [], closing: [], periodic: [] };
     let activeOpsCategory = 'prep';
 
-    // --- OPS CLOUD SYNC (append-only snapshots in the Ops sheet) ---
-    // Local-first: every change saves to localStorage instantly and the UI never
-    // waits on the network. A debounced push mirrors state to the sheet, which
-    // keeps an append-only history — nothing on the server is ever overwritten.
+    // --- OPS CLOUD SYNC (per-task rows; multi-user safe) ---
+    // Each task is its own sheet row keyed by taskId. Only CHANGED tasks are
+    // pushed, and the server rejects a write whose updatedAt is older than what
+    // it holds — so two people ticking different tasks never clobber each other.
+    // Deletes become tombstones so they propagate instead of resurrecting.
     const OPS_DEVICE_KEY = 'codex_device_name';
+    const OPS_PUSHED_KEY = 'codex_ops_pushed_v1';   // id -> {sig, updatedAt}
+    const OPS_PULLTS_KEY = 'codex_ops_pull_ts_v1';
+    const SETTINGS_PULLTS_KEY = 'codex_settings_pull_ts_v1';
     let opsPushTimer = null;
-    let opsDirty = false;
-    let opsSyncState = 'idle';   // idle | syncing | ok | offline
+    let opsSyncState = 'idle';
 
     function getDeviceName() {
-        let d = localStorage.getItem(OPS_DEVICE_KEY);
-        if (!d) {
-            d = 'device-' + Math.random().toString(36).slice(2, 7);
-            try { localStorage.setItem(OPS_DEVICE_KEY, d); } catch {}
-        }
-        return d;
+        return localStorage.getItem(OPS_DEVICE_KEY) || '';
+    }
+    function setDeviceName(n) {
+        try { localStorage.setItem(OPS_DEVICE_KEY, n); } catch {}
+    }
+    // First launch on a device: ask who this is, so shared history reads
+    // "Done Jun 24 by Jack" rather than an anonymous device id.
+    function ensureDeviceName() {
+        if (getDeviceName()) return;
+        setTimeout(() => {
+            openSelectModal('WHO ARE YOU?', [], null, {
+                placeholder: 'Your name…',
+                btnLabel: 'SET',
+                onSubmit: (v) => {
+                    const n = (v || '').trim();
+                    if (n) { setDeviceName(capitalize(n)); renderOpsList(); }
+                }
+            });
+        }, 900);
     }
 
-    function setOpsSyncBadge(state) {
+    const newTaskId = () => 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+    function loadPushed() {
+        try { return JSON.parse(localStorage.getItem(OPS_PUSHED_KEY)) || {}; } catch { return {}; }
+    }
+    function savePushed(m) {
+        try { localStorage.setItem(OPS_PUSHED_KEY, JSON.stringify(m)); } catch {}
+    }
+    // Signature of the meaningful fields — used to detect what actually changed
+    function taskSig(t, cat) {
+        return JSON.stringify([cat, t.text, !!t.completed, t.intervalDays || '', t.lastCompleted || '',
+            t.log || [], t.subtasks || [], t.kind || '', t.qty || '', t.bottleML || '',
+            t.linkedSpec || '', t.linkedSection || '', t.orderIndex]);
+    }
+
+    const OPS_CATS = ['opening', 'prep', 'closing', 'periodic'];
+
+    // Give every task an id + order, then work out which ones changed since the
+    // last successful push. Returns the list of tasks to send (incl. tombstones).
+    function collectDirtyTasks() {
+        const pushed = loadPushed();
+        const now = Date.now();
+        const dirty = [];
+        const liveIds = new Set();
+
+        OPS_CATS.forEach(cat => {
+            (opsData[cat] || []).forEach((t, idx) => {
+                if (!t.taskId) t.taskId = newTaskId();
+                if (t.orderIndex === undefined || t.orderIndex === null) t.orderIndex = (idx + 1) * 1000;
+                liveIds.add(t.taskId);
+                const sig = taskSig(t, cat);
+                const prev = pushed[t.taskId];
+                if (!prev || prev.sig !== sig) {
+                    t.updatedAt = now;
+                    dirty.push(Object.assign({}, t, {
+                        category: cat, deleted: false,
+                        updatedBy: getDeviceName() || 'unknown'
+                    }));
+                }
+            });
+        });
+
+        // Anything we pushed before that no longer exists locally = deleted
+        Object.keys(pushed).forEach(id => {
+            if (!liveIds.has(id) && !pushed[id].tombstoned) {
+                dirty.push({ taskId: id, deleted: true, updatedAt: now, updatedBy: getDeviceName() || 'unknown' });
+            }
+        });
+        return dirty;
+    }
+
+    function setOpsSyncBadge(state, extra) {
         opsSyncState = state;
         const el = document.getElementById('ops-sync-badge');
         if (!el) return;
@@ -1689,60 +1757,154 @@ document.addEventListener('DOMContentLoaded', () => {
             offline: ['OFFLINE — SAVED LOCALLY', 'offline']
         };
         const [text, cls] = map[state] || ['', ''];
-        el.innerText = text;
+        el.innerText = extra ? `${text} ${extra}` : text;
         el.className = 'ops-sync-badge ' + cls;
     }
 
     function scheduleOpsPush() {
-        opsDirty = true;
         clearTimeout(opsPushTimer);
-        opsPushTimer = setTimeout(pushOpsToCloud, 2500);   // debounce a flurry of ticks into one write
+        opsPushTimer = setTimeout(pushOpsToCloud, 2000);
     }
 
     async function pushOpsToCloud() {
-        if (!opsDirty) return;
-        // Never push an empty state over a non-empty cloud copy
-        if (opsTaskCount(opsData) === 0) { opsDirty = false; return; }
+        const dirty = collectDirtyTasks();
+        if (!dirty.length) return;
         setOpsSyncBadge('syncing');
         try {
             await fetch(API_URL, {
                 method: 'POST',
-                body: JSON.stringify({ type: 'ops', device: getDeviceName(), data: opsData })
+                body: JSON.stringify({ type: 'opsTasks', device: getDeviceName(), tasks: dirty })
             });
-            opsDirty = false;
+            // Record what we sent so we can detect the next change
+            const pushed = loadPushed();
+            dirty.forEach(t => {
+                if (t.deleted) pushed[t.taskId] = { sig: '', updatedAt: t.updatedAt, tombstoned: true };
+                else pushed[t.taskId] = { sig: taskSig(t, t.category), updatedAt: t.updatedAt };
+            });
+            savePushed(pushed);
+            saveOpsLocalOnly();   // persist the ids/updatedAt we just assigned
             setOpsSyncBadge('ok');
             setTimeout(() => { if (opsSyncState === 'ok') setOpsSyncBadge('idle'); }, 2000);
         } catch (e) {
-            console.error('OPS push failed — will retry on next change/open', e);
-            setOpsSyncBadge('offline');   // stays dirty; retries later
+            console.error('OPS push failed — retries on next change/open', e);
+            setOpsSyncBadge('offline');
         }
     }
 
     async function pullOpsFromCloud() {
         setOpsSyncBadge('syncing');
+        const since = parseFloat(localStorage.getItem(OPS_PULLTS_KEY)) || 0;
         try {
-            const res = await fetch(API_URL + '?type=ops');
+            const res = await fetch(`${API_URL}?type=ops&since=${since}`);
             if (!res.ok) throw new Error('bad response');
             const payload = await res.json();
-            const cloud = payload && payload.data;
-            const cloudCount = opsTaskCount(cloud);
-            const localCount = opsTaskCount(opsData);
+            const incoming = payload.tasks || [];
+            let changed = false;
 
-            if (cloudCount > 0 && !opsDirty) {
-                // Trust the cloud unless we have unpushed local changes
-                opsData = cloud;
+            incoming.forEach(remote => {
+                if (!remote.taskId) return;
+                // find it locally, whichever bucket it's in
+                let foundCat = null, foundIdx = -1;
+                OPS_CATS.forEach(cat => {
+                    const i = (opsData[cat] || []).findIndex(t => t.taskId === remote.taskId);
+                    if (i >= 0) { foundCat = cat; foundIdx = i; }
+                });
+                const localTask = foundCat ? opsData[foundCat][foundIdx] : null;
+                const localUpd = localTask ? (localTask.updatedAt || 0) : 0;
+                if (localTask && localUpd > (remote.updatedAt || 0)) return;   // ours is newer
+
+                if (remote.deleted) {
+                    if (localTask) { opsData[foundCat].splice(foundIdx, 1); changed = true; }
+                    return;
+                }
+                const cat = remote.category || foundCat || 'prep';
+                const merged = {
+                    taskId: remote.taskId,
+                    text: remote.text || '',
+                    completed: !!remote.completed,
+                    orderIndex: remote.orderIndex,
+                    subtasks: remote.subtasks || [],
+                    log: remote.log || [],
+                    updatedAt: remote.updatedAt || 0,
+                    updatedBy: remote.updatedBy || ''
+                };
+                if (remote.intervalDays)  merged.intervalDays  = parseFloat(remote.intervalDays);
+                if (remote.lastCompleted) merged.lastCompleted = parseFloat(remote.lastCompleted);
+                if (remote.kind)          merged.kind          = remote.kind;
+                if (remote.qty)           merged.qty           = parseFloat(remote.qty);
+                if (remote.bottleML)      merged.bottleML      = parseFloat(remote.bottleML);
+                if (remote.linkedSpec)    merged.linkedSpec    = remote.linkedSpec;
+                if (remote.linkedSection) merged.linkedSection = remote.linkedSection;
+
+                if (localTask && foundCat === cat) opsData[cat][foundIdx] = merged;
+                else {
+                    if (localTask) opsData[foundCat].splice(foundIdx, 1);   // moved category
+                    if (!opsData[cat]) opsData[cat] = [];
+                    opsData[cat].push(merged);
+                }
+                changed = true;
+                // treat pulled state as already-pushed so we don't echo it back
+                const pushed = loadPushed();
+                pushed[remote.taskId] = { sig: taskSig(merged, cat), updatedAt: merged.updatedAt };
+                savePushed(pushed);
+            });
+
+            if (changed) {
+                OPS_CATS.forEach(cat => {
+                    (opsData[cat] || []).sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+                });
                 saveOpsLocalOnly();
                 renderOpsList();
-            } else if (localCount > 0 && cloudCount === 0) {
-                // Cloud is empty (first run) — seed it from local
-                scheduleOpsPush();
             }
+            if (payload.now) localStorage.setItem(OPS_PULLTS_KEY, String(payload.now));
             setOpsSyncBadge('ok');
             setTimeout(() => { if (opsSyncState === 'ok') setOpsSyncBadge('idle'); }, 2000);
         } catch (e) {
             console.error('OPS pull failed — using local copy', e);
             setOpsSyncBadge('offline');
         }
+    }
+
+    // --- SHARED SETTINGS (bottle sizes, batch modes, shelf) ---
+    const SYNCED_SETTING_KEYS = [
+        ['ing_bottles', 'codex_ing_bottles_v1'],
+        ['batch_modes', 'codex_batch_modes_v1'],
+        ['batch_sizes', 'codex_batch_sizes_v1'],
+        ['shelf',       'codex_shelf_v1']
+    ];
+    let settingsPushTimer = null;
+
+    function scheduleSettingsPush() {
+        clearTimeout(settingsPushTimer);
+        settingsPushTimer = setTimeout(pushSettings, 3000);
+    }
+    async function pushSettings() {
+        const now = Date.now();
+        const payload = SYNCED_SETTING_KEYS.map(([k, lsKey]) => {
+            let v = null;
+            try { v = JSON.parse(localStorage.getItem(lsKey) || 'null'); } catch {}
+            return v ? { key: k, value: v, updatedAt: now, updatedBy: getDeviceName() } : null;
+        }).filter(Boolean);
+        if (!payload.length) return;
+        try {
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ type: 'settings', device: getDeviceName(), settings: payload }) });
+        } catch (e) { console.error('Settings push failed', e); }
+    }
+    async function pullSettings() {
+        const since = parseFloat(localStorage.getItem(SETTINGS_PULLTS_KEY)) || 0;
+        try {
+            const res = await fetch(`${API_URL}?type=settings&since=${since}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            (data.settings || []).forEach(s => {
+                const entry = SYNCED_SETTING_KEYS.find(([k]) => k === s.key);
+                if (!entry || !s.value) return;
+                try { localStorage.setItem(entry[1], JSON.stringify(s.value)); } catch {}
+            });
+            if (data.now) localStorage.setItem(SETTINGS_PULLTS_KEY, String(data.now));
+            if (typeof loadShelf === 'function') loadShelf();
+            if (typeof refreshShelfDatalist === 'function') refreshShelfDatalist();
+        } catch (e) { console.error('Settings pull failed', e); }
     }
 
     function loadOps() {
@@ -1889,6 +2051,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const m = loadBatchModes();
         m[(fullName || '').toLowerCase().trim()] = mode;
         try { localStorage.setItem(BATCH_MODE_KEY, JSON.stringify(m)); } catch {}
+        if (typeof scheduleSettingsPush === 'function') scheduleSettingsPush();
     }
     function loadBatchSizes() {
         try { return JSON.parse(localStorage.getItem(BATCH_SIZE_KEY)) || {}; } catch { return {}; }
@@ -1900,6 +2063,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const m = loadBatchSizes();
         m[(fullName || '').toLowerCase().trim()] = ml;
         try { localStorage.setItem(BATCH_SIZE_KEY, JSON.stringify(m)); } catch {}
+        if (typeof scheduleSettingsPush === 'function') scheduleSettingsPush();
     }
     function loadIngBottles() {
         try { return JSON.parse(localStorage.getItem(ING_BOTTLE_KEY)) || {}; } catch { return {}; }
@@ -1912,6 +2076,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const m = loadIngBottles();
         m[(name || '').toLowerCase().trim()] = ml;
         try { localStorage.setItem(ING_BOTTLE_KEY, JSON.stringify(m)); } catch {}
+        if (typeof scheduleSettingsPush === 'function') scheduleSettingsPush();
     }
     // Only things that COME in a bottle get a bottle count; in-house stuff shows ml.
     const BOTTLED_CATS = ['amber-glow', 'neon-cyan'];
@@ -2350,7 +2515,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (!task.log) task.log = [];
                         if (isNowComplete) {
                             task.lastCompleted = Date.now();
-                            task.log.push({ ts: task.lastCompleted });
+                            task.log.push({ ts: task.lastCompleted, by: getDeviceName() || '' });
                             if (task.log.length > 20) task.log.shift();
                         } else {
                             task.log.pop();
@@ -2435,7 +2600,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 const long = g > interval * 1.3;
                                 gap = `<span class="ops-hist-gap${long ? ' long' : ''}">+${g}d</span>`;
                             }
-                            html += `<div class="ops-hist-row"><span class="ops-hist-check">✓</span><span class="ops-hist-date">${formatDate(entry.ts)}</span>${gap}</div>`;
+                            const who = entry.by ? `<span class="ops-hist-by">${entry.by}</span>` : '';
+                            html += `<div class="ops-hist-row"><span class="ops-hist-check">✓</span><span class="ops-hist-date">${formatDate(entry.ts)}</span>${gap}${who}</div>`;
                         });
                         if (log.length > visibleCount) {
                             html += `<div class="ops-hist-older">${shown.length} OF ${log.length} · <span data-more="1">OLDER</span></div>`;
@@ -2493,6 +2659,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             rememberPrepKind(item.text, item.kind);
                         }
                         opsData[activeOpsCategory].splice(toIdx, 0, item);
+                        // Midpoint ordering: only this task's orderIndex changes,
+                        // so simultaneous drags on other devices don't collide.
+                        const arr = opsData[activeOpsCategory];
+                        const pos = arr.indexOf(item);
+                        const before = pos > 0 ? (arr[pos - 1].orderIndex || 0) : 0;
+                        const after = pos < arr.length - 1 ? (arr[pos + 1].orderIndex || before + 2000) : before + 2000;
+                        item.orderIndex = (before + after) / 2;
                         saveOps();
                         renderOpsList();
                     }
@@ -2637,16 +2810,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadOps();
     renderOpsList();
+    ensureDeviceName();
     pullOpsFromCloud();   // reconcile with the sheet; local render already happened
+    pullSettings();
 
     // Re-pull when returning to the app, and flush anything unpushed
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-            if (opsDirty) pushOpsToCloud();
-            else pullOpsFromCloud();
+            pushOpsToCloud();   // flush anything pending (no-op when nothing changed)
+            pullOpsFromCloud();
+            pullSettings();
         }
     });
-    window.addEventListener('online', () => { if (opsDirty) pushOpsToCloud(); });
+    window.addEventListener('online', () => { pushOpsToCloud(); pullSettings(); });
 
     document.querySelectorAll('.ops-pill').forEach(pill => {
         pill.addEventListener('click', (e) => {

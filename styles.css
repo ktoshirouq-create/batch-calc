@@ -566,3 +566,6 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .vault-total-row .ing-name { color: var(--nodee-gold) !important; font-size: 0.65rem !important; font-weight: 900 !important; letter-spacing: 2px; }
 .vault-total-row .ing-amount { color: var(--text-main); }
 .vault-total-row .vt-sub { color: var(--text-muted); font-size: 0.7rem; font-weight: 600; }
+
+.ops-hist-by { color: var(--nodee-gold); font-size: 0.62rem; font-weight: 700; margin-left: auto; opacity: 0.8; }
+.ops-hist-row { justify-content: flex-start; }
