@@ -580,3 +580,44 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 
 /* Shelf bottle-size pill */
 .shelf-bottle-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: var(--nodee-gold); border-radius: 6px; padding: 5px 7px; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.5px; cursor: pointer; flex-shrink: 0; min-width: 52px; text-align: center; }
+
+/* --- THE SHELF (compact single-line rows) --- */
+#shelf-card { margin-top: 18px; }
+#shelf-add-form { margin-top: 12px; }
+.shelf-add-form-inner { background: rgba(255,255,255,0.03); border: 1px solid rgba(200,169,126,0.2); border-radius: 12px; padding: 14px; }
+.shelf-add-name { width: 100%; margin-bottom: 10px; }
+.shelf-add-controls { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.shelf-add-cat { padding: 10px 12px; border-radius: 8px; font-size: 0.7rem; font-weight: 900; letter-spacing: 1px; color: #000; cursor: pointer; min-width: 84px; border: none; }
+.shelf-add-cat.amber-glow { background: var(--amber-glow); }
+.shelf-add-cat.neon-cyan { background: var(--neon-cyan); }
+.shelf-add-cat.juice-glow { background: var(--juice-glow); }
+.shelf-add-cat.magenta-glow { background: var(--magenta-glow); }
+.shelf-add-cat.coffee-dark { background: var(--coffee-dark); color: #fff; }
+.shelf-add-cat.puree-mango { background: var(--puree-mango); }
+.shelf-add-cat.static-ruby { background: var(--static-ruby); color: #fff; }
+.shelf-add-abv { width: 64px; background: rgba(255,255,255,0.04); border: 1px solid #222; border-radius: 8px; padding: 9px 6px; color: var(--nodee-gold); font-size: 0.95rem; font-weight: 700; text-align: center; }
+.shelf-add-abv-suffix { color: var(--text-muted); font-size: 0.85rem; }
+.shelf-add-actions { display: flex; gap: 10px; }
+.shelf-add-cancel, .shelf-add-save { flex: 1; padding: 12px; border-radius: 10px; font-size: 0.75rem; font-weight: 800; letter-spacing: 1.5px; cursor: pointer; border: none; }
+.shelf-add-cancel { background: rgba(255,255,255,0.05); color: var(--text-muted); }
+.shelf-add-save { background: var(--nodee-gold); color: var(--bg-oled); }
+
+#shelf-list { margin-top: 16px; }
+.shelf-row { display: flex; align-items: center; gap: 6px; padding: 9px 2px; border-bottom: 1px solid #1a1a1a; flex-wrap: nowrap; transition: opacity 0.2s ease; }
+.shelf-row:last-child { border-bottom: none; }
+.shelf-row-oos { opacity: 0.4; }
+.shelf-stock-btn { background: none; border: none; color: var(--nodee-gold); font-size: 0.95rem; cursor: pointer; padding: 2px 2px; min-width: 18px; flex-shrink: 0; }
+.shelf-stock-btn.oos { color: var(--text-muted); }
+.shelf-ing-name { flex: 1 1 auto; min-width: 0; font-size: 0.8rem; font-weight: 600; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shelf-cat-btn { padding: 4px 5px; border-radius: 5px; font-size: 0.5rem; font-weight: 900; letter-spacing: 0.5px; color: #000; cursor: pointer; width: 54px; text-align: center; border: none; flex-shrink: 0; }
+.shelf-cat-btn.amber-glow { background: var(--amber-glow); }
+.shelf-cat-btn.neon-cyan { background: var(--neon-cyan); }
+.shelf-cat-btn.juice-glow { background: var(--juice-glow); }
+.shelf-cat-btn.magenta-glow { background: var(--magenta-glow); }
+.shelf-cat-btn.coffee-dark { background: var(--coffee-dark); color: #fff; }
+.shelf-cat-btn.puree-mango { background: var(--puree-mango); }
+.shelf-cat-btn.static-ruby { background: var(--static-ruby); color: #fff; }
+.shelf-abv-input { width: 34px; background: rgba(255,255,255,0.04); border: 1px solid #222; border-radius: 5px; padding: 4px 2px; color: var(--nodee-gold); font-size: 0.72rem; font-weight: 700; text-align: center; flex-shrink: 0; -moz-appearance: textfield; }
+.shelf-abv-input::-webkit-outer-spin-button, .shelf-abv-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.shelf-abv-suffix { color: var(--text-muted); font-size: 0.6rem; flex-shrink: 0; margin-left: -3px; }
+.shelf-bottle-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: var(--nodee-gold); border-radius: 5px; padding: 4px 4px; font-size: 0.58rem; font-weight: 800; cursor: pointer; flex-shrink: 0; width: 48px; text-align: center; }
