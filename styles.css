@@ -655,3 +655,9 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 /* qty stepper value becomes a typed field */
 .qs-input { width: 30px; background: transparent; border: none; color: var(--text-main); font-weight: 800; font-size: 0.8rem; text-align: center; -moz-appearance: textfield; }
 .qs-input::-webkit-outer-spin-button, .qs-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* --- STICKY SAVE BAR (builder got tall enough that SAVE fell off-screen) --- */
+.builder-save-bar { position: fixed; left: 0; right: 0; bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 90; padding: 10px 16px; background: linear-gradient(to top, rgba(0,0,0,0.96) 60%, rgba(0,0,0,0)); }
+.builder-save-bar.hidden { display: none; }
+.builder-save-bar .btn-primary { padding: 16px; font-size: 0.9rem; box-shadow: 0 4px 18px rgba(0,0,0,0.6); }
+.builder-save-spacer { height: 8px; }

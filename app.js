@@ -865,11 +865,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 const fullName = `${STANDALONE_OWNER} — ${name}`;
                 const mainSec = builderState.sections.find(s => s.name === 'MAIN') || builderState.sections[0];
                 (mainSec ? mainSec.ingredients : []).forEach(ing => {
-                    if (!ing.name.trim() || !ing.amount) return;
+                    // Static rows (dash / squeeze / top) are counted, not measured —
+                    // they can sit at 0 and must NOT be silently dropped on save.
+                    const isStatic = ing.cat === 'static-ruby';
+                    if (!ing.name.trim()) return;
+                    if (!isStatic && !ing.amount) return;
                     payload.push({
                         cocktailName: fullName,
                         ingredientName: capitalize(ing.name.trim()),
-                        amount: parseFloat(ing.amount),
+                        amount: isStatic ? (parseFloat(ing.amount) || 1) : parseFloat(ing.amount),
                         bottleSize: 0,
                         categoryTag: ing.cat,
                         unit: ing.cat === 'static-ruby' ? (ing.unit || 'dash') : ''
@@ -899,11 +903,15 @@ document.addEventListener('DOMContentLoaded', () => {
             builderState.sections.forEach(sec => {
                 const sectionName = sec.name === 'MAIN' ? name : `${name} — ${sec.name}`;
                 sec.ingredients.forEach(ing => {
-                    if (!ing.name.trim() || !ing.amount) return;
+                    // Static rows (dash / squeeze / top) are counted, not measured —
+                    // they can sit at 0 and must NOT be silently dropped on save.
+                    const isStatic = ing.cat === 'static-ruby';
+                    if (!ing.name.trim()) return;
+                    if (!isStatic && !ing.amount) return;
                     payload.push({
                         cocktailName: sectionName,
                         ingredientName: capitalize(ing.name.trim()),
-                        amount: parseFloat(ing.amount),
+                        amount: isStatic ? (parseFloat(ing.amount) || 1) : parseFloat(ing.amount),
                         bottleSize: 0,
                         categoryTag: ing.cat,
                         unit: ing.cat === 'static-ruby' ? (ing.unit || 'dash') : ''
@@ -1703,10 +1711,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function expandSpecBuilder() {
         document.getElementById('new-spec-btn')?.classList.add('hidden');
         document.getElementById('builder-content')?.classList.remove('hidden');
+        document.getElementById('builder-save-bar')?.classList.remove('hidden');
     }
     function collapseSpecBuilder() {
         document.getElementById('new-spec-btn')?.classList.remove('hidden');
         document.getElementById('builder-content')?.classList.add('hidden');
+        document.getElementById('builder-save-bar')?.classList.add('hidden');
     }
     window.expandSpecBuilder = expandSpecBuilder;
     window.collapseSpecBuilder = collapseSpecBuilder;
