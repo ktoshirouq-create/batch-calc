@@ -326,7 +326,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 vaultLive = true;
                 try { localStorage.setItem(VAULT_CACHE_KEY, JSON.stringify(recipeVault)); } catch {}
-                renderVault();
+                // Render OUTSIDE the network try/catch — a rendering bug must never
+                // be reported as "offline", which sends you hunting the wrong problem.
+                try { renderVault(); } catch (renderErr) { console.error('Render failed:', renderErr); }
                 hideLoader();
                 return;
             } catch (e) {
@@ -460,10 +462,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!list) return;
         list.innerHTML = '';
         const specs = Object.keys(recipeVault);
-        if (specs.length > 0 && mains.length === 0 && standalones.length === 0 && orphans.length === 0) {
-            list.innerHTML = `<div class="empty-state"><p>Nothing matches.</p><span>${q ? 'Try a different search term.' : 'No specs in this category yet.'}</span></div>`;
-            return;
-        }
         if (specs.length === 0) {
             list.innerHTML = vaultLive
                 ? '<div class="empty-state"><p>No specs yet.</p><span>Tap ＋ NEW SPEC above to add your first cocktail.</span></div>'
@@ -495,6 +493,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 && !specs.some(m => !m.includes(' — ') && s.startsWith(m + ' — ')))
                  .filter(matchesQuery);
         const toRender = [...mains, ...orphans, ...standalones];
+
+        // Filter/search produced nothing (the vault itself isn't empty)
+        if (toRender.length === 0) {
+            list.innerHTML = `<div class="empty-state"><p>Nothing matches.</p><span>${q ? 'Try a different search term.' : 'No specs in this category yet.'}</span></div>`;
+            return;
+        }
 
         toRender.forEach(cocktail => {
             recipeVault[cocktail].sort((a, b) => (catOrder[a.color] || 10) - (catOrder[b.color] || 10));
