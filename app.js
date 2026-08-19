@@ -655,6 +655,8 @@ document.addEventListener('DOMContentLoaded', () => {
             sectionEl.innerHTML = `
                 <div class="builder-section-header">
                     <span class="builder-section-title">${sec.name}</span>
+                    ${(secIdx > 0 && isBatchSection(sec.name))
+                        ? `<button class="builder-section-size" aria-label="Bottle size for ${sec.name}">${sec.bottleML || getBatchSize(`${(document.getElementById('builder-name')?.value || '').trim()} — ${sec.name}`)}ml</button>` : ''}
                     ${secIdx > 0 ? '<button class="builder-section-remove">×</button>' : ''}
                 </div>
                 <div class="builder-rows"></div>
@@ -764,6 +766,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 builderState.sections[secIdx].ingredients.push({ amount: 0, name: '', cat: 'amber-glow' });
                 renderBuilder();
             });
+            const sizeBtn = sectionEl.querySelector('.builder-section-size');
+            if (sizeBtn) {
+                sizeBtn.addEventListener('click', () => {
+                    triggerHaptic('light');
+                    const cocktailNow = (document.getElementById('builder-name')?.value || '').trim();
+                    const current = sec.bottleML || getBatchSize(`${cocktailNow} — ${sec.name}`);
+                    openNumberModal(`${sec.name.toUpperCase()} BOTTLE`, current, 'ml', (ml) => {
+                        builderState.sections[secIdx].bottleML = ml;
+                        renderBuilder();
+                    });
+                });
+            }
             if (secIdx > 0) {
                 sectionEl.querySelector('.builder-section-remove').addEventListener('click', () => {
                     openConfirmModal({
@@ -960,6 +974,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             builderState.sections.forEach(sec => {
                 const sectionName = sec.name === 'MAIN' ? name : `${name} — ${sec.name}`;
+                // Remember the bottle size entered in the builder header
+                if (sec.name !== 'MAIN' && sec.bottleML) {
+                    setBatchSize(sectionName, sec.bottleML);
+                    setBatchMode(sectionName, getBatchMode(sectionName) || 'drink');
+                }
                 sec.ingredients.forEach(ing => {
                     // Static rows (dash / squeeze / top) are counted, not measured —
                     // they can sit at 0 and must NOT be silently dropped on save.
@@ -1857,7 +1876,9 @@ document.addEventListener('DOMContentLoaded', () => {
         builderState = { name: name, sections: [] };
         related.forEach(sectionName => {
             const isMain = sectionName === name;
-            const sec = { name: isMain ? 'MAIN' : sectionName.replace(name + ' — ', ''), ingredients: [] };
+            const secLabel = isMain ? 'MAIN' : sectionName.replace(name + ' — ', '');
+            const sec = { name: secLabel, ingredients: [] };
+            if (!isMain && isBatchSection(secLabel)) sec.bottleML = getBatchSize(sectionName);
             (recipeVault[sectionName] || []).forEach(ing => {
                 sec.ingredients.push({ amount: ing.amount, name: ing.name, cat: ing.color, unit: ing.unit });
             });
