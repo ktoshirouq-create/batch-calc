@@ -661,3 +661,12 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .builder-save-bar.hidden { display: none; }
 .builder-save-bar .btn-primary { padding: 16px; font-size: 0.9rem; box-shadow: 0 4px 18px rgba(0,0,0,0.6); }
 .builder-save-spacer { height: 8px; }
+
+/* --- VAULT FILTER ROW --- */
+.vault-filter-row { display: flex; gap: 5px; margin-bottom: 16px; }
+.vault-filter { flex: 1; padding: 9px 2px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: var(--text-muted); font-size: 0.56rem; font-weight: 900; letter-spacing: 0.8px; cursor: pointer; }
+.vault-filter.active { background: var(--nodee-gold); color: var(--bg-oled); border-color: var(--nodee-gold); }
+
+/* Alternate recipes (mocktail etc) read as a recipe, not a dimmed batch */
+.vault-altrecipe { opacity: 0.85; }
+.vault-altrecipe .subbatch-row .ing-name { color: var(--text-main); }

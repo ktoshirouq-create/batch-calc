@@ -14,7 +14,7 @@
     <link rel="icon" type="image/png" href="icon-512.png">
     <link rel="apple-touch-icon" href="icon-512.png">
     
-    <link rel="stylesheet" href="styles.css?v=48">
+    <link rel="stylesheet" href="styles.css?v=49">
 </head>
 <body>
     <div id="loader" class="loader-overlay"><span class="loader-text">SYNCING CODEX...</span></div>
@@ -73,7 +73,13 @@
 
             <div class="card glass-panel" style="padding: 25px 15px;">
                 <h2 class="card-title text-muted border-bottom pb-10" style="padding-left: 5px;">DATABASE</h2>
-                <input type="text" id="vault-search" class="search-pill w-100" placeholder="Search Specs & Batches...">
+                <input type="text" id="vault-search" class="search-pill w-100" placeholder="Search specs, batches, ingredients...">
+                <div class="vault-filter-row">
+                    <button class="vault-filter active" data-filter="all">ALL</button>
+                    <button class="vault-filter" data-filter="cocktails">COCKTAILS</button>
+                    <button class="vault-filter" data-filter="mocktails">MOCKTAILS</button>
+                    <button class="vault-filter" data-filter="batches">BATCHES</button>
+                </div>
                 <div id="managed-vault-list"></div>
             </div>
 
@@ -266,6 +272,6 @@
         </button>
     </nav>
 
-    <script src="app.js?v=48"></script>
+    <script src="app.js?v=49"></script>
 </body>
 </html>

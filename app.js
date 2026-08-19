@@ -357,7 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderVaultContent(container, cocktail, subBatches, round) {
         container.innerHTML = '';
-        const mainIngs = recipeVault[cocktail] || [];
+        const mainIngs = (vaultFilter === 'mocktails') ? [] : (recipeVault[cocktail] || []);
 
         if (mainIngs.length > 0) {
             const mainSection = document.createElement('div');
@@ -402,22 +402,27 @@ document.addEventListener('DOMContentLoaded', () => {
                     ? standaloneLabel(sbName)
                     : sbName.replace(cocktail + ' — ', '');
 
-                // Sub-batches are built BY THE BOTTLE, not per drink — the stored
-                // amounts are a ratio, and the pour is set to taste. So always show
-                // the recipe scaled to fill one bottle, regardless of SERVES.
+                // Batches are built BY THE BOTTLE (stored amounts are a ratio, pour set
+                // to taste) so they always render at bottle scale. Alternate recipes
+                // like a Mocktail are made per serve and scale with SERVES instead.
+                const isBatch = isBatchSection(label) || isStandaloneName(sbName);
                 const ratioSum = sbIngs.filter(i => i.color !== 'static-ruby')
                                        .reduce((s, i) => s + (i.amount || 0), 0);
                 const bottleML = getBatchSize(sbName);
                 const mode = getBatchMode(sbName);
-                const factor = (mode === 'bottle' || ratioSum <= 0) ? 1 : (bottleML / ratioSum);
+                const factor = !isBatch
+                    ? round                                            // per-serve recipe
+                    : ((mode === 'bottle' || ratioSum <= 0) ? 1 : (bottleML / ratioSum));
 
                 const mainRef = mainIngs.find(i => i.name === label);
                 const perBottle = ratioSum > 0 ? Math.round(ratioSum * factor) : bottleML;
 
                 const section = document.createElement('div');
-                section.className = 'vault-subbatch';
+                section.className = 'vault-subbatch' + (isBatch ? '' : ' vault-altrecipe');
                 let html = `<h4 class="vault-subbatch-title">${label.toUpperCase()}` +
-                    `<button class="sb-size" data-batch="${sbName.replace(/"/g, '&quot;')}" aria-label="Bottle size for ${label}">${bottleML}ml</button></h4>`;
+                    (isBatch
+                        ? `<button class="sb-size" data-batch="${sbName.replace(/"/g, '&quot;')}" aria-label="Bottle size for ${label}">${bottleML}ml</button>`
+                        : `<span class="vault-yield-label">PER SERVE</span>`) + `</h4>`;
                 sbIngs.forEach(ing => {
                     let amtHtml;
                     if (ing.color === 'static-ruby') {
@@ -427,8 +432,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     html += `<div class="subbatch-row ${ing.color}"><span class="ing-name">${ing.name}</span><span class="ing-amount">${amtHtml}</span></div>`;
                 });
-                // Fixed bottle-worth: doesn't move with SERVES
-                if (mainRef && mainRef.amount > 0) {
+                // Fixed bottle-worth: doesn't move with SERVES (batches only)
+                if (isBatch && mainRef && mainRef.amount > 0) {
                     const cocktails = Math.floor(perBottle / mainRef.amount);
                     html += `<div class="sb-worth">1 bottle (${perBottle}ml) = ${cocktails} cocktails at ${formatAmount(mainRef.amount)}ml</div>`;
                 }
@@ -447,11 +452,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    let vaultFilter = 'all';
+    let vaultQuery = '';
+
     function renderVault() {
         const list = document.getElementById('managed-vault-list');
         if (!list) return;
         list.innerHTML = '';
         const specs = Object.keys(recipeVault);
+        if (specs.length > 0 && mains.length === 0 && standalones.length === 0 && orphans.length === 0) {
+            list.innerHTML = `<div class="empty-state"><p>Nothing matches.</p><span>${q ? 'Try a different search term.' : 'No specs in this category yet.'}</span></div>`;
+            return;
+        }
         if (specs.length === 0) {
             list.innerHTML = vaultLive
                 ? '<div class="empty-state"><p>No specs yet.</p><span>Tap ＋ NEW SPEC above to add your first cocktail.</span></div>'
@@ -460,15 +472,38 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const catOrder = { 'amber-glow': 1, 'neon-cyan': 2, 'juice-glow': 3, 'magenta-glow': 4, 'coffee-dark': 5, 'puree-mango': 6, 'static-ruby': 7 };
-        const mains = specs.filter(s => !s.includes(' — '));
-        const standalones = specs.filter(s => isStandaloneName(s));
-        const orphans = specs.filter(s => s.includes(' — ') && !isStandaloneName(s)
-            && !mains.some(m => s.startsWith(m + ' — ')));
+        // --- FILTER + SEARCH ---
+        const q = (vaultQuery || '').toLowerCase().trim();
+        const specHasMocktail = (name) => specs.some(s => s.startsWith(name + ' — ') && isMocktailSection(s.slice(name.length + 3)));
+        const matchesQuery = (name) => {
+            if (!q) return true;
+            if (name.toLowerCase().includes(q)) return true;
+            // search ingredients too — "what uses Tia Maria?"
+            const related = [name, ...specs.filter(s => s.startsWith(name + ' — '))];
+            return related.some(r => (recipeVault[r] || []).some(i => (i.name || '').toLowerCase().includes(q)));
+        };
+
+        let mains = specs.filter(s => !s.includes(' — '));
+        let standalones = specs.filter(s => isStandaloneName(s));
+        if (vaultFilter === 'cocktails') { standalones = []; }
+        else if (vaultFilter === 'mocktails') { mains = mains.filter(specHasMocktail); standalones = []; }
+        else if (vaultFilter === 'batches') { mains = []; }
+        mains = mains.filter(matchesQuery);
+        standalones = standalones.filter(matchesQuery);
+        const orphans = (vaultFilter === 'batches' || vaultFilter === 'mocktails') ? [] :
+            specs.filter(s => s.includes(' — ') && !isStandaloneName(s)
+                && !specs.some(m => !m.includes(' — ') && s.startsWith(m + ' — ')))
+                 .filter(matchesQuery);
         const toRender = [...mains, ...orphans, ...standalones];
 
         toRender.forEach(cocktail => {
             recipeVault[cocktail].sort((a, b) => (catOrder[a.color] || 10) - (catOrder[b.color] || 10));
-            const subBatches = specs.filter(s => s.startsWith(cocktail + ' — '));
+            let subBatches = specs.filter(s => s.startsWith(cocktail + ' — '));
+            // In the MOCKTAILS view, show only the mocktail recipe — you're asking
+            // "what can I make for someone not drinking", not for the spirit version.
+            if (vaultFilter === 'mocktails') {
+                subBatches = subBatches.filter(s => isMocktailSection(s.slice(cocktail.length + 3)));
+            }
             // Pull in any standalone batch this cocktail references from MAIN
             (recipeVault[cocktail] || []).forEach(ing => {
                 const ref = `${STANDALONE_OWNER} — ${ing.name}`;
@@ -559,6 +594,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof renderShelf === 'function') renderShelf();
     }
 
+    document.getElementById('vault-search')?.addEventListener('input', (e) => {
+        vaultQuery = e.target.value;
+        renderVault();
+    });
+    document.querySelectorAll('.vault-filter').forEach(btn => {
+        btn.addEventListener('click', () => {
+            triggerHaptic('light');
+            document.querySelectorAll('.vault-filter').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            vaultFilter = btn.getAttribute('data-filter');
+            renderVault();
+        });
+    });
+
     // --- SPEC BUILDER ---
     let builderState = { name: '', sections: [{ name: 'MAIN', ingredients: [] }] };
     // 'cocktail' = a drink with MAIN + optional sub-batches.
@@ -568,6 +617,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const STANDALONE_OWNER = 'Batch';
     let standaloneBottleML = 700;
     const isStandaloneName = (n) => (n || '').startsWith(STANDALONE_OWNER + ' — ');
+    // A "batch" is something you bottle. A Mocktail (or any other named section)
+    // is an ALTERNATE RECIPE for the same drink — made per serve, never bottled.
+    const BATCH_SECTIONS = ['spirit batch', 'juice batch', 'espresso batch', 'cream', 'cream batch'];
+    const isBatchSection = (sectionLabel) => BATCH_SECTIONS.includes((sectionLabel || '').toLowerCase().trim());
+    const isMocktailSection = (sectionLabel) => /mocktail/i.test(sectionLabel || '');
     const standaloneLabel  = (n) => (n || '').replace(STANDALONE_OWNER + ' — ', '');
 
     function applyBuilderKind() {
