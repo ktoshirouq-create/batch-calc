@@ -714,3 +714,5 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .static-step .ss-n { color: var(--text-main); font-weight: 800; font-size: 0.85rem; min-width: 16px; text-align: center; }
 
 .unit-pill.mixer-unit { background: rgba(155,138,196,0.18); color: var(--mixer-fizz); border: 1px solid rgba(155,138,196,0.4); }
+
+.builder-mocktail-name { background: rgba(255,255,255,0.05); border: 1px solid rgba(200,169,126,0.3); color: var(--nodee-gold); border-radius: 6px; padding: 4px 8px; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.5px; cursor: pointer; margin-left: auto; margin-right: 8px; }

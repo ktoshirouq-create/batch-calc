@@ -419,7 +419,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const section = document.createElement('div');
                 section.className = 'vault-subbatch' + (isBatch ? '' : ' vault-altrecipe');
-                let html = `<h4 class="vault-subbatch-title">${label.toUpperCase()}` +
+                const sectionTitle = isMocktailSection(label) ? getMocktailName(cocktail) : label;
+                let html = `<h4 class="vault-subbatch-title">${sectionTitle.toUpperCase()}` +
                     (isBatch
                         ? `<button class="sb-size" data-batch="${sbName.replace(/"/g, '&quot;')}" aria-label="Bottle size for ${label}">${bottleML}ml</button>`
                         : `<span class="vault-yield-label">PER SERVE</span>`) + `</h4>`;
@@ -476,6 +477,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const matchesQuery = (name) => {
             if (!q) return true;
             if (name.toLowerCase().includes(q)) return true;
+            if (getMocktailName(name).toLowerCase().includes(q)) return true;
             // search ingredients too — "what uses Tia Maria?"
             const related = [name, ...specs.filter(s => s.startsWith(name + ' — '))];
             return related.some(r => (recipeVault[r] || []).some(i => (i.name || '').toLowerCase().includes(q)));
@@ -541,7 +543,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const header = document.createElement('div');
             header.className = 'vault-header';
-            const displayName = isStandaloneName(cocktail) ? standaloneLabel(cocktail) : cocktail;
+            const displayName = isStandaloneName(cocktail) ? standaloneLabel(cocktail)
+                : (vaultFilter === 'mocktails' ? getMocktailName(cocktail) : cocktail);
             header.innerHTML = `<span class="cocktail-title">${displayName}</span>` +
                 `<button class="row-more" aria-label="Actions for ${displayName}">⋯</button>`;
             header.querySelector('.row-more').addEventListener('click', (e) => {
@@ -671,7 +674,13 @@ document.addEventListener('DOMContentLoaded', () => {
             sectionEl.className = 'builder-section';
             sectionEl.innerHTML = `
                 <div class="builder-section-header">
-                    <span class="builder-section-title">${sec.name}</span>
+                    <span class="builder-section-title">${
+                        isMocktailSection(sec.name)
+                            ? getMocktailName(capitalize((document.getElementById('builder-name')?.value || '').trim()) || 'Mocktail').toUpperCase()
+                            : sec.name
+                    }</span>
+                    ${(secIdx > 0 && isMocktailSection(sec.name))
+                        ? `<button class="builder-mocktail-name" aria-label="Name this mocktail">✎ name</button>` : ''}
                     ${(secIdx > 0 && isBatchSection(sec.name))
                         ? `<button class="builder-section-size" aria-label="Bottle size for ${sec.name}">${sec.bottleML || getBatchSize(`${(document.getElementById('builder-name')?.value || '').trim()} — ${sec.name}`)}ml</button>` : ''}
                     ${secIdx > 0 ? '<button class="builder-section-remove">×</button>' : ''}
@@ -858,6 +867,28 @@ document.addEventListener('DOMContentLoaded', () => {
                                 renderBuilder();
                             });
                         }, 350);
+                    });
+                });
+            }
+
+            const mockNameBtn = sectionEl.querySelector('.builder-mocktail-name');
+            if (mockNameBtn) {
+                mockNameBtn.addEventListener('click', () => {
+                    triggerHaptic('light');
+                    const cocktailNow = capitalize((document.getElementById('builder-name')?.value || '').trim());
+                    if (!cocktailNow) {
+                        openAlertModal({ title: 'NAME FIRST', message: 'Give the cocktail a name before naming its mocktail.' });
+                        return;
+                    }
+                    openSelectModal('MOCKTAIL NAME', [], null, {
+                        placeholder: `${cocktailNow} Mocktail`,
+                        btnLabel: 'SET',
+                        prefill: hasCustomMocktailName(cocktailNow) ? getMocktailName(cocktailNow) : '',
+                        onSubmit: (v) => {
+                            setMocktailName(cocktailNow, capitalize((v || '').trim()));
+                            renderBuilder();
+                            renderVault();
+                        }
                     });
                 });
             }
@@ -2692,6 +2723,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const SYNCED_SETTING_KEYS = [
         ['ing_bottles', 'codex_ing_bottles_v1'],
         ['batch_modes', 'codex_batch_modes_v1'],
+        ['mocktail_names', 'codex_mocktail_names_v1'],
         ['batch_sizes', 'codex_batch_sizes_v1'],
         ['shelf',       'codex_shelf_v1']
     ];
@@ -2862,6 +2894,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // Batch definition mode, keyed by full batch name ("Cocktail — Section").
     // 'bottle' = amounts are literal for one bottle. 'drink' = legacy ratio, scaled up.
     // Stored locally until the sheet gains a mode column.
+    // A mocktail isn't always just the virgin version of the same drink, so its
+    // display name can be overridden. Default is "<Cocktail> Mocktail".
+    const MOCKTAIL_NAME_KEY = 'codex_mocktail_names_v1';
+    function loadMocktailNames() {
+        try { return JSON.parse(localStorage.getItem(MOCKTAIL_NAME_KEY)) || {}; } catch { return {}; }
+    }
+    function getMocktailName(cocktail) {
+        return loadMocktailNames()[(cocktail || '').toLowerCase().trim()] || `${cocktail} Mocktail`;
+    }
+    function hasCustomMocktailName(cocktail) {
+        return !!loadMocktailNames()[(cocktail || '').toLowerCase().trim()];
+    }
+    function setMocktailName(cocktail, name) {
+        const m = loadMocktailNames();
+        const k = (cocktail || '').toLowerCase().trim();
+        if (name) m[k] = name; else delete m[k];
+        try { localStorage.setItem(MOCKTAIL_NAME_KEY, JSON.stringify(m)); } catch {}
+        if (typeof scheduleSettingsPush === 'function') scheduleSettingsPush();
+    }
+
     const BATCH_MODE_KEY = 'codex_batch_modes_v1';
     const BATCH_SIZE_KEY = 'codex_batch_sizes_v1';
     function loadBatchModes() {
