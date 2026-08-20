@@ -189,7 +189,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             input.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
             list.appendChild(wrap);
-            setTimeout(() => input.focus(), 350);
+            // Select any prefilled text so you can just type the new value
+            setTimeout(() => { input.focus(); if (input.value) input.select(); }, 350);
         }
         
         modal.classList.remove('hidden');
@@ -881,7 +882,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         return;
                     }
                     openSelectModal('MOCKTAIL NAME', [], null, {
-                        placeholder: `${cocktailNow} Mocktail`,
+                        placeholder: 'Mocktail name…',
                         btnLabel: 'SET',
                         prefill: hasCustomMocktailName(cocktailNow) ? getMocktailName(cocktailNow) : '',
                         onSubmit: (v) => {
@@ -2901,6 +2902,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try { return JSON.parse(localStorage.getItem(MOCKTAIL_NAME_KEY)) || {}; } catch { return {}; }
     }
     function getMocktailName(cocktail) {
+        // Default appends the suffix; a name you set is used exactly as typed.
         return loadMocktailNames()[(cocktail || '').toLowerCase().trim()] || `${cocktail} Mocktail`;
     }
     function hasCustomMocktailName(cocktail) {
