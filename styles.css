@@ -712,3 +712,5 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .static-step { display: inline-flex; align-items: center; gap: 2px; background: rgba(255,255,255,0.04); border: 1px solid #222; border-radius: 8px; padding: 2px; }
 .static-step .ss-btn { background: none; border: none; color: var(--nodee-gold); font-size: 0.95rem; font-weight: 900; padding: 4px 7px; cursor: pointer; line-height: 1; }
 .static-step .ss-n { color: var(--text-main); font-weight: 800; font-size: 0.85rem; min-width: 16px; text-align: center; }
+
+.unit-pill.mixer-unit { background: rgba(155,138,196,0.18); color: var(--mixer-fizz); border: 1px solid rgba(155,138,196,0.4); }

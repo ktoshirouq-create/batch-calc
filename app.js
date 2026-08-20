@@ -368,20 +368,17 @@ document.addEventListener('DOMContentLoaded', () => {
             let html = '';
             mainIngs.forEach(ing => {
                 html += `<div class="result-row ${ing.color}"><span class="ing-name">${ing.name}</span>`;
-                if (ing.color === 'static-ruby') {
-                    // top = no amount ever; other units scale their whole-number count with the round
-                    if ((ing.unit || 'dash') === 'top') {
-                        html += `<span class="ing-amount">top</span></div>`;
-                    } else {
-                        html += `<span class="ing-amount">${Math.round((ing.amount || 0) * round)} ${ing.unit || 'dash'}</span></div>`;
-                    }
+                if (isToppedRow(ing)) {
+                    html += `<span class="ing-amount">top</span></div>`;
+                } else if (ing.color === 'static-ruby') {
+                    html += `<span class="ing-amount">${Math.round((ing.amount || 0) * round)} ${ing.unit || 'dash'}</span></div>`;
                 } else {
                     html += `<span class="ing-amount">${formatAmount(ing.amount * round)}ml</span></div>`;
                 }
             });
             // Total yield for the round (static items excluded — dashes aren't volume)
             const mainTotal = mainIngs
-                .filter(i => i.color !== 'static-ruby')
+                .filter(i => i.color !== 'static-ruby' && !isToppedRow(i))
                 .reduce((s, i) => s + (i.amount || 0) * round, 0);
             if (mainTotal > 0) {
                 const perDrink = round > 0 ? mainTotal / round : mainTotal;
@@ -409,7 +406,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // to taste) so they always render at bottle scale. Alternate recipes
                 // like a Mocktail are made per serve and scale with SERVES instead.
                 const isBatch = isBatchSection(label) || isStandaloneName(sbName);
-                const ratioSum = sbIngs.filter(i => i.color !== 'static-ruby')
+                const ratioSum = sbIngs.filter(i => i.color !== 'static-ruby' && !isToppedRow(i))
                                        .reduce((s, i) => s + (i.amount || 0), 0);
                 const bottleML = getBatchSize(sbName);
                 const mode = getBatchMode(sbName);
@@ -428,8 +425,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         : `<span class="vault-yield-label">PER SERVE</span>`) + `</h4>`;
                 sbIngs.forEach(ing => {
                     let amtHtml;
-                    if (ing.color === 'static-ruby') {
-                        amtHtml = (ing.unit || 'dash') === 'top' ? 'top' : `${ing.amount || 0} ${ing.unit || 'dash'}`;
+                    if (isToppedRow(ing)) {
+                        amtHtml = 'top';
+                    } else if (ing.color === 'static-ruby') {
+                        amtHtml = `${ing.amount || 0} ${ing.unit || 'dash'}`;
                     } else {
                         amtHtml = `${formatAmount(Math.round((ing.amount || 0) * factor))}ml`;
                     }
@@ -656,7 +655,12 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('add-section-btn')?.classList.toggle('hidden', isBatch);
     }
     const catLabels = { 'amber-glow': 'SPIRIT', 'neon-cyan': 'LIQUEUR', 'juice-glow': 'JUICE', 'magenta-glow': 'SYRUP', 'coffee-dark': 'ESPRESSO', 'puree-mango': 'PUREE', 'mixer-fizz': 'MIXER', 'static-ruby': 'OTHER' };
-    const STATIC_UNITS = ['dash', 'squeeze', 'top'];;
+    const STATIC_UNITS = ['dash', 'squeeze'];
+    // Mixers are normally topped, not measured — but can be given an ml amount
+    // when they're part of a batch rather than poured at service.
+    const MIXER_UNITS = ['top', 'ml'];
+    const isTopped = (ing) => ing && ing.cat === 'mixer-fizz' && (ing.unit || 'top') === 'top';
+    const isToppedRow = (row) => row && row.color === 'mixer-fizz' && (row.unit || 'top') === 'top';
 
     function renderBuilder() {
         const container = document.getElementById('builder-sections');
@@ -692,6 +696,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div style="display:flex; align-items:center; gap:4px; margin-right:4px;">
                            ${countInput}
                            <button class="unit-pill" data-unit="${u}">${u}</button>
+                        </div>
+                    `;
+                } else if (ing.cat === 'mixer-fizz') {
+                    const mu = ing.unit || 'top';
+                    amountHtml = `
+                        <div style="display:flex; align-items:center; gap:4px; margin-right:4px;">
+                           ${mu === 'ml' ? `<input type="number" class="builder-row-amount" value="${ing.amount || ''}" placeholder="0">` : ''}
+                           <button class="unit-pill mixer-unit" data-unit="${mu}">${mu}</button>
                         </div>
                     `;
                 } else {
@@ -733,8 +745,19 @@ document.addEventListener('DOMContentLoaded', () => {
                         });
                     }
                 } else {
-                    row.querySelector('.builder-row-amount').addEventListener('input', e => {
+                    const amtEl = row.querySelector('.builder-row-amount');   // absent on topped mixers
+                    if (amtEl) amtEl.addEventListener('input', e => {
                         builderState.sections[secIdx].ingredients[ingIdx].amount = parseFloat(e.target.value) || 0;
+                    });
+                    const mixPill = row.querySelector('.mixer-unit');
+                    if (mixPill) mixPill.addEventListener('click', () => {
+                        triggerHaptic('light');
+                        const t = builderState.sections[secIdx].ingredients[ingIdx];
+                        const i = MIXER_UNITS.indexOf(t.unit || 'top');
+                        t.unit = MIXER_UNITS[(i + 1) % MIXER_UNITS.length];
+                        if (t.unit === 'top') t.amount = 1;      // keeps it past the save filter
+                        else if (!t.amount) t.amount = 100;
+                        renderBuilder();
                     });
                 }
                 
@@ -776,6 +799,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 const current = builderState.sections[secIdx].ingredients[ingIdx].cat;
                     const next = cats[(cats.indexOf(current) + 1) % cats.length];
                     builderState.sections[secIdx].ingredients[ingIdx].cat = next;
+                    if (next === 'mixer-fizz') {
+                        const t = builderState.sections[secIdx].ingredients[ingIdx];
+                        if (!t.unit || !MIXER_UNITS.includes(t.unit)) { t.unit = 'top'; t.amount = 1; }
+                        renderBuilder();
+                        return;
+                    }
                     if (next === 'static-ruby' && !builderState.sections[secIdx].ingredients[ingIdx].amount) {
                         builderState.sections[secIdx].ingredients[ingIdx].amount = 1;
                     }
@@ -1020,7 +1049,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         amount: isStatic ? (parseFloat(ing.amount) || 1) : parseFloat(ing.amount),
                         bottleSize: 0,
                         categoryTag: ing.cat,
-                        unit: ing.cat === 'static-ruby' ? (ing.unit || 'dash') : ''
+                        unit: ing.cat === 'static-ruby' ? (ing.unit || 'dash') : (ing.cat === 'mixer-fizz' ? (ing.unit || 'top') : '')
                     });
                 });
                 setBatchMode(fullName, 'bottle');
@@ -1063,7 +1092,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         amount: isStatic ? (parseFloat(ing.amount) || 1) : parseFloat(ing.amount),
                         bottleSize: 0,
                         categoryTag: ing.cat,
-                        unit: ing.cat === 'static-ruby' ? (ing.unit || 'dash') : ''
+                        unit: ing.cat === 'static-ruby' ? (ing.unit || 'dash') : (ing.cat === 'mixer-fizz' ? (ing.unit || 'top') : '')
                     });
                 });
             });
@@ -1174,7 +1203,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (mainRef && mainRef.amount > 0) {
                 batchBuilderState.perDrink = mainRef.amount;
             } else {
-                batchBuilderState.perDrink = batchBuilderState.ingredients.filter(i => i.cat !== 'static-ruby').reduce((sum, ing) => sum + (ing.amount || 0), 0);
+                batchBuilderState.perDrink = batchBuilderState.ingredients.filter(i => i.cat !== 'static-ruby' && !isTopped(i)).reduce((sum, ing) => sum + (ing.amount || 0), 0);
             }
         }
     }
@@ -1328,7 +1357,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (newMode === batchBuilderState.mode) return;
                 triggerHaptic('light');
                 const sum = batchBuilderState.ingredients
-                    .filter(i => i.cat !== 'static-ruby')
+                    .filter(i => i.cat !== 'static-ruby' && !isTopped(i))
                     .reduce((s, i) => s + (i.amount || 0), 0);
                 const bottle = batchBuilderState.bottleML || BATCH_BOTTLE_ML;
                 if (sum > 0) {
@@ -1338,7 +1367,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         ? (bottle / sum)
                         : ((batchBuilderState.perDrink > 0 ? batchBuilderState.perDrink : sum) / sum);
                     batchBuilderState.ingredients.forEach(i => {
-                        if (i.cat !== 'static-ruby') i.amount = Math.round((i.amount || 0) * f);
+                        if (i.cat !== 'static-ruby' && !isTopped(i)) i.amount = Math.round((i.amount || 0) * f);
                     });
                 }
                 batchBuilderState.mode = newMode;
@@ -1405,6 +1434,14 @@ document.addEventListener('DOMContentLoaded', () => {
                        <button class="unit-pill" data-unit="${u}">${u}</button>
                     </div>
                 `;
+            } else if (ing.cat === 'mixer-fizz') {
+                const mu = ing.unit || 'top';
+                amountHtml = `
+                    <div style="display:flex; align-items:center; gap:4px; margin-right:4px;">
+                       ${mu === 'ml' ? `<input type="number" class="builder-row-amount" value="${ing.amount || ''}" placeholder="0">` : ''}
+                       <button class="unit-pill mixer-unit" data-unit="${mu}">${mu}</button>
+                    </div>
+                `;
             } else {
                 amountHtml = `<input type="number" class="builder-row-amount" value="${ing.amount || ''}" placeholder="0">`;
             }
@@ -1443,8 +1480,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
             } else {
-                row.querySelector('.builder-row-amount').addEventListener('input', e => {
+                const amtEl = row.querySelector('.builder-row-amount');
+                if (amtEl) amtEl.addEventListener('input', e => {
                     batchBuilderState.ingredients[idx].amount = parseFloat(e.target.value) || 0;
+                    updateBatchYieldDisplay();
+                });
+                const mixPill = row.querySelector('.mixer-unit');
+                if (mixPill) mixPill.addEventListener('click', () => {
+                    triggerHaptic('light');
+                    const t = batchBuilderState.ingredients[idx];
+                    const i = MIXER_UNITS.indexOf(t.unit || 'top');
+                    t.unit = MIXER_UNITS[(i + 1) % MIXER_UNITS.length];
+                    if (t.unit === 'top') t.amount = 1;
+                    else if (!t.amount) t.amount = 100;
+                    renderBatchIngredients();
                     updateBatchYieldDisplay();
                 });
             }
@@ -1540,7 +1589,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateBatchYieldDisplay() {
         const autoSum = document.getElementById('batch-auto-sum');
         if (!autoSum || !batchBuilderState) return;
-        const total = batchBuilderState.ingredients.filter(i => i.cat !== 'static-ruby').reduce((s, i) => s + (i.amount || 0), 0);
+        const total = batchBuilderState.ingredients.filter(i => i.cat !== 'static-ruby' && !isTopped(i)).reduce((s, i) => s + (i.amount || 0), 0);
         autoSum.innerText = `${total.toFixed(1).replace(/\.0$/, '')} ml`;
         const readout = document.getElementById('batch-drinks-readout');
         if (readout) {
@@ -2864,7 +2913,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const specName = task.linkedSection
             ? `${task.linkedSpec} — ${task.linkedSection}`
             : task.linkedSpec;
-        const ings = (recipeVault[specName] || []).filter(i => i.color !== 'static-ruby');
+        const ings = (recipeVault[specName] || []).filter(i => i.color !== 'static-ruby' && !isToppedRow(i));
         wrap.innerHTML = '';
         if (!ings.length) {
             wrap.innerHTML = `<div class="batch-card-note">${vaultLive ? 'No ingredients found for this batch.' : "Can't reach the Codex — pull to refresh."}</div>`;
