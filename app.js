@@ -661,6 +661,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="builder-rows"></div>
                 <button class="builder-add-ing">＋ INGREDIENT</button>
+                ${(secIdx > 0 && !isBatchSection(sec.name))
+                    ? '<button class="builder-use-batch">＋ USE BATCH</button>' : ''}
             `;
             const rowsEl = sectionEl.querySelector('.builder-rows');
             sec.ingredients.forEach((ing, ingIdx) => {
@@ -766,6 +768,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 builderState.sections[secIdx].ingredients.push({ amount: 0, name: '', cat: 'amber-glow' });
                 renderBuilder();
             });
+            // Recipe sections (Mocktail etc) can POUR FROM a batch — the batch recipe
+            // stays in one place and the section just references it.
+            const useBatchBtn = sectionEl.querySelector('.builder-use-batch');
+            if (useBatchBtn) {
+                useBatchBtn.addEventListener('click', () => {
+                    triggerHaptic('light');
+                    const opts = [];
+                    // batches defined in this spec
+                    builderState.sections.forEach(s => {
+                        if (s.name !== 'MAIN' && isBatchSection(s.name)) opts.push({ label: s.name, value: s.name });
+                    });
+                    // standalone batches
+                    Object.keys(recipeVault || {}).filter(isStandaloneName).forEach(n => {
+                        opts.push({ label: standaloneLabel(n), value: standaloneLabel(n) });
+                    });
+                    if (!opts.length) {
+                        openAlertModal({ title: 'NO BATCHES', message: 'Add a batch to this spec first, or create a standalone batch.' });
+                        return;
+                    }
+                    openSelectModal('POUR FROM BATCH', opts, (val, label) => {
+                        setTimeout(() => {
+                            openNumberModal(`POUR OF ${label.toUpperCase()}`, 60, 'ml', (ml) => {
+                                const ings = builderState.sections[secIdx].ingredients;
+                                const existing = ings.find(i => (i.name || '').toLowerCase() === label.toLowerCase());
+                                const cat = /juice|mocktail/i.test(label) ? 'juice-glow' : 'amber-glow';
+                                if (existing) { existing.amount = ml; existing.cat = cat; }
+                                else ings.push({ amount: ml, name: label, cat });
+                                renderBuilder();
+                            });
+                        }, 350);
+                    });
+                });
+            }
+
             const sizeBtn = sectionEl.querySelector('.builder-section-size');
             if (sizeBtn) {
                 sizeBtn.addEventListener('click', () => {
@@ -908,14 +944,19 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         });
                     }
-                    setTimeout(() => openSectionPicker(val, pre), 350);
+                    // Only batches are built from MAIN's ingredients. A Mocktail (or any
+                    // other recipe section) is written from scratch — no picker.
+                    if (isBatchSection(val)) setTimeout(() => openSectionPicker(val, pre), 350);
+                    else { builderState.sections.push({ name: val, ingredients: [] }); renderBuilder(); }
                 },
                 {
                     placeholder: 'Or type custom section name...',
                     btnLabel: 'ADD CUSTOM',
                     onSubmit: (val) => {
                         // Custom: no rule — checklist opens unticked
-                        setTimeout(() => openSectionPicker(capitalize(val), []), 350);
+                        const custom = capitalize(val);
+                        if (isBatchSection(custom)) setTimeout(() => openSectionPicker(custom, []), 350);
+                        else { builderState.sections.push({ name: custom, ingredients: [] }); renderBuilder(); }
                     }
                 }
             );

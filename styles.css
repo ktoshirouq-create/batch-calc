@@ -673,3 +673,6 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 
 .builder-section-size { background: rgba(255,255,255,0.05); border: 1px solid rgba(200,169,126,0.3); color: var(--nodee-gold); border-radius: 6px; padding: 4px 8px; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.5px; cursor: pointer; margin-left: auto; margin-right: 8px; }
 .builder-section-header { gap: 8px; }
+
+.builder-use-batch { width: 100%; background: rgba(200,169,126,0.06); border: 1px dashed rgba(200,169,126,0.3); color: var(--nodee-gold); padding: 11px; border-radius: 10px; font-size: 0.72rem; font-weight: 800; letter-spacing: 1px; margin-top: 8px; cursor: pointer; }
+.builder-use-batch:active { background: rgba(200,169,126,0.14); }
