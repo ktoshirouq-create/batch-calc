@@ -686,7 +686,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 row.innerHTML = `
                     ${amountHtml}
-                    <input type="text" class="builder-row-name" list="shelf-suggestions" autocomplete="off" value="${(ing.name || '').replace(/"/g, '&quot;')}" placeholder="Ingredient">
+                    <input type="text" class="builder-row-name" autocomplete="off" value="${(ing.name || '').replace(/"/g, '&quot;')}" placeholder="Ingredient">
                     <button class="builder-row-cat ${ing.cat}">${catLabels[ing.cat] || 'SPIRIT'}</button>
                     <button class="builder-row-remove">×</button>
                 `;
@@ -716,6 +716,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
                 
+                attachIngredientSuggestions(row.querySelector('.builder-row-name'), (picked, cat) => {
+                    const ing2 = builderState.sections[secIdx].ingredients[ingIdx];
+                    ing2.name = picked;
+                    if (cat) ing2.cat = cat;
+                    renderBuilder();
+                });
                 row.querySelector('.builder-row-name').addEventListener('input', e => {
                     const val = e.target.value;
                     builderState.sections[secIdx].ingredients[ingIdx].name = val;
@@ -1379,7 +1385,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             row.innerHTML = `
                 ${amountHtml}
-                <input type="text" class="builder-row-name" list="shelf-suggestions" autocomplete="off" value="${(ing.name || '').replace(/"/g, '&quot;')}" placeholder="Ingredient">
+                <input type="text" class="builder-row-name" autocomplete="off" value="${(ing.name || '').replace(/"/g, '&quot;')}" placeholder="Ingredient">
                 <button class="builder-row-cat ${ing.cat}">${catLabels[ing.cat] || 'SPIRIT'}</button>
                 <button class="builder-row-remove">×</button>
             `;
@@ -1409,8 +1415,36 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
             
+            attachIngredientSuggestions(row.querySelector('.builder-row-name'), (picked, cat) => {
+                batchBuilderState.ingredients[idx].name = picked;
+                if (cat) batchBuilderState.ingredients[idx].cat = cat;
+                renderBatchIngredients();
+            });
             row.querySelector('.builder-row-name').addEventListener('input', e => {
-                batchBuilderState.ingredients[idx].name = e.target.value;
+                const val = e.target.value;
+                batchBuilderState.ingredients[idx].name = val;
+                if (!val.trim()) return;
+                // The batch builder never applied a category — a known ingredient
+                // like Yuzu came in as SPIRIT even though the shelf says LIQUEUR.
+                const current = batchBuilderState.ingredients[idx].cat;
+                let detected = null, shelfHit = false;
+                if (typeof shelfData !== 'undefined') {
+                    const m = Object.keys(shelfData).find(k => k.toLowerCase() === val.toLowerCase().trim());
+                    if (m) { detected = shelfData[m].category; shelfHit = true; }
+                }
+                if (!shelfHit) detected = categorizeIngredient(val);
+                if (detected && detected !== current && (shelfHit || current === 'amber-glow')) {
+                    // respect the bucket's allowed categories
+                    let allowed = null;
+                    if (BATCH_CONFIG[batchBuilderState.type]) allowed = BATCH_CONFIG[batchBuilderState.type].allowedCategories;
+                    else if (batchBuilderState.type === 'Mocktail') allowed = ['juice-glow', 'puree-mango', 'magenta-glow'];
+                    if (!allowed || allowed.includes(detected)) {
+                        batchBuilderState.ingredients[idx].cat = detected;
+                        const btn = row.querySelector('.builder-row-cat');
+                        btn.className = `builder-row-cat ${detected}`;
+                        btn.innerText = catLabels[detected] || 'SPIRIT';
+                    }
+                }
             });
             row.querySelector('.builder-row-cat').addEventListener('click', () => {
                 triggerHaptic('light');
@@ -1554,6 +1588,53 @@ document.addEventListener('DOMContentLoaded', () => {
         try { localStorage.setItem(SHELF_KEY, JSON.stringify(shelfData)); } catch {}
         refreshShelfDatalist();
         if (typeof scheduleSettingsPush === 'function') scheduleSettingsPush();
+    }
+
+    // Custom suggestion pills under an ingredient field — matches ANYWHERE in the
+    // name (not just prefix), recency-first, and stays quiet until you type.
+    // Picking one also applies that ingredient's stored category.
+    function attachIngredientSuggestions(input, onPick) {
+        if (!input) return;
+        const rowEl = document.createElement('div');
+        rowEl.className = 'ing-sugg-row hidden';
+        input.parentNode.insertBefore(rowEl, input.nextSibling);
+
+        const hide = () => { rowEl.classList.add('hidden'); rowEl.innerHTML = ''; };
+
+        const render = () => {
+            const q = (input.value || '').toLowerCase().trim();
+            if (!q) { hide(); return; }
+            const names = Object.keys(shelfData || {});
+            const hits = names
+                .filter(n => n.toLowerCase().includes(q) && n.toLowerCase() !== q)
+                .sort((a, b) => {
+                    const ap = a.toLowerCase().startsWith(q) ? 0 : 1;
+                    const bp = b.toLowerCase().startsWith(q) ? 0 : 1;
+                    return ap - bp || a.localeCompare(b);
+                })
+                .slice(0, 6);
+            if (!hits.length) { hide(); return; }
+            rowEl.innerHTML = '';
+            hits.forEach(n => {
+                const pill = document.createElement('button');
+                pill.type = 'button';
+                pill.className = `ing-sugg ${shelfData[n].category || ''}`;
+                pill.innerText = n;
+                pill.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    triggerHaptic('light');
+                    input.value = n;
+                    hide();
+                    onPick(n, shelfData[n].category);
+                });
+                rowEl.appendChild(pill);
+            });
+            rowEl.classList.remove('hidden');
+        };
+
+        input.addEventListener('input', render);
+        input.addEventListener('blur', () => setTimeout(hide, 180));   // let the tap land first
     }
 
     function refreshShelfDatalist() {

@@ -676,3 +676,16 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 
 .builder-use-batch { width: 100%; background: rgba(200,169,126,0.06); border: 1px dashed rgba(200,169,126,0.3); color: var(--nodee-gold); padding: 11px; border-radius: 10px; font-size: 0.72rem; font-weight: 800; letter-spacing: 1px; margin-top: 8px; cursor: pointer; }
 .builder-use-batch:active { background: rgba(200,169,126,0.14); }
+
+/* --- INGREDIENT SUGGESTION PILLS (replaces the native datalist) --- */
+.ing-sugg-row { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 2px; width: 100%; }
+.ing-sugg-row.hidden { display: none; }
+.ing-sugg { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: var(--text-main); border-radius: 7px; padding: 6px 9px; font-size: 0.72rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.ing-sugg:active { background: rgba(200,169,126,0.2); }
+.ing-sugg.amber-glow { border-color: rgba(229,177,93,0.5); }
+.ing-sugg.neon-cyan { border-color: rgba(126,170,200,0.5); }
+.ing-sugg.juice-glow { border-color: rgba(158,196,168,0.5); }
+.ing-sugg.magenta-glow { border-color: rgba(176,106,139,0.5); }
+.ing-sugg.puree-mango { border-color: rgba(232,116,59,0.5); }
+.ing-sugg.static-ruby { border-color: rgba(140,28,32,0.6); }
+.builder-row { flex-wrap: wrap; }
