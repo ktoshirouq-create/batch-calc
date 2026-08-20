@@ -10,6 +10,7 @@
     --juice-glow: #9EC4A8;
     --coffee-dark: #6F4E37;
     --puree-mango: #E8743B;
+    --mixer-fizz: #9B8AC4;
     --static-ruby: #8C1C20;
 }
 
@@ -210,7 +211,6 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 /* Static & OPS UI Updates */
 .unit-pill { background: rgba(255,255,255,0.08); padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-main); transition: background 0.2s; user-select: none; }
 .unit-pill:active { background: var(--nodee-gold); color: #000; }
-.builder-static-input { width: 35px; background: transparent; border: 1px dashed rgba(255,255,255,0.2); color: #fff; text-align: center; border-radius: 4px; font-size: 0.9rem; margin-right: 8px; padding: 2px 0; outline: none; }
 .ops-number { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--text-muted); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 900; color: var(--text-muted); flex-shrink: 0; transition: all 0.2s ease; cursor: pointer; }
 .ops-time-tag { font-size: 0.65rem; color: var(--text-muted); margin-top: 4px; letter-spacing: 0.5px; }
 .ops-time-tag.text-red { color: #d97c8e; }
@@ -689,3 +689,15 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .ing-sugg.puree-mango { border-color: rgba(232,116,59,0.5); }
 .ing-sugg.static-ruby { border-color: rgba(140,28,32,0.6); }
 .builder-row { flex-wrap: wrap; }
+
+/* --- MIXER category (soda, sparkling, tonic, Mystic Mango...) --- */
+.mixer-fizz .ing-amount { color: var(--mixer-fizz); }
+.bc-amt.mixer-fizz { color: var(--mixer-fizz); }
+.builder-row-cat.mixer-fizz, .stage-cat.mixer-fizz, .shelf-cat-btn.mixer-fizz,
+.shelf-add-cat.mixer-fizz, .batch-mode-pill.mixer-fizz { background: var(--mixer-fizz); color: #000; }
+.ing-sugg.mixer-fizz { border-color: rgba(155,138,196,0.5); }
+
+/* --- DASH STEPPER (was a fiddly typed field) --- */
+.static-step { display: inline-flex; align-items: center; gap: 2px; background: rgba(255,255,255,0.04); border: 1px solid #222; border-radius: 8px; padding: 2px; }
+.static-step .ss-btn { background: none; border: none; color: var(--nodee-gold); font-size: 0.95rem; font-weight: 900; padding: 4px 7px; cursor: pointer; line-height: 1; }
+.static-step .ss-n { color: var(--text-main); font-weight: 800; font-size: 0.85rem; min-width: 16px; text-align: center; }

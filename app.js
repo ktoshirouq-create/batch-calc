@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- BATCHING ENGINE RULES (THE BOUNCER) ---
     const BATCH_CONFIG = {
         'Spirit Batch': { allowedCategories: ['amber-glow', 'neon-cyan', 'magenta-glow'] }, 
-        'Juice Batch': { allowedCategories: ['juice-glow', 'puree-mango', 'magenta-glow'] }, 
+        'Juice Batch': { allowedCategories: ['juice-glow', 'puree-mango', 'magenta-glow', 'mixer-fizz'] }, 
         'Espresso Batch': { allowedCategories: ['coffee-dark'] }
     };
 
@@ -46,6 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (/espresso\s*batch/.test(low)) return 'coffee-dark';
         if (/espresso|cold\s*brew|coffee/.test(low)) return 'coffee-dark';
         if (/puree/.test(low)) return 'puree-mango';
+        if (/soda|sparkling|tonic|sprite|cola|coke|ginger beer|ginger ale|fever.?tree|mystic|lemonade|seltzer|club soda|mixer/.test(low)) return 'mixer-fizz';
         if (/bitters|angostura|ango|peychaud|egg white|^egg$|tincture|saline|absinthe rinse/.test(low)) return 'static-ruby';
         if (SYRUP_KEYS.some(k => low.includes(k))) return 'magenta-glow';
         if (LIQUEUR_KEYS.some(k => low.includes(k))) return 'neon-cyan';
@@ -469,7 +470,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const catOrder = { 'amber-glow': 1, 'neon-cyan': 2, 'juice-glow': 3, 'magenta-glow': 4, 'coffee-dark': 5, 'puree-mango': 6, 'static-ruby': 7 };
+        const catOrder = { 'amber-glow': 1, 'neon-cyan': 2, 'juice-glow': 3, 'mixer-fizz': 4, 'magenta-glow': 5, 'coffee-dark': 6, 'puree-mango': 7, 'static-ruby': 8 };
         // --- FILTER + SEARCH ---
         const q = (vaultQuery || '').toLowerCase().trim();
         const specHasMocktail = (name) => specs.some(s => s.startsWith(name + ' — ') && isMocktailSection(s.slice(name.length + 3)));
@@ -642,7 +643,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('add-batch-btn')?.classList.toggle('hidden', isBatch);
         document.getElementById('add-section-btn')?.classList.toggle('hidden', isBatch);
     }
-    const catLabels = { 'amber-glow': 'SPIRIT', 'neon-cyan': 'LIQUEUR', 'juice-glow': 'JUICE', 'magenta-glow': 'SYRUP', 'coffee-dark': 'ESPRESSO', 'puree-mango': 'PUREE', 'static-ruby': 'OTHER' };
+    const catLabels = { 'amber-glow': 'SPIRIT', 'neon-cyan': 'LIQUEUR', 'juice-glow': 'JUICE', 'magenta-glow': 'SYRUP', 'coffee-dark': 'ESPRESSO', 'puree-mango': 'PUREE', 'mixer-fizz': 'MIXER', 'static-ruby': 'OTHER' };
     const STATIC_UNITS = ['dash', 'squeeze', 'top'];;
 
     function renderBuilder() {
@@ -673,9 +674,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (ing.cat === 'static-ruby') {
                     const u = ing.unit || 'dash';
                     // 'top' has no meaningful count — hide the number input entirely
-                    const countInput = u === 'top' ? '' : `<input type="number" class="builder-static-input" value="${ing.amount || ''}" placeholder="0" style="width:30px;">`;
+                    const countInput = u === 'top' ? '' :
+                        `<span class="static-step"><button class="ss-btn" data-d="-1">−</button><span class="ss-n">${ing.amount || 0}</span><button class="ss-btn" data-d="1">+</button></span>`;
                     amountHtml = `
-                        <div style="display:flex; width: 95px; align-items:center; gap:4px; margin-right:4px;">
+                        <div style="display:flex; align-items:center; gap:4px; margin-right:4px;">
                            ${countInput}
                            <button class="unit-pill" data-unit="${u}">${u}</button>
                         </div>
@@ -692,12 +694,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
                 
                 if (ing.cat === 'static-ruby') {
-                    const staticInput = row.querySelector('.builder-static-input');  // absent for 'top' rows
-                    if (staticInput) {
-                        staticInput.addEventListener('input', (e) => {
-                            builderState.sections[secIdx].ingredients[ingIdx].amount = parseFloat(e.target.value) || 0;
+                    row.querySelectorAll('.ss-btn').forEach(b => {
+                        b.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            triggerHaptic('light');
+                            const d = parseInt(b.getAttribute('data-d'));
+                            const t = builderState.sections[secIdx].ingredients[ingIdx];
+                            t.amount = Math.max(0, (parseFloat(t.amount) || 0) + d);
+                            const n = row.querySelector('.ss-n');
+                            if (n) n.innerText = t.amount;
                         });
-                    }
+                    });
                     const unitPill = row.querySelector('.unit-pill');
                     if (unitPill) {
                         unitPill.addEventListener('click', (e) => {
@@ -750,7 +757,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 row.querySelector('.builder-row-cat').addEventListener('click', () => {
                 triggerHaptic('light');
-                const cats = ['amber-glow', 'neon-cyan', 'juice-glow', 'puree-mango', 'magenta-glow', 'coffee-dark', 'static-ruby'];
+                const cats = ['amber-glow', 'neon-cyan', 'juice-glow', 'mixer-fizz', 'puree-mango', 'magenta-glow', 'coffee-dark', 'static-ruby'];
                 const current = builderState.sections[secIdx].ingredients[ingIdx].cat;
                     const next = cats[(cats.indexOf(current) + 1) % cats.length];
                     builderState.sections[secIdx].ingredients[ingIdx].cat = next;
@@ -1087,9 +1094,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function sweepIntoBatch(targetType) {
         const mainSec = builderState.sections.find(s => s.name === 'MAIN');
         
-        let allowed = ['amber-glow', 'neon-cyan', 'juice-glow', 'puree-mango', 'magenta-glow', 'coffee-dark'];
+        let allowed = ['amber-glow', 'neon-cyan', 'juice-glow', 'mixer-fizz', 'puree-mango', 'magenta-glow', 'coffee-dark'];
         if (BATCH_CONFIG[targetType]) allowed = BATCH_CONFIG[targetType].allowedCategories;
-        else if (targetType === 'Mocktail') allowed = ['juice-glow', 'puree-mango', 'magenta-glow'];
+        else if (targetType === 'Mocktail') allowed = ['juice-glow', 'puree-mango', 'magenta-glow', 'mixer-fizz'];
         
         // Build exclusion sets: names already in OTHER sub-batches, plus all sub-batch names (so refs don't pull in as constituents)
         const inOtherBatch = new Set();
@@ -1372,9 +1379,10 @@ document.addEventListener('DOMContentLoaded', () => {
             let amountHtml = '';
             if (ing.cat === 'static-ruby') {
                 const u = ing.unit || 'dash';
-                const countInput = u === 'top' ? '' : `<input type="number" class="builder-static-input" value="${ing.amount || ''}" placeholder="0" style="width:30px;">`;
+                const countInput = u === 'top' ? '' :
+                    `<span class="static-step"><button class="ss-btn" data-d="-1">−</button><span class="ss-n">${ing.amount || 0}</span><button class="ss-btn" data-d="1">+</button></span>`;
                 amountHtml = `
-                    <div style="display:flex; width: 85px; align-items:center; gap:4px; margin-right:4px;">
+                    <div style="display:flex; align-items:center; gap:4px; margin-right:4px;">
                        ${countInput}
                        <button class="unit-pill" data-unit="${u}">${u}</button>
                     </div>
@@ -1391,12 +1399,17 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             
             if (ing.cat === 'static-ruby') {
-                const staticInput = row.querySelector('.builder-static-input');
-                if (staticInput) {
-                    staticInput.addEventListener('input', (e) => {
-                        batchBuilderState.ingredients[idx].amount = parseFloat(e.target.value) || 0;
+                row.querySelectorAll('.ss-btn').forEach(b => {
+                    b.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        triggerHaptic('light');
+                        const d = parseInt(b.getAttribute('data-d'));
+                        const t = batchBuilderState.ingredients[idx];
+                        t.amount = Math.max(0, (parseFloat(t.amount) || 0) + d);
+                        const n = row.querySelector('.ss-n');
+                        if (n) n.innerText = t.amount;
                     });
-                }
+                });
                 const unitPill = row.querySelector('.unit-pill');
                 if (unitPill) {
                     unitPill.addEventListener('click', (e) => {
@@ -1437,7 +1450,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // respect the bucket's allowed categories
                     let allowed = null;
                     if (BATCH_CONFIG[batchBuilderState.type]) allowed = BATCH_CONFIG[batchBuilderState.type].allowedCategories;
-                    else if (batchBuilderState.type === 'Mocktail') allowed = ['juice-glow', 'puree-mango', 'magenta-glow'];
+                    else if (batchBuilderState.type === 'Mocktail') allowed = ['juice-glow', 'puree-mango', 'magenta-glow', 'mixer-fizz'];
                     if (!allowed || allowed.includes(detected)) {
                         batchBuilderState.ingredients[idx].cat = detected;
                         const btn = row.querySelector('.builder-row-cat');
@@ -1449,11 +1462,11 @@ document.addEventListener('DOMContentLoaded', () => {
             row.querySelector('.builder-row-cat').addEventListener('click', () => {
                 triggerHaptic('light');
                 
-                let cats = ['amber-glow', 'neon-cyan', 'juice-glow', 'puree-mango', 'magenta-glow', 'coffee-dark', 'static-ruby'];
+                let cats = ['amber-glow', 'neon-cyan', 'juice-glow', 'mixer-fizz', 'puree-mango', 'magenta-glow', 'coffee-dark', 'static-ruby'];
                 if (BATCH_CONFIG[batchBuilderState.type]) {
                     cats = BATCH_CONFIG[batchBuilderState.type].allowedCategories;
                 } else if (batchBuilderState.type === 'Mocktail') {
-                    cats = ['juice-glow', 'puree-mango', 'magenta-glow'];
+                    cats = ['juice-glow', 'puree-mango', 'magenta-glow', 'mixer-fizz'];
                 }
 
                 if (cats.length === 1) {
@@ -1574,8 +1587,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const SHELF_KEY = 'codex_shelf_v1';
     let shelfData = {};
     let shelfAddState = null;
-    const shelfCatLabels = { 'amber-glow': 'SPIRIT', 'neon-cyan': 'LIQUEUR', 'juice-glow': 'JUICE', 'magenta-glow': 'SYRUP', 'coffee-dark': 'ESPRESSO', 'puree-mango': 'PUREE', 'static-ruby': 'OTHER' };
-    const shelfDefaultAbvs = { 'amber-glow': 40, 'neon-cyan': 20, 'juice-glow': 0, 'magenta-glow': 0, 'coffee-dark': 0, 'puree-mango': 0, 'static-ruby': 45 };
+    const shelfCatLabels = { 'amber-glow': 'SPIRIT', 'neon-cyan': 'LIQUEUR', 'juice-glow': 'JUICE', 'magenta-glow': 'SYRUP', 'coffee-dark': 'ESPRESSO', 'puree-mango': 'PUREE', 'mixer-fizz': 'MIXER', 'static-ruby': 'OTHER' };
+    const shelfDefaultAbvs = { 'amber-glow': 40, 'neon-cyan': 20, 'juice-glow': 0, 'magenta-glow': 0, 'coffee-dark': 0, 'puree-mango': 0, 'mixer-fizz': 0, 'static-ruby': 45 };
 
     function loadShelf() {
         try {
@@ -1676,7 +1689,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (changed) saveShelf();
     };
 
-    const shelfCats = ['amber-glow', 'neon-cyan', 'juice-glow', 'puree-mango', 'magenta-glow', 'coffee-dark', 'static-ruby'];
+    const shelfCats = ['amber-glow', 'neon-cyan', 'juice-glow', 'mixer-fizz', 'puree-mango', 'magenta-glow', 'coffee-dark', 'static-ruby'];
 
     function toggleShelfAddForm() {
         const form = document.getElementById('shelf-add-form');
@@ -1730,7 +1743,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const list = document.getElementById('shelf-list');
         if (!list) return;
         list.innerHTML = '';
-        const catOrder = { 'amber-glow': 1, 'neon-cyan': 2, 'juice-glow': 3, 'magenta-glow': 4, 'coffee-dark': 5, 'puree-mango': 6, 'static-ruby': 7 };
+        const catOrder = { 'amber-glow': 1, 'neon-cyan': 2, 'juice-glow': 3, 'mixer-fizz': 4, 'magenta-glow': 5, 'coffee-dark': 6, 'puree-mango': 7, 'static-ruby': 8 };
         const entries = Object.entries(shelfData).sort((a, b) => {
             const oa = catOrder[a[1].category] || 10, ob = catOrder[b[1].category] || 10;
             return oa !== ob ? oa - ob : a[0].localeCompare(b[0]);
@@ -2233,7 +2246,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.cycleCategory = (index) => {
         triggerHaptic('light');
-        const tags = ['amber-glow', 'neon-cyan', 'magenta-glow', 'juice-glow'];
+        const tags = ['amber-glow', 'neon-cyan', 'magenta-glow', 'juice-glow', 'mixer-fizz'];
         const labels = { 'amber-glow': 'SPIRIT', 'neon-cyan': 'LIQUEUR', 'magenta-glow': 'SYRUP', 'juice-glow': 'JUICE' };
         let curr = tags.indexOf(parsedStagingData[index].categoryTag);
         let next = (curr + 1) % tags.length;
