@@ -2075,15 +2075,38 @@ document.addEventListener('DOMContentLoaded', () => {
             const cocktailName = sheet.dataset.cocktailName;
             sheet.classList.add('hidden');
             if (action === 'edit' && cocktailName) editSpec(cocktailName);
-            else if (action === 'rename' && cocktailName) renameSpec(cocktailName);
+            else if (action === 'rename' && cocktailName) {
+                // In the mocktails view this names the MOCKTAIL only — renaming the
+                // spec there would also rename the alcoholic version.
+                if (vaultFilter === 'mocktails') {
+                    openSelectModal('MOCKTAIL NAME', [], null, {
+                        placeholder: 'Mocktail name…',
+                        btnLabel: 'SET',
+                        prefill: getMocktailName(cocktailName),
+                        onSubmit: (v) => {
+                            const nm = capitalize((v || '').trim());
+                            setMocktailName(cocktailName, nm);
+                            renderVault();
+                            showToast(nm ? `Mocktail named "${nm}"` : 'Mocktail name reset');
+                        }
+                    });
+                } else renameSpec(cocktailName);
+            }
             else if (action === 'delete' && cocktailName) deleteSpec(cocktailName);
         });
     }
     window.openActionSheet = (cocktailName) => {
         const sheet = document.getElementById('action-sheet-modal');
         if (!sheet) return;
+        const inMocktails = (vaultFilter === 'mocktails');
         sheet.dataset.cocktailName = cocktailName;
-        sheet.querySelector('.action-sheet-title').innerText = cocktailName;
+        sheet.querySelector('.action-sheet-title').innerText =
+            inMocktails ? getMocktailName(cocktailName) : cocktailName;
+        const renameBtn = sheet.querySelector('[data-action="rename"]');
+        if (renameBtn) renameBtn.innerText = inMocktails ? 'RENAME MOCKTAIL' : 'RENAME';
+        // Deleting from the mocktails view would delete the whole drink — hide it
+        const delBtn = sheet.querySelector('[data-action="delete"]');
+        if (delBtn) delBtn.classList.toggle('hidden', inMocktails);
         sheet.classList.remove('hidden');
     };
     
