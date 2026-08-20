@@ -123,7 +123,7 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .action-btn.delete:active { background: rgba(217, 124, 142, 0.2); }
 
 .vault-divider { height: 1px; background: linear-gradient(to right, transparent, rgba(200, 169, 126, 0.25), transparent); margin: 26px 0 12px; }
-.vault-subbatch { margin-top: 14px; opacity: 0.62; }
+.vault-subbatch { margin-top: 18px; opacity: 1; }
 .vault-subbatch-title { font-size: 0.65rem; font-weight: 800; letter-spacing: 1.8px; color: var(--text-muted); text-transform: uppercase; padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: baseline; }
 .vault-yield-label { font-size: 0.55rem; font-weight: 700; color: var(--text-muted); letter-spacing: 1px; opacity: 0.7; }
 .subbatch-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; }
@@ -668,8 +668,11 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .vault-filter.active { background: var(--nodee-gold); color: var(--bg-oled); border-color: var(--nodee-gold); }
 
 /* Alternate recipes (mocktail etc) read as a recipe, not a dimmed batch */
-.vault-altrecipe { opacity: 0.85; }
-.vault-altrecipe .subbatch-row .ing-name { color: var(--text-main); }
+/* Sub-sections (batches AND alternate recipes) share one muted level so the
+   card reads as: MAIN loud, everything below it quiet and equal. */
+.vault-subbatch .subbatch-row .ing-name { color: var(--text-muted); }
+.vault-subbatch .subbatch-row .ing-amount { opacity: 0.75; }
+.vault-subbatch-title { color: var(--text-muted); }
 
 .builder-section-size { background: rgba(255,255,255,0.05); border: 1px solid rgba(200,169,126,0.3); color: var(--nodee-gold); border-radius: 6px; padding: 4px 8px; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.5px; cursor: pointer; margin-left: auto; margin-right: 8px; }
 .builder-section-header { gap: 8px; }
@@ -688,7 +691,15 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .ing-sugg.magenta-glow { border-color: rgba(176,106,139,0.5); }
 .ing-sugg.puree-mango { border-color: rgba(232,116,59,0.5); }
 .ing-sugg.static-ruby { border-color: rgba(140,28,32,0.6); }
-.builder-row { flex-wrap: wrap; }
+/* Only the suggestion pill row wraps to its own line — the controls stay put.
+   (A blanket flex-wrap pushed the remove × onto its own row on static entries.) */
+.builder-row { flex-wrap: wrap; align-items: center; }
+.builder-row > .ing-sugg-row { flex-basis: 100%; }
+.builder-row-name { flex: 1 1 60px; min-width: 0; }
+.builder-row-cat { min-width: 62px; padding: 10px 4px; font-size: 0.58rem; }
+.builder-row-remove { margin-left: auto; }
+.static-step { flex-shrink: 0; }
+.unit-pill { flex-shrink: 0; }
 
 /* --- MIXER category (soda, sparkling, tonic, Mystic Mango...) --- */
 .mixer-fizz .ing-amount { color: var(--mixer-fizz); }

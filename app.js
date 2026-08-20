@@ -509,6 +509,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (vaultFilter === 'mocktails') {
                 subBatches = subBatches.filter(s => isMocktailSection(s.slice(cocktail.length + 3)));
             }
+            // Fixed reading order — you always want the spirit batch first.
+            const SECTION_RANK = (n) => {
+                const l = (isStandaloneName(n) ? standaloneLabel(n) : n.replace(cocktail + ' — ', '')).toLowerCase();
+                if (/spirit/.test(l)) return 1;
+                if (/juice/.test(l)) return 2;
+                if (/espresso|coffee/.test(l)) return 3;
+                if (/cream/.test(l)) return 4;
+                if (/mocktail/.test(l)) return 5;
+                return 6;
+            };
             // Pull in any standalone batch this cocktail references from MAIN
             (recipeVault[cocktail] || []).forEach(ing => {
                 const ref = `${STANDALONE_OWNER} — ${ing.name}`;
@@ -523,6 +533,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 bh.innerText = 'BATCHES';
                 list.appendChild(bh);
             }
+            subBatches.sort((a, b) => SECTION_RANK(a) - SECTION_RANK(b) || a.localeCompare(b));
+
             const id = cocktail.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
 
             const vItem = document.createElement('div');
@@ -711,9 +723,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             triggerHaptic('light');
                             let currIdx = STATIC_UNITS.indexOf(e.target.dataset.unit || 'dash');
                             const nextUnit = STATIC_UNITS[(currIdx + 1) % STATIC_UNITS.length];
-                            builderState.sections[secIdx].ingredients[ingIdx].unit = nextUnit;
-                            // 'top' stores amount:1 internally so the save filter keeps it; display never shows the number
-                            if (nextUnit === 'top') builderState.sections[secIdx].ingredients[ingIdx].amount = 1;
+                            const t = builderState.sections[secIdx].ingredients[ingIdx];
+                            t.unit = nextUnit;
+                            // 'top' has no count; 'squeeze' is almost always one (an egg white)
+                            if (nextUnit === 'top') t.amount = 1;
+                            else if (nextUnit === 'squeeze') t.amount = t.amount || 1;
+                            else if (!t.amount) t.amount = 1;
                             renderBuilder();
                         });
                     }
@@ -761,6 +776,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const current = builderState.sections[secIdx].ingredients[ingIdx].cat;
                     const next = cats[(cats.indexOf(current) + 1) % cats.length];
                     builderState.sections[secIdx].ingredients[ingIdx].cat = next;
+                    if (next === 'static-ruby' && !builderState.sections[secIdx].ingredients[ingIdx].amount) {
+                        builderState.sections[secIdx].ingredients[ingIdx].amount = 1;
+                    }
                     if (next === 'static-ruby' || current === 'static-ruby') {
                         renderBuilder(); // Re-render to toggle the static input UI
                     } else {
@@ -1416,8 +1434,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         triggerHaptic('light');
                         let currIdx = STATIC_UNITS.indexOf(e.target.dataset.unit || 'dash');
                         const nextUnit = STATIC_UNITS[(currIdx + 1) % STATIC_UNITS.length];
-                        batchBuilderState.ingredients[idx].unit = nextUnit;
-                        if (nextUnit === 'top') batchBuilderState.ingredients[idx].amount = 1;
+                        const t = batchBuilderState.ingredients[idx];
+                        t.unit = nextUnit;
+                        if (nextUnit === 'top') t.amount = 1;
+                        else if (nextUnit === 'squeeze') t.amount = t.amount || 1;
+                        else if (!t.amount) t.amount = 1;
                         renderBatchIngredients();
                     });
                 }
@@ -2019,7 +2040,17 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             builderState.sections.push(sec);
         });
-        builderState.sections.sort((a, b) => (a.name === 'MAIN' ? -1 : (b.name === 'MAIN' ? 1 : 0)));
+        const BUILDER_RANK = (n) => {
+            const l = (n || '').toLowerCase();
+            if (l === 'main') return 0;
+            if (/spirit/.test(l)) return 1;
+            if (/juice/.test(l)) return 2;
+            if (/espresso|coffee/.test(l)) return 3;
+            if (/cream/.test(l)) return 4;
+            if (/mocktail/.test(l)) return 5;
+            return 6;
+        };
+        builderState.sections.sort((a, b) => BUILDER_RANK(a.name) - BUILDER_RANK(b.name));
         document.getElementById('builder-name').value = name;
         renderBuilder();
         if (typeof expandSpecBuilder === 'function') expandSpecBuilder();
