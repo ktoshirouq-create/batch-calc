@@ -716,3 +716,10 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .unit-pill.mixer-unit { background: rgba(155,138,196,0.18); color: var(--mixer-fizz); border: 1px solid rgba(155,138,196,0.4); }
 
 .builder-mocktail-name { background: rgba(255,255,255,0.05); border: 1px solid rgba(200,169,126,0.3); color: var(--nodee-gold); border-radius: 6px; padding: 4px 8px; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.5px; cursor: pointer; margin-left: auto; margin-right: 8px; }
+
+/* --- VARIANT PILLS (mocktail / 18+ availability at a glance) --- */
+.variant-pill { font-size: 0.54rem; font-weight: 900; letter-spacing: 0.5px; padding: 3px 6px; border-radius: 5px; flex-shrink: 0; margin-left: 4px; }
+.vp-mock { color: var(--nodee-gold); border: 1px solid rgba(200,169,126,0.55); }
+.vp-18 { color: #7FBF8F; border: 1px solid rgba(127,191,143,0.55); }
+.vault-u21 .vault-subbatch-title { color: #7FBF8F; }
+.vault-filter[data-filter="u21"] { flex: 0 0 46px; }

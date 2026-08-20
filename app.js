@@ -361,7 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderVaultContent(container, cocktail, subBatches, round) {
         container.innerHTML = '';
-        const mainIngs = (vaultFilter === 'mocktails') ? [] : (recipeVault[cocktail] || []);
+        const mainIngs = (vaultFilter === 'mocktails' || vaultFilter === 'u21') ? [] : (recipeVault[cocktail] || []);
 
         if (mainIngs.length > 0) {
             const mainSection = document.createElement('div');
@@ -419,8 +419,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const perBottle = ratioSum > 0 ? Math.round(ratioSum * factor) : bottleML;
 
                 const section = document.createElement('div');
-                section.className = 'vault-subbatch' + (isBatch ? '' : ' vault-altrecipe');
-                const sectionTitle = isMocktailSection(label) ? getMocktailName(cocktail) : label;
+                section.className = 'vault-subbatch' + (isBatch ? '' : ' vault-altrecipe')
+                    + (isU21Section(label) ? ' vault-u21' : '');
+                const sectionTitle = isMocktailSection(label) ? getMocktailName(cocktail)
+                    : (isU21Section(label) ? '18+ VERSION' : label);
                 let html = `<h4 class="vault-subbatch-title">${sectionTitle.toUpperCase()}` +
                     (isBatch
                         ? `<button class="sb-size" data-batch="${sbName.replace(/"/g, '&quot;')}" aria-label="Bottle size for ${label}">${bottleML}ml</button>`
@@ -488,10 +490,14 @@ document.addEventListener('DOMContentLoaded', () => {
         let standalones = specs.filter(s => isStandaloneName(s));
         if (vaultFilter === 'cocktails') { standalones = []; }
         else if (vaultFilter === 'mocktails') { mains = mains.filter(specHasMocktail); standalones = []; }
+        else if (vaultFilter === 'u21') {
+            mains = mains.filter(n => specs.some(s => s.startsWith(n + ' — ') && isU21Section(s.slice(n.length + 3))));
+            standalones = [];
+        }
         else if (vaultFilter === 'batches') { mains = []; }
         mains = mains.filter(matchesQuery);
         standalones = standalones.filter(matchesQuery);
-        const orphans = (vaultFilter === 'batches' || vaultFilter === 'mocktails') ? [] :
+        const orphans = (vaultFilter === 'batches' || vaultFilter === 'mocktails' || vaultFilter === 'u21') ? [] :
             specs.filter(s => s.includes(' — ') && !isStandaloneName(s)
                 && !specs.some(m => !m.includes(' — ') && s.startsWith(m + ' — ')))
                  .filter(matchesQuery);
@@ -510,6 +516,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // "what can I make for someone not drinking", not for the spirit version.
             if (vaultFilter === 'mocktails') {
                 subBatches = subBatches.filter(s => isMocktailSection(s.slice(cocktail.length + 3)));
+            } else if (vaultFilter === 'u21') {
+                subBatches = subBatches.filter(s => isU21Section(s.slice(cocktail.length + 3)));
             }
             // Fixed reading order — you always want the spirit batch first.
             const SECTION_RANK = (n) => {
@@ -518,8 +526,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (/juice/.test(l)) return 2;
                 if (/espresso|coffee/.test(l)) return 3;
                 if (/cream/.test(l)) return 4;
-                if (/mocktail/.test(l)) return 5;
-                return 6;
+                if (/^18\+|u21/.test(l)) return 5;
+                if (/mocktail/.test(l)) return 6;
+                return 7;
             };
             // Pull in any standalone batch this cocktail references from MAIN
             (recipeVault[cocktail] || []).forEach(ing => {
@@ -546,7 +555,13 @@ document.addEventListener('DOMContentLoaded', () => {
             header.className = 'vault-header';
             const displayName = isStandaloneName(cocktail) ? standaloneLabel(cocktail)
                 : (vaultFilter === 'mocktails' ? getMocktailName(cocktail) : cocktail);
-            header.innerHTML = `<span class="cocktail-title">${displayName}</span>` +
+            // Quiet variant markers — only shown when the drink actually has them
+            const hasMocktail = specs.some(s => s.startsWith(cocktail + ' — ') && isMocktailSection(s.slice(cocktail.length + 3)));
+            const hasU21 = specs.some(s => s.startsWith(cocktail + ' — ') && isU21Section(s.slice(cocktail.length + 3)));
+            const pills =
+                (hasMocktail ? `<span class="variant-pill vp-mock" aria-label="Has a mocktail version">0%</span>` : '') +
+                (hasU21 ? `<span class="variant-pill vp-18" aria-label="Has an 18+ version">18+</span>` : '');
+            header.innerHTML = `<span class="cocktail-title">${displayName}</span>${pills}` +
                 `<button class="row-more" aria-label="Actions for ${displayName}">⋯</button>`;
             header.querySelector('.row-more').addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -642,6 +657,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const BATCH_SECTIONS = ['spirit batch', 'juice batch', 'espresso batch', 'cream', 'cream batch'];
     const isBatchSection = (sectionLabel) => BATCH_SECTIONS.includes((sectionLabel || '').toLowerCase().trim());
     const isMocktailSection = (sectionLabel) => /mocktail/i.test(sectionLabel || '');
+    // A low-ABV swap (e.g. Vodka U21 in place of the spirit) — a recipe, not a batch
+    const isU21Section = (sectionLabel) => /^18\+|u21/i.test((sectionLabel || '').trim());
     const standaloneLabel  = (n) => (n || '').replace(STANDALONE_OWNER + ' — ', '');
 
     function applyBuilderKind() {
@@ -1019,7 +1036,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 { label: 'Spirit Batch', value: 'Spirit Batch' },
                 { label: 'Juice Batch', value: 'Juice Batch' },
                 { label: 'Cream', value: 'Cream' },
-                { label: 'Mocktail', value: 'Mocktail' }
+                { label: 'Mocktail', value: 'Mocktail' },
+                { label: '18+ Version', value: '18+' }
             ];
             openSelectModal('ADD SECTION', presets,
                 (val) => {
@@ -2151,8 +2169,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (/juice/.test(l)) return 2;
             if (/espresso|coffee/.test(l)) return 3;
             if (/cream/.test(l)) return 4;
-            if (/mocktail/.test(l)) return 5;
-            return 6;
+            if (/^18\+|u21/.test(l)) return 5;
+            if (/mocktail/.test(l)) return 6;
+            return 7;
         };
         builderState.sections.sort((a, b) => BUILDER_RANK(a.name) - BUILDER_RANK(b.name));
         document.getElementById('builder-name').value = name;
