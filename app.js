@@ -2080,6 +2080,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="action-sheet-title"></div>
                     <button class="action-sheet-btn" data-action="edit">EDIT SPEC</button>
                     <button class="action-sheet-btn" data-action="rename">RENAME</button>
+                    <button class="action-sheet-btn" data-action="u21">ADD 18+ VERSION</button>
                     <button class="action-sheet-btn action-sheet-danger" data-action="delete">DELETE</button>
                     <button class="action-sheet-btn action-sheet-cancel" data-action="cancel">CANCEL</button>
                 </div>
@@ -2092,7 +2093,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!action) return;
             const cocktailName = sheet.dataset.cocktailName;
             sheet.classList.add('hidden');
-            if (action === 'edit' && cocktailName) editSpec(cocktailName);
+            if (action === 'u21' && cocktailName) addU21Version(cocktailName);
+            else if (action === 'edit' && cocktailName) editSpec(cocktailName);
             else if (action === 'rename' && cocktailName) {
                 // In the mocktails view this names the MOCKTAIL only — renaming the
                 // spec there would also rename the alcoholic version.
@@ -2120,6 +2122,12 @@ document.addEventListener('DOMContentLoaded', () => {
         sheet.dataset.cocktailName = cocktailName;
         sheet.querySelector('.action-sheet-title').innerText =
             inMocktails ? getMocktailName(cocktailName) : cocktailName;
+        const u21Btn = sheet.querySelector('[data-action="u21"]');
+        if (u21Btn) {
+            const has = !!recipeVault[`${cocktailName} — 18+`];
+            u21Btn.innerText = has ? 'REMOVE 18+ VERSION' : 'ADD 18+ VERSION';
+            u21Btn.classList.toggle('hidden', inMocktails || isStandaloneName(cocktailName));
+        }
         const renameBtn = sheet.querySelector('[data-action="rename"]');
         if (renameBtn) renameBtn.innerText = inMocktails ? 'RENAME MOCKTAIL' : 'RENAME';
         // Deleting from the mocktails view would delete the whole drink — hide it
@@ -2242,6 +2250,65 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
+    };
+
+    // The 18+ swap is always the same: replace the alcoholic pour with Vodka U21
+    // at the same volume, keep everything else. One tap rather than retyping it.
+    window.addU21Version = async (name) => {
+        const sectionName = `${name} — 18+`;
+        if (recipeVault[sectionName]) {
+            openConfirmModal({
+                title: 'REMOVE 18+ VERSION',
+                message: `Remove the 18+ version of "${name}"?`,
+                confirmLabel: 'REMOVE',
+                danger: true,
+                onConfirm: async () => {
+                    showLoader('REMOVING...');
+                    try {
+                        await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'delete', cocktailName: sectionName }) });
+                        await loadVault();
+                        showToast('18+ version removed');
+                    } catch (e) { hideLoader(); showToast('Failed — check connection'); }
+                }
+            });
+            return;
+        }
+        const mainIngs = recipeVault[name] || [];
+        if (!mainIngs.length) {
+            openAlertModal({ title: 'NOTHING TO COPY', message: 'This spec has no MAIN ingredients yet.' });
+            return;
+        }
+        // Alcohol = spirits, liqueurs, and any batch reference that carries them
+        const isAlcoholic = (ing) => {
+            if (ing.color === 'amber-glow' || ing.color === 'neon-cyan') return true;
+            const sub = recipeVault[`${name} — ${ing.name}`];
+            return !!(sub && sub.some(i => i.color === 'amber-glow' || i.color === 'neon-cyan'));
+        };
+        let swapVolume = 0;
+        const rows = [];
+        mainIngs.forEach(ing => {
+            if (isAlcoholic(ing)) { swapVolume += (ing.amount || 0); return; }
+            rows.push({
+                cocktailName: sectionName, ingredientName: ing.name, amount: ing.amount,
+                bottleSize: 0, categoryTag: ing.color, unit: ing.unit || ''
+            });
+        });
+        if (swapVolume > 0) {
+            rows.unshift({
+                cocktailName: sectionName, ingredientName: 'Vodka U21', amount: swapVolume,
+                bottleSize: 0, categoryTag: 'amber-glow', unit: ''
+            });
+        }
+        if (!rows.length) {
+            openAlertModal({ title: 'NOTHING TO COPY', message: "Couldn't build an 18+ version from this spec." });
+            return;
+        }
+        showLoader('ADDING 18+...');
+        try {
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify(rows) });
+            await loadVault();
+            showToast(`18+ version added${swapVolume ? ` · ${swapVolume}ml Vodka U21` : ''}`);
+        } catch (e) { hideLoader(); showToast('Failed — check connection'); }
     };
 
     window.deleteSpec = (name) => {
