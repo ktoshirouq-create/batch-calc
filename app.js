@@ -2830,6 +2830,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- SHARED SETTINGS (bottle sizes, batch modes, shelf) ---
+    // --- SHARED SETTINGS (per-ENTRY rows, not one blob per scope) ---
+    // A blob would mean two people editing the shelf clobber each other. Each
+    // entry syncs on its own row with its own timestamp, so edits to different
+    // ingredients (or different batches) never collide.
     const SYNCED_SETTING_KEYS = [
         ['ing_bottles', 'codex_ing_bottles_v1'],
         ['batch_modes', 'codex_batch_modes_v1'],
@@ -2837,38 +2841,105 @@ document.addEventListener('DOMContentLoaded', () => {
         ['batch_sizes', 'codex_batch_sizes_v1'],
         ['shelf',       'codex_shelf_v1']
     ];
+    const SETTINGS_PUSHED_KEY = 'codex_settings_pushed_v1';   // "scope:entry" -> {sig, ts}
     let settingsPushTimer = null;
+
+    const readScope = (lsKey) => {
+        try { return JSON.parse(localStorage.getItem(lsKey) || '{}') || {}; } catch { return {}; }
+    };
+    const loadSettingsPushed = () => {
+        try { return JSON.parse(localStorage.getItem(SETTINGS_PUSHED_KEY)) || {}; } catch { return {}; }
+    };
+    const saveSettingsPushed = (m) => {
+        try { localStorage.setItem(SETTINGS_PUSHED_KEY, JSON.stringify(m)); } catch {}
+    };
 
     function scheduleSettingsPush() {
         clearTimeout(settingsPushTimer);
-        settingsPushTimer = setTimeout(pushSettings, 3000);
+        settingsPushTimer = setTimeout(pushSettings, 2500);
     }
+
     async function pushSettings() {
+        const pushed = loadSettingsPushed();
         const now = Date.now();
-        const payload = SYNCED_SETTING_KEYS.map(([k, lsKey]) => {
-            let v = null;
-            try { v = JSON.parse(localStorage.getItem(lsKey) || 'null'); } catch {}
-            return v ? { key: k, value: v, updatedAt: now, updatedBy: getDeviceName() } : null;
-        }).filter(Boolean);
+        const payload = [];
+        const seen = new Set();
+
+        SYNCED_SETTING_KEYS.forEach(([scope, lsKey]) => {
+            const obj = readScope(lsKey);
+            Object.keys(obj).forEach(entry => {
+                const key = `${scope}:${entry}`;
+                seen.add(key);
+                const sig = JSON.stringify(obj[entry]);
+                if (!pushed[key] || pushed[key].sig !== sig) {
+                    payload.push({ key, value: obj[entry], updatedAt: now, updatedBy: getDeviceName() });
+                }
+            });
+        });
+        // Entries we pushed before that are gone locally = deletions (tombstone)
+        Object.keys(pushed).forEach(key => {
+            if (!seen.has(key) && !pushed[key].deleted) {
+                payload.push({ key, value: null, updatedAt: now, updatedBy: getDeviceName() });
+            }
+        });
         if (!payload.length) return;
+
         try {
-            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ type: 'settings', device: getDeviceName(), settings: payload }) });
-        } catch (e) { console.error('Settings push failed', e); }
+            await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify({ type: 'settings', device: getDeviceName(), settings: payload })
+            });
+            payload.forEach(p => {
+                pushed[p.key] = p.value === null
+                    ? { sig: '', ts: p.updatedAt, deleted: true }
+                    : { sig: JSON.stringify(p.value), ts: p.updatedAt };
+            });
+            saveSettingsPushed(pushed);
+        } catch (e) {
+            console.error('Settings push failed — retries on next change/open', e);
+        }
     }
+
     async function pullSettings() {
         const since = parseFloat(localStorage.getItem(SETTINGS_PULLTS_KEY)) || 0;
         try {
             const res = await fetch(`${API_URL}?type=settings&since=${since}`);
             if (!res.ok) return;
             const data = await res.json();
+            const pushed = loadSettingsPushed();
+            const scopes = {};
+            let changed = false;
+
             (data.settings || []).forEach(s => {
-                const entry = SYNCED_SETTING_KEYS.find(([k]) => k === s.key);
-                if (!entry || !s.value) return;
-                try { localStorage.setItem(entry[1], JSON.stringify(s.value)); } catch {}
+                if (!s.key) return;
+                const i = String(s.key).indexOf(':');
+                if (i < 0) return;                                  // legacy whole-blob row — ignore
+                const scope = s.key.slice(0, i), entry = s.key.slice(i + 1);
+                const def = SYNCED_SETTING_KEYS.find(([k]) => k === scope);
+                if (!def) return;
+                if (!scopes[def[1]]) scopes[def[1]] = readScope(def[1]);
+                // ours newer? keep ours
+                const localTs = pushed[s.key] ? pushed[s.key].ts : 0;
+                if (localTs > (s.updatedAt || 0)) return;
+                if (s.value === null || s.value === undefined) delete scopes[def[1]][entry];
+                else scopes[def[1]][entry] = s.value;
+                pushed[s.key] = s.value == null
+                    ? { sig: '', ts: s.updatedAt || 0, deleted: true }
+                    : { sig: JSON.stringify(s.value), ts: s.updatedAt || 0 };
+                changed = true;
             });
+
+            if (changed) {
+                Object.keys(scopes).forEach(lsKey => {
+                    try { localStorage.setItem(lsKey, JSON.stringify(scopes[lsKey])); } catch {}
+                });
+                saveSettingsPushed(pushed);
+                if (typeof loadShelf === 'function') loadShelf();
+                if (typeof refreshShelfDatalist === 'function') refreshShelfDatalist();
+                if (typeof renderShelf === 'function') renderShelf();
+                if (typeof renderVault === 'function') renderVault();
+            }
             if (data.now) localStorage.setItem(SETTINGS_PULLTS_KEY, String(data.now));
-            if (typeof loadShelf === 'function') loadShelf();
-            if (typeof refreshShelfDatalist === 'function') refreshShelfDatalist();
         } catch (e) { console.error('Settings pull failed', e); }
     }
 
