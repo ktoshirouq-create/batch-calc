@@ -3358,13 +3358,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     const input = document.createElement('input');
                     input.type = 'text'; input.className = 'ops-subtask-input'; input.value = task.subtasks[sIdx].text;
                     span.replaceWith(input); input.focus(); input.select();
+                    let done = false;
                     const commit = () => {
+                        if (done) return;
+                        done = true;
                         const v = input.value.trim();
                         if (v) task.subtasks[sIdx].text = v;
                         saveOps();
                         rerenderSubtasks(rowEl, cat, taskIdx);
                     };
-                    input.addEventListener('keydown', ev => { if (ev.key === 'Enter') commit(); });
+                    input.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); commit(); } });
                     input.addEventListener('blur', commit);
                 };
                 sRow.querySelector('.ops-subtask-text').addEventListener('click', startSubEdit);
@@ -3389,8 +3392,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 const input = document.createElement('input');
                 input.type = 'text'; input.className = 'ops-subtask-input'; input.placeholder = 'New step…';
                 addLine.replaceWith(input); input.focus();
+                // Guard against a double-add: committing removes the input from the
+                // DOM, which fires blur — so Enter would commit, then blur would
+                // commit the same text again.
+                let committed = false;
                 const commit = (reopen) => {
+                    if (committed) return;
+                    committed = true;
                     const v = input.value.trim();
+                    input.value = '';
                     if (v) {
                         if (!task.subtasks) task.subtasks = [];
                         task.subtasks.push({ text: v, done: false });
@@ -3405,7 +3415,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (newAdd) newAdd.click();
                     }
                 };
-                input.addEventListener('keydown', ev => { if (ev.key === 'Enter') commit(true); });
+                input.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); commit(true); } });
                 input.addEventListener('blur', () => commit(false));
             });
             subWrap.appendChild(addLine);
