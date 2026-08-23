@@ -3968,6 +3968,37 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     window.addEventListener('online', () => { pushOpsToCloud(); pullSettings(); });
 
+    // --- LIVE-ISH POLLING ---
+    // While OPS is the visible tab, pull every 30s so a tick on someone else's
+    // phone shows up without switching away and back. Stops when OPS isn't
+    // showing or the app is backgrounded, so it costs nothing the rest of the time.
+    let opsPollTimer = null;
+    function opsTabVisible() {
+        const m = document.getElementById('ops-module');
+        return !!m && m.classList.contains('active') && document.visibilityState === 'visible';
+    }
+    function startOpsPolling() {
+        if (opsPollTimer) return;
+        opsPollTimer = setInterval(() => {
+            if (!opsTabVisible()) { stopOpsPolling(); return; }
+            pullOpsFromCloud();
+        }, 30000);
+    }
+    function stopOpsPolling() {
+        clearInterval(opsPollTimer);
+        opsPollTimer = null;
+    }
+    // React to tab switches and app focus
+    document.querySelectorAll('.nav-tab').forEach(t => {
+        t.addEventListener('click', () => {
+            setTimeout(() => { opsTabVisible() ? startOpsPolling() : stopOpsPolling(); }, 50);
+        });
+    });
+    document.addEventListener('visibilitychange', () => {
+        opsTabVisible() ? startOpsPolling() : stopOpsPolling();
+    });
+    if (opsTabVisible()) startOpsPolling();
+
     document.querySelectorAll('.ops-pill').forEach(pill => {
         pill.addEventListener('click', (e) => {
             triggerHaptic('light');
