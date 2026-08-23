@@ -294,6 +294,85 @@ document.addEventListener('DOMContentLoaded', () => {
         modal.classList.remove('hidden');
     }
 
+    // Names we've logged before, so you can attribute a cleaning to someone who
+    // doesn't use the app themselves.
+    const KNOWN_PEOPLE_KEY = 'codex_people_v1';
+    function knownPeople() {
+        try { return JSON.parse(localStorage.getItem(KNOWN_PEOPLE_KEY)) || []; } catch { return []; }
+    }
+    function rememberPerson(name) {
+        if (!name) return;
+        const list = knownPeople().filter(n => n.toLowerCase() !== name.toLowerCase());
+        list.unshift(name);
+        try { localStorage.setItem(KNOWN_PEOPLE_KEY, JSON.stringify(list.slice(0, 12))); } catch {}
+    }
+
+    // Adds a completion to the log. Always APPENDS — the old version overwrote
+    // the latest entry, which silently destroyed history.
+    function openLogDoneModal(cat, taskIdx) {
+        const task = opsData[cat][taskIdx];
+        const now = new Date();
+        const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        triggerHaptic();
+        document.getElementById('selection-modal-title').innerText = 'LOG A CLEANING';
+        const list = document.getElementById('selection-modal-list');
+        list.innerHTML = '';
+        const wrap = document.createElement('div');
+        wrap.className = 'num-modal';
+        const people = knownPeople();
+        wrap.innerHTML = `
+            <div class="logdone-field">
+                <label>WHEN</label>
+                <div class="logdone-quick">
+                    <button class="lq active" data-day="0">TODAY</button>
+                    <button class="lq" data-day="1">YESTERDAY</button>
+                </div>
+                <input type="date" class="date-modal-input logdone-date" value="${iso}">
+            </div>
+            <div class="logdone-field">
+                <label>WHO</label>
+                <input type="text" class="premium-text-input logdone-who" value="${(getDeviceName() || '').replace(/"/g,'&quot;')}" placeholder="Name" list="codex-people">
+                <datalist id="codex-people">${people.map(p => `<option value="${p.replace(/"/g,'&quot;')}">`).join('')}</datalist>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary">CANCEL</button>
+                <button class="btn-primary">LOG IT</button>
+            </div>`;
+        const dateEl = wrap.querySelector('.logdone-date');
+        wrap.querySelectorAll('.lq').forEach(b => {
+            b.addEventListener('click', () => {
+                triggerHaptic('light');
+                wrap.querySelectorAll('.lq').forEach(x => x.classList.remove('active'));
+                b.classList.add('active');
+                const d = new Date();
+                d.setDate(d.getDate() - parseInt(b.getAttribute('data-day')));
+                dateEl.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            });
+        });
+        wrap.querySelectorAll('.modal-actions button')[0].addEventListener('click', () => { triggerHaptic('light'); closeSelectModal(); });
+        wrap.querySelectorAll('.modal-actions button')[1].addEventListener('click', () => {
+            if (!dateEl.value) return;
+            const [y, m, d] = dateEl.value.split('-').map(Number);
+            const ts = new Date(y, m - 1, d, 12, 0, 0).getTime();
+            const who = (wrap.querySelector('.logdone-who').value || '').trim();
+            triggerHaptic('heavy');
+            closeSelectModal();
+            if (!task.log) task.log = [];
+            task.log.push({ ts, by: who });                 // append, never replace
+            task.log.sort((a, b) => a.ts - b.ts);
+            if (task.log.length > 20) task.log.shift();
+            task.lastCompleted = task.log[task.log.length - 1].ts;
+            task.completed = true;
+            if (Array.isArray(task.subtasks)) task.subtasks.forEach(s => s.done = true);
+            rememberPerson(who);
+            saveOps();
+            renderOpsList();
+            showToast(`Logged${who ? ' · ' + who : ''}`);
+        });
+        list.appendChild(wrap);
+        modal.classList.remove('hidden');
+    }
+
     function openAlertModal({ title = 'NOTICE', message, onClose }) {
         triggerHaptic();
         document.getElementById('selection-modal-title').innerText = title;
@@ -3610,8 +3689,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (checkTarget) {
                 checkTarget.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    triggerHaptic('light');
                     const task = opsData[activeOpsCategory][taskObj.originalIndex];
+                    // Already logged? Tapping again should record ANOTHER cleaning,
+                    // not force an untick-then-tick dance.
+                    if (isPeriodic && task.completed) {
+                        triggerHaptic('medium');
+                        openLogDoneModal(activeOpsCategory, taskObj.originalIndex);
+                        return;
+                    }
+                    triggerHaptic('light');
                     const isNowComplete = !task.completed;
                     task.completed = isNowComplete;
                     // manual completion also marks all subtasks done; unchecking clears them
@@ -3724,7 +3810,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 const long = g > interval * 1.3;
                                 gap = `<span class="ops-hist-gap${long ? ' long' : ''}">+${g}d</span>`;
                             }
-                            const who = entry.by ? `<span class="ops-hist-by">${entry.by}</span>` : '';
+                            const who = entry.by ? `<span class="ops-hist-by">${String(entry.by).replace(/</g,'&lt;')}</span>` : '';
                             html += `<div class="ops-hist-row"><span class="ops-hist-check">✓</span><span class="ops-hist-date">${formatDate(entry.ts)}</span>${gap}${who}</div>`;
                         });
                         if (log.length > visibleCount) {
@@ -3813,7 +3899,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const actions = [];
                     if (isLinked) actions.push({ label: 'View Spec', value: 'view-spec' });
                     if (isPeriodic) actions.push({ label: 'Set Frequency', value: 'set-freq' });
-                    if (isPeriodic) actions.push({ label: 'Set Last Done Date', value: 'set-done-date' });
+                    if (isPeriodic) actions.push({ label: 'Log a Cleaning', value: 'log-done' });
                     if (isPrep) actions.push({ label: taskObj.kind === 'mise' ? 'Move to Batches' : 'Move to Mise', value: 'move-kind' });
                     if (isPrep && isLinked) actions.push({ label: 'Batch Bottle Size', value: 'batch-size' });
                     actions.push({ label: 'Edit Task', value: 'edit' });
@@ -3891,23 +3977,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                     }
                                 });
                             }, 100);
-                        } else if (val === 'set-done-date') {
-                            setTimeout(() => {
-                                const t = opsData[activeOpsCategory][taskObj.originalIndex];
-                                const cur = t.lastCompleted ? new Date(t.lastCompleted) : new Date();
-                                const iso = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
-                                openDateModal('LAST DONE', iso, (ts) => {
-                                    if (!t.log) t.log = [];
-                                    // replace the most recent log entry if there is one, else add
-                                    if (t.log.length) t.log[t.log.length - 1] = { ts, by: getDeviceName() || '' };
-                                    else t.log.push({ ts, by: getDeviceName() || '' });
-                                    t.log.sort((a, b) => a.ts - b.ts);
-                                    t.lastCompleted = t.log[t.log.length - 1].ts;
-                                    saveOps();
-                                    renderOpsList();
-                                    showToast('Last done date updated');
-                                });
-                            }, 350);
+                        } else if (val === 'log-done') {
+                            setTimeout(() => openLogDoneModal(activeOpsCategory, taskObj.originalIndex), 350);
                         } else if (val === 'set-freq') {
                             setTimeout(() => {
                                 openSelectModal('FREQUENCY', [

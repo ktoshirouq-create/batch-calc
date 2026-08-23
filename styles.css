@@ -726,3 +726,11 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 
 .ops-subtask-num { color: var(--nodee-gold); font-size: 0.72rem; font-weight: 800; flex-shrink: 0; opacity: 0.8; min-width: 14px; }
 .date-modal-input { background: rgba(255,255,255,0.04); border: 1px solid rgba(200,169,126,0.35); border-radius: 12px; padding: 14px 12px; color: var(--nodee-gold); font-size: 1.05rem; font-weight: 600; text-align: center; width: 100%; }
+
+/* --- LOG A CLEANING modal --- */
+.logdone-field { margin-bottom: 16px; }
+.logdone-field label { display: block; font-size: 0.58rem; font-weight: 900; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 8px; }
+.logdone-quick { display: flex; gap: 8px; margin-bottom: 10px; }
+.logdone-quick .lq { flex: 1; padding: 10px 4px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: var(--text-muted); font-size: 0.62rem; font-weight: 900; letter-spacing: 1px; cursor: pointer; }
+.logdone-quick .lq.active { background: var(--nodee-gold); color: var(--bg-oled); border-color: var(--nodee-gold); }
+.logdone-who { margin-bottom: 0 !important; }
