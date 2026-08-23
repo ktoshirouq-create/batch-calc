@@ -723,3 +723,6 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .vp-18 { color: #7FBF8F; border: 1px solid rgba(127,191,143,0.55); }
 .vault-u21 .vault-subbatch-title { color: #7FBF8F; }
 .vault-filter[data-filter="u21"] { flex: 0 0 46px; }
+
+.ops-subtask-num { color: var(--nodee-gold); font-size: 0.72rem; font-weight: 800; flex-shrink: 0; opacity: 0.8; min-width: 14px; }
+.date-modal-input { background: rgba(255,255,255,0.04); border: 1px solid rgba(200,169,126,0.35); border-radius: 12px; padding: 14px 12px; color: var(--nodee-gold); font-size: 1.05rem; font-weight: 600; text-align: center; width: 100%; }

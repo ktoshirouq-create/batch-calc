@@ -264,6 +264,36 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => { input.focus(); input.select(); }, 350);
     }
 
+    // Native date picker in the same modal shell as openNumberModal
+    function openDateModal(title, isoValue, onSet) {
+        triggerHaptic();
+        document.getElementById('selection-modal-title').innerText = title;
+        const list = document.getElementById('selection-modal-list');
+        list.innerHTML = '';
+        const wrap = document.createElement('div');
+        wrap.className = 'num-modal';
+        wrap.innerHTML = `
+            <div class="num-modal-row">
+                <input type="date" class="date-modal-input" value="${isoValue}">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary">CANCEL</button>
+                <button class="btn-primary">SET</button>
+            </div>`;
+        const input = wrap.querySelector('.date-modal-input');
+        wrap.querySelectorAll('button')[0].addEventListener('click', () => { triggerHaptic('light'); closeSelectModal(); });
+        wrap.querySelectorAll('button')[1].addEventListener('click', () => {
+            if (!input.value) return;
+            const [y, m, d] = input.value.split('-').map(Number);
+            const ts = new Date(y, m - 1, d, 12, 0, 0).getTime();   // midday avoids TZ edge cases
+            triggerHaptic('heavy');
+            closeSelectModal();
+            onSet(ts);
+        });
+        list.appendChild(wrap);
+        modal.classList.remove('hidden');
+    }
+
     function openAlertModal({ title = 'NOTICE', message, onClose }) {
         triggerHaptic();
         document.getElementById('selection-modal-title').innerText = title;
@@ -3332,9 +3362,12 @@ document.addEventListener('DOMContentLoaded', () => {
             (task.subtasks || []).forEach((sub, sIdx) => {
                 const sRow = document.createElement('div');
                 sRow.className = `ops-subtask-row ${sub.done ? 'done' : ''}`;
+                // Steps are numbered for you — strip any "1." the user typed themselves
+                const cleanText = (sub.text || '').replace(/^\s*\d+[.)]\s*/, '');
                 sRow.innerHTML = `
                     <div class="ops-subtask-check ${sub.done ? 'done' : ''}">${sub.done ? '✓' : ''}</div>
-                    <span class="ops-subtask-text">${(sub.text || '').replace(/</g,'&lt;')}</span>
+                    <span class="ops-subtask-num">${sIdx + 1}.</span>
+                    <span class="ops-subtask-text">${cleanText.replace(/</g,'&lt;')}</span>
                     <span class="ops-subtask-edit">✎</span>
                     <span class="ops-subtask-del">×</span>
                 `;
@@ -3356,7 +3389,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const span = sRow.querySelector('.ops-subtask-text');
                     if (!span) return;
                     const input = document.createElement('input');
-                    input.type = 'text'; input.className = 'ops-subtask-input'; input.value = task.subtasks[sIdx].text;
+                    input.type = 'text'; input.className = 'ops-subtask-input';
+                    input.value = (task.subtasks[sIdx].text || '').replace(/^\s*\d+[.)]\s*/, '');
                     span.replaceWith(input); input.focus(); input.select();
                     let done = false;
                     const commit = () => {
@@ -3399,7 +3433,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const commit = (reopen) => {
                     if (committed) return;
                     committed = true;
-                    const v = input.value.trim();
+                    const v = input.value.trim().replace(/^\s*\d+[.)]\s*/, '');
                     input.value = '';
                     if (v) {
                         if (!task.subtasks) task.subtasks = [];
@@ -3503,7 +3537,9 @@ document.addEventListener('DOMContentLoaded', () => {
             let rowClasses = `ops-row ${taskObj.completed ? 'completed' : ''}`;
             if (isLinked) rowClasses += ' ops-row-linked';
             row.className = rowClasses;
-            row.setAttribute('draggable', isDraggable ? 'true' : 'false');
+            // Only arm dragging while the ≡ handle is held. A permanently draggable
+            // row swallows long-press inside child inputs, so paste never appears.
+            row.setAttribute('draggable', 'false');
             
             let html = `<div class="ops-row-main">`;
             
@@ -3722,6 +3758,12 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (isDraggable) {
+                const handle = row.querySelector('.drag-handle-task');
+                if (handle) {
+                    handle.addEventListener('pointerdown', () => row.setAttribute('draggable', 'true'));
+                    handle.addEventListener('pointerup', () => row.setAttribute('draggable', 'false'));
+                    handle.addEventListener('pointercancel', () => row.setAttribute('draggable', 'false'));
+                }
                 row.addEventListener('dragstart', (e) => {
                     e.dataTransfer.setData('text/plain', taskObj.originalIndex);
                     row.style.opacity = '0.4';
@@ -3759,6 +3801,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
                 row.addEventListener('dragend', () => {
+                    row.setAttribute('draggable', 'false');
                     row.style.opacity = '1';
                     document.querySelectorAll('.ops-row').forEach(r => r.style.borderTop = 'none');
                 });
@@ -3770,6 +3813,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const actions = [];
                     if (isLinked) actions.push({ label: 'View Spec', value: 'view-spec' });
                     if (isPeriodic) actions.push({ label: 'Set Frequency', value: 'set-freq' });
+                    if (isPeriodic) actions.push({ label: 'Set Last Done Date', value: 'set-done-date' });
                     if (isPrep) actions.push({ label: taskObj.kind === 'mise' ? 'Move to Batches' : 'Move to Mise', value: 'move-kind' });
                     if (isPrep && isLinked) actions.push({ label: 'Batch Bottle Size', value: 'batch-size' });
                     actions.push({ label: 'Edit Task', value: 'edit' });
@@ -3847,6 +3891,23 @@ document.addEventListener('DOMContentLoaded', () => {
                                     }
                                 });
                             }, 100);
+                        } else if (val === 'set-done-date') {
+                            setTimeout(() => {
+                                const t = opsData[activeOpsCategory][taskObj.originalIndex];
+                                const cur = t.lastCompleted ? new Date(t.lastCompleted) : new Date();
+                                const iso = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+                                openDateModal('LAST DONE', iso, (ts) => {
+                                    if (!t.log) t.log = [];
+                                    // replace the most recent log entry if there is one, else add
+                                    if (t.log.length) t.log[t.log.length - 1] = { ts, by: getDeviceName() || '' };
+                                    else t.log.push({ ts, by: getDeviceName() || '' });
+                                    t.log.sort((a, b) => a.ts - b.ts);
+                                    t.lastCompleted = t.log[t.log.length - 1].ts;
+                                    saveOps();
+                                    renderOpsList();
+                                    showToast('Last done date updated');
+                                });
+                            }, 350);
                         } else if (val === 'set-freq') {
                             setTimeout(() => {
                                 openSelectModal('FREQUENCY', [
