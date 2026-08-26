@@ -734,3 +734,6 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .logdone-quick .lq { flex: 1; padding: 10px 4px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: var(--text-muted); font-size: 0.62rem; font-weight: 900; letter-spacing: 1px; cursor: pointer; }
 .logdone-quick .lq.active { background: var(--nodee-gold); color: var(--bg-oled); border-color: var(--nodee-gold); }
 .logdone-who { margin-bottom: 0 !important; }
+
+.vault-batches-header { display: flex; justify-content: space-between; align-items: baseline; }
+.vault-batches-header .grp-count { color: var(--text-muted); font-weight: 700; letter-spacing: 1px; font-size: 0.58rem; }

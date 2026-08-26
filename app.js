@@ -610,7 +610,18 @@ document.addEventListener('DOMContentLoaded', () => {
             specs.filter(s => s.includes(' — ') && !isStandaloneName(s)
                 && !specs.some(m => !m.includes(' — ') && s.startsWith(m + ' — ')))
                  .filter(matchesQuery);
+        // Standalone batches live behind the BATCHES chip, not in the drink list
+        if (vaultFilter !== 'batches') standalones = [];
         const toRender = [...mains, ...orphans, ...standalones];
+
+        // Order: Signature → Twists → Classics → Batches, alphabetical inside each
+        const GROUP_RANK = { signature: 0, twist: 1, classic: 2, batches: 3 };
+        toRender.sort((a, b) => {
+            const ga = isStandaloneName(a) ? 'batches' : getDrinkType(a);
+            const gb = isStandaloneName(b) ? 'batches' : getDrinkType(b);
+            return (GROUP_RANK[ga] ?? 9) - (GROUP_RANK[gb] ?? 9) || a.localeCompare(b);
+        });
+        let lastGroup = null;
 
         // Filter/search produced nothing (the vault itself isn't empty)
         if (toRender.length === 0) {
@@ -646,12 +657,16 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             subBatches.forEach(sb => recipeVault[sb].sort((a, b) => (catOrder[a.color] || 10) - (catOrder[b.color] || 10)));
 
-            // Divider before the first standalone batch
-            if (isStandaloneName(cocktail) && !list.querySelector('.vault-batches-header')) {
-                const bh = document.createElement('div');
-                bh.className = 'vault-batches-header';
-                bh.innerText = 'BATCHES';
-                list.appendChild(bh);
+            // Group header whenever the drink type changes (batches keep their own)
+            const grpKey = isStandaloneName(cocktail) ? 'batches' : getDrinkType(cocktail);
+            if (grpKey !== lastGroup) {
+                const gh = document.createElement('div');
+                gh.className = 'vault-batches-header';
+                const count = toRender.filter(n =>
+                    (isStandaloneName(n) ? 'batches' : getDrinkType(n)) === grpKey).length;
+                gh.innerHTML = `${grpKey === 'batches' ? 'BATCHES' : DRINK_TYPE_LABELS[grpKey]}<span class="grp-count">${count}</span>`;
+                list.appendChild(gh);
+                lastGroup = grpKey;
             }
             subBatches.sort((a, b) => SECTION_RANK(a) - SECTION_RANK(b) || a.localeCompare(b));
 
@@ -2189,6 +2204,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="action-sheet-title"></div>
                     <button class="action-sheet-btn" data-action="edit">EDIT SPEC</button>
                     <button class="action-sheet-btn" data-action="rename">RENAME</button>
+                    <button class="action-sheet-btn" data-action="set-type">SET TYPE</button>
                     <button class="action-sheet-btn" data-action="u21">ADD 18+ VERSION</button>
                     <button class="action-sheet-btn action-sheet-danger" data-action="delete">DELETE</button>
                     <button class="action-sheet-btn action-sheet-cancel" data-action="cancel">CANCEL</button>
@@ -2202,7 +2218,20 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!action) return;
             const cocktailName = sheet.dataset.cocktailName;
             sheet.classList.add('hidden');
-            if (action === 'u21' && cocktailName) addU21Version(cocktailName);
+            if (action === 'set-type' && cocktailName) {
+                setTimeout(() => {
+                    openSelectModal('SET TYPE', DRINK_TYPES.map(t => ({
+                        label: DRINK_TYPE_LABELS[t].replace(/S$/, '') === 'SIGNATURE' ? 'Signature'
+                             : (t === 'twist' ? 'Twist' : 'Classic'),
+                        value: t
+                    })), (t) => {
+                        setDrinkType(cocktailName, t);
+                        renderVault();
+                        showToast(`Set to ${t === 'twist' ? 'Twist' : t === 'classic' ? 'Classic' : 'Signature'}`);
+                    });
+                }, 250);
+            }
+            else if (action === 'u21' && cocktailName) addU21Version(cocktailName);
             else if (action === 'edit' && cocktailName) editSpec(cocktailName);
             else if (action === 'rename' && cocktailName) {
                 // In the mocktails view this names the MOCKTAIL only — renaming the
@@ -2231,6 +2260,8 @@ document.addEventListener('DOMContentLoaded', () => {
         sheet.dataset.cocktailName = cocktailName;
         sheet.querySelector('.action-sheet-title').innerText =
             inMocktails ? getMocktailName(cocktailName) : cocktailName;
+        const typeBtn = sheet.querySelector('[data-action="set-type"]');
+        if (typeBtn) typeBtn.classList.toggle('hidden', inMocktails || isStandaloneName(cocktailName));
         const u21Btn = sheet.querySelector('[data-action="u21"]');
         if (u21Btn) {
             const has = !!recipeVault[`${cocktailName} — 18+`];
@@ -2947,6 +2978,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ['ing_bottles', 'codex_ing_bottles_v1'],
         ['batch_modes', 'codex_batch_modes_v1'],
         ['mocktail_names', 'codex_mocktail_names_v1'],
+        ['drink_types', 'codex_drink_types_v1'],
         ['batch_sizes', 'codex_batch_sizes_v1'],
         ['shelf',       'codex_shelf_v1']
     ];
@@ -3186,6 +3218,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // Stored locally until the sheet gains a mode column.
     // A mocktail isn't always just the virgin version of the same drink, so its
     // display name can be overridden. Default is "<Cocktail> Mocktail".
+    // Signature / Twist / Classic — how the menu is grouped in the list.
+    const DRINK_TYPE_KEY = 'codex_drink_types_v1';
+    const DRINK_TYPES = ['signature', 'twist', 'classic'];
+    const DRINK_TYPE_LABELS = { signature: 'SIGNATURE', twist: 'TWISTS', classic: 'CLASSICS' };
+    function loadDrinkTypes() {
+        try { return JSON.parse(localStorage.getItem(DRINK_TYPE_KEY)) || {}; } catch { return {}; }
+    }
+    function getDrinkType(name) {
+        return loadDrinkTypes()[(name || '').toLowerCase().trim()] || 'signature';
+    }
+    function setDrinkType(name, type) {
+        const m = loadDrinkTypes();
+        const k = (name || '').toLowerCase().trim();
+        if (type && type !== 'signature') m[k] = type; else delete m[k];
+        try { localStorage.setItem(DRINK_TYPE_KEY, JSON.stringify(m)); } catch {}
+        if (typeof scheduleSettingsPush === 'function') scheduleSettingsPush();
+    }
+
     const MOCKTAIL_NAME_KEY = 'codex_mocktail_names_v1';
     function loadMocktailNames() {
         try { return JSON.parse(localStorage.getItem(MOCKTAIL_NAME_KEY)) || {}; } catch { return {}; }
