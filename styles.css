@@ -737,3 +737,7 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 
 .vault-batches-header { display: flex; justify-content: space-between; align-items: baseline; }
 .vault-batches-header .grp-count { color: var(--text-muted); font-weight: 700; letter-spacing: 1px; font-size: 0.58rem; }
+
+/* Sheet lifts above the keyboard; suggestions scroll within what's left */
+#prep-add-sheet { align-items: flex-end; }
+#prep-add-sheet .prep-sheet { max-height: 80vh; overflow-y: auto; }

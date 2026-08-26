@@ -3374,6 +3374,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     window.renderOpsList = function() {
+        // END SHIFT resets the opening/closing checklists — it has no meaning on
+        // the prep board or upkeep, so keep it off those tabs.
+        const endBtn = document.getElementById('ops-reset-btn');
+        if (endBtn) endBtn.classList.toggle('hidden',
+            !(activeOpsCategory === 'opening' || activeOpsCategory === 'closing'));
         const container = document.getElementById('ops-list-container');
         if (!container) return;
         container.innerHTML = '';
@@ -4173,6 +4178,23 @@ document.addEventListener('DOMContentLoaded', () => {
         renderOpsList();
     }
 
+    // Android doesn't always shrink the layout viewport for the keyboard, so a
+    // bottom-anchored sheet ends up underneath it. Track the visual viewport and
+    // lift the sheet by however much the keyboard covers.
+    function bindKeyboardLift(sheetEl) {
+        const vv = window.visualViewport;
+        if (!vv || sheetEl.dataset.kbBound) return;
+        sheetEl.dataset.kbBound = '1';
+        const apply = () => {
+            if (sheetEl.classList.contains('hidden')) return;
+            const covered = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+            sheetEl.style.paddingBottom = covered ? `${covered}px` : '';
+        };
+        vv.addEventListener('resize', apply);
+        vv.addEventListener('scroll', apply);
+        sheetEl._applyKbLift = apply;
+    }
+
     function openPrepAddSheet() {
         let sheet = document.getElementById('prep-add-sheet');
         if (!sheet) {
@@ -4199,14 +4221,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 commitTypedPrepTask();
             });
             const input = document.getElementById('prep-add-input');
-            input.addEventListener('input', renderPrepSuggestions);
+            input.addEventListener('input', () => {
+                renderPrepSuggestions();
+                const s = document.getElementById('prep-add-sheet');
+                if (s && s._applyKbLift) s._applyKbLift();
+            });
             input.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') commitTypedPrepTask();
             });
         }
         sheet.classList.remove('hidden');
+        bindKeyboardLift(sheet);
         renderPrepSuggestions();
-        setTimeout(() => document.getElementById('prep-add-input')?.focus(), 300);
+        setTimeout(() => {
+            document.getElementById('prep-add-input')?.focus();
+            if (sheet._applyKbLift) setTimeout(sheet._applyKbLift, 250);
+        }, 300);
     }
 
     // Commit whatever is typed (Enter or SAVE). Honours remembered section choice.
@@ -4227,7 +4257,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function closePrepAddSheet() {
         const sheet = document.getElementById('prep-add-sheet');
-        if (sheet) sheet.classList.add('hidden');
+        if (sheet) { sheet.classList.add('hidden'); sheet.style.paddingBottom = ''; }
         const input = document.getElementById('prep-add-input');
         if (input) input.value = '';
     }
