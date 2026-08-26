@@ -3446,6 +3446,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                       .sort((a, b) => {
                                           if (groupRank(a) !== groupRank(b)) return groupRank(a) - groupRank(b);
                                           if (a.completed !== b.completed) return a.completed ? 1 : -1;
+                                          // BATCHES: most bottles first — that's the biggest job.
+                                          // MISE keeps whatever order you dragged it into.
+                                          if (a.kind !== 'mise' && b.kind !== 'mise') {
+                                              return (b.qty || 1) - (a.qty || 1);
+                                          }
                                           return 0;
                                       });
         } else {
