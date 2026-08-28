@@ -3622,7 +3622,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const C = 88;
             let dash = 0, color = 'rgba(200,169,126,0.5)', glyph = '';
             if (taskObj.completed) {
-                dash = C; color = '#C8A97E'; glyph = '<span style="color:#C8A97E;">✓</span>';
+                dash = C; color = '#6FBF8B'; glyph = '<span style="color:#6FBF8B;">✓</span>';
             } else if (taskObj.lastCompleted) {
                 const daysSince = Math.floor((Date.now() - taskObj.lastCompleted) / DAY_MS);
                 const daysUntilDue = interval - daysSince;
@@ -3637,7 +3637,7 @@ document.addEventListener('DOMContentLoaded', () => {
         function buildCountdown(taskObj) {
             const interval = taskObj.intervalDays || 30;
             if (taskObj.completed && taskObj.lastCompleted) {
-                return `<div class="ops-count"><div class="num done-date">${formatDate(taskObj.lastCompleted)}</div><div class="lbl">DONE</div></div>`;
+                return `<div class="ops-count done"><div class="num done-date">${formatDate(taskObj.lastCompleted)}</div><div class="lbl">DONE</div></div>`;
             }
             if (taskObj.lastCompleted) {
                 const daysSince = Math.floor((Date.now() - taskObj.lastCompleted) / DAY_MS);
