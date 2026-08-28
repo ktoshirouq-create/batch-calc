@@ -279,7 +279,7 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 
 /* Completed State (The Dimming Effect) */
 .ops-row.completed { opacity: 0.55; background: transparent; border-color: transparent; }
-.ops-row.completed .ops-checkbox, .ops-row.completed .ops-number { border-color: var(--nodee-gold); background: var(--nodee-gold); color: #000; text-decoration: line-through; }
+.ops-row.completed .ops-checkbox, .ops-row.completed .ops-number { border-color: var(--nodee-gold); background: var(--nodee-gold); color: #000; }
 .ops-row.completed .ops-checkbox::after { content: '✓'; color: #000; font-size: 0.8rem; font-weight: 900; }
 .ops-row.completed .ops-text { text-decoration: line-through; color: var(--text-muted); }
 .ops-row.completed .ops-time-tag { text-decoration: none; display: block; width: fit-content; }
@@ -741,3 +741,13 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 /* Sheet lifts above the keyboard; suggestions scroll within what's left */
 #prep-add-sheet { align-items: flex-end; }
 #prep-add-sheet .prep-sheet { max-height: 80vh; overflow-y: auto; }
+
+/* Upkeep and restock rows never really "finish" — they cycle. Striking them
+   through made the whole list unreadable, so the gold ring carries the state
+   and the name stays legible. */
+.ops-row.completed.ops-cycling { opacity: 0.8; }
+.ops-row.completed.ops-cycling .ops-text { text-decoration: none; color: var(--text-main); }
+.ops-row.completed.ops-cycling .ops-time-tag { color: var(--text-muted); }
+
+/* Restock location chip */
+.restock-loc { background: rgba(255,255,255,0.05); border: 1px solid rgba(200,169,126,0.35); color: var(--nodee-gold); border-radius: 6px; padding: 4px 8px; font-size: 0.6rem; font-weight: 900; letter-spacing: 0.5px; cursor: pointer; flex-shrink: 0; }

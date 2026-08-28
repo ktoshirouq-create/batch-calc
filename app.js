@@ -2013,6 +2013,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 const nowIn = (shelfData[name].inStock === false);
                 shelfData[name].inStock = nowIn;
                 saveShelf();
+                // Marking something out of stock puts it on the restock list
+                if (!nowIn) {
+                    if (!opsData.restock) opsData.restock = [];
+                    const already = opsData.restock.some(t => !t.completed && (t.text || '').toLowerCase() === name.toLowerCase());
+                    if (!already) {
+                        opsData.restock.push({ text: name, completed: false, subtasks: [], loc: shelfData[name].loc || 'K2' });
+                        saveOps();
+                        showToast(`"${name}" added to restock`);
+                    }
+                }
                 const btn = e.target;
                 btn.innerText = nowIn ? '●' : '○';
                 btn.className = `shelf-stock-btn ${nowIn ? 'in-stock' : 'oos'}`;
@@ -2371,7 +2381,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // Re-point any prep task that linked to the old name
                     let tasksTouched = false;
-                    ['opening', 'prep', 'closing', 'periodic'].forEach(cat => {
+                    ['opening', 'prep', 'closing', 'periodic', 'restock'].forEach(cat => {
                         (opsData[cat] || []).forEach(t => {
                             if (t.linkedSpec === name) { t.linkedSpec = newFull; tasksTouched = true; }
                             if (t.linkedSpec === STANDALONE_OWNER && t.linkedSection === currentLabel && isStandalone) {
@@ -2762,7 +2772,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- OPS MODULE ENGINE ---
     const OPS_KEY = 'codex_ops_v1';
-    let opsData = { opening: [], prep: [], closing: [], periodic: [] };
+    let opsData = { opening: [], prep: [], closing: [], periodic: [], restock: [] };
     let activeOpsCategory = 'prep';
 
     // --- OPS CLOUD SYNC (per-task rows; multi-user safe) ---
@@ -2814,7 +2824,7 @@ document.addEventListener('DOMContentLoaded', () => {
             t.linkedSpec || '', t.linkedSection || '', t.orderIndex]);
     }
 
-    const OPS_CATS = ['opening', 'prep', 'closing', 'periodic'];
+    const OPS_CATS = ['opening', 'prep', 'closing', 'periodic', 'restock'];
 
     // Give every task an id + order, then work out which ones changed since the
     // last successful push. Returns the list of tasks to send (incl. tombstones).
@@ -3120,6 +3130,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         // weekly + monthly -> periodic (stamp default interval if missing)
         if (!opsData.periodic) opsData.periodic = [];
+        if (!opsData.restock) opsData.restock = [];
         if (opsData.weekly && Array.isArray(opsData.weekly)) {
             opsData.weekly.forEach(t => { if (!t.intervalDays) t.intervalDays = 7; opsData.periodic.push(t); });
             delete opsData.weekly;
@@ -3131,7 +3142,7 @@ document.addEventListener('DOMContentLoaded', () => {
             migrated = true;
         }
         // subtasks: string[] -> {text, done}[]  (idempotent — skips if already objects)
-        ['opening', 'prep', 'closing', 'periodic'].forEach(cat => {
+        ['opening', 'prep', 'closing', 'periodic', 'restock'].forEach(cat => {
             (opsData[cat] || []).forEach(t => {
                 if (Array.isArray(t.subtasks)) {
                     t.subtasks = t.subtasks.map(s => typeof s === 'string' ? { text: s, done: false } : s);
@@ -3177,7 +3188,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function opsTaskCount(d) {
         if (!d) return 0;
-        return ['opening', 'prep', 'closing', 'periodic']
+        return ['opening', 'prep', 'closing', 'periodic', 'restock']
             .reduce((n, k) => n + (Array.isArray(d[k]) ? d[k].length : 0), 0);
     }
 
@@ -3404,7 +3415,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const isNumberedSop = activeOpsCategory === 'opening' || activeOpsCategory === 'closing';
         const isPrep = activeOpsCategory === 'prep';
         const isPeriodic = activeOpsCategory === 'periodic';
-        const isDraggable = isNumberedSop || isPrep;  // PREP draggable for urgency; SOPs draggable for order
+        const isRestock = activeOpsCategory === 'restock';
+        const isDraggable = (isNumberedSop || isPrep) && !isRestock;  // PREP draggable for urgency; SOPs draggable for order
         const DAY_MS = 1000 * 60 * 60 * 24;
 
         // PERIODIC auto-uncheck: any completed task now past its interval rejoins the active list.
@@ -3423,6 +3435,15 @@ document.addEventListener('DOMContentLoaded', () => {
         let sortedTasks = [];
         if (isNumberedSop) {
             sortedTasks = [...tasks].map((t, i) => ({...t, originalIndex: i}));
+        } else if (isRestock) {
+            // Running list grouped by where you fetch it from; collected sinks
+            const locRank = (t) => (t.loc === 'K3' ? 1 : 0);
+            sortedTasks = [...tasks].map((t, i) => ({...t, originalIndex: i}))
+                                      .sort((a, b) => {
+                                          if (a.completed !== b.completed) return a.completed ? 1 : -1;
+                                          if (locRank(a) !== locRank(b)) return locRank(a) - locRank(b);
+                                          return (a.text || '').localeCompare(b.text || '');
+                                      });
         } else if (isPrep) {
             // Shared batches: two cocktails using an identically-named section
             // (e.g. "Passion+Lem") are the same bottle — collapse to one task.
@@ -3469,7 +3490,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 opening: ['No opening tasks yet.', 'Add the steps you run at the start of every shift.'],
                 closing: ['No closing tasks yet.', 'Add the steps you run at the end of every shift.'],
                 prep:    ['Nothing to prep.', 'Tap ＋ ADD TASK to add a batch or a mise job.'],
-                periodic:['No upkeep tasks yet.', 'Add recurring jobs like deep cleans, with how often they’re due.']
+                periodic:['No upkeep tasks yet.', 'Add recurring jobs like deep cleans, with how often they’re due.'],
+                restock: ['Nothing to restock.', 'Add what ran out, or mark an ingredient out of stock on the Shelf.']
             }[activeOpsCategory] || ['No tasks yet.', 'Tap ＋ ADD TASK below to begin.'];
             container.innerHTML = `<div class="empty-state"><p>${emptyMsg[0]}</p><span>${emptyMsg[1]}</span></div>`;
             return;
@@ -3659,6 +3681,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         sortedTasks.forEach((taskObj, displayIndex) => {
             // PREP section headers: BATCHES / MISE, emitted at group boundaries
+            if (isRestock && !taskObj.completed) {
+                const grp = taskObj.loc === 'K3' ? 'K3 · DRY STORAGE' : 'K2 · BIG FRIDGE';
+                if (grp !== lastPrepGroup) {
+                    const h = document.createElement('div');
+                    h.className = 'ops-prep-section';
+                    h.innerText = grp;
+                    container.appendChild(h);
+                    lastPrepGroup = grp;
+                }
+            }
             if (isPrep) {
                 const grp = taskObj.kind === 'mise' ? 'MISE' : 'BATCHES';
                 if (grp !== lastPrepGroup) {
@@ -3674,6 +3706,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const isBatchKind = isPrep && taskObj.kind !== 'mise';
             const row = document.createElement('div');
             let rowClasses = `ops-row ${taskObj.completed ? 'completed' : ''}`;
+            if (isPeriodic || isRestock) rowClasses += ' ops-cycling';
             if (isLinked) rowClasses += ' ops-row-linked';
             row.className = rowClasses;
             // Only arm dragging while the ≡ handle is held. A permanently draggable
@@ -3711,6 +3744,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (isPeriodic) {
                 html += buildCountdown(taskObj);
+            }
+            if (isRestock) {
+                html += `<button class="restock-loc" aria-label="Location">${taskObj.loc || 'K2'}</button>`;
             }
             html += `<button class="row-more" aria-label="Task actions">⋯</button>`;
             if (isDraggable) {
@@ -4067,6 +4103,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     });
             };
+            const locBtn = row.querySelector('.restock-loc');
+            if (locBtn) locBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                triggerHaptic('light');
+                const t = opsData[activeOpsCategory][taskObj.originalIndex];
+                t.loc = (t.loc === 'K3') ? 'K2' : 'K3';
+                saveOps();
+                renderOpsList();
+            });
             const moreBtn = row.querySelector('.row-more');
             if (moreBtn) moreBtn.addEventListener('click', (e) => { e.stopPropagation(); openTaskActions(); });
 
@@ -4334,6 +4379,29 @@ document.addEventListener('DOMContentLoaded', () => {
             // PREP: dedicated add-sheet — type-first with live suggestions + history + qty parsing
             if (activeOpsCategory === 'prep') {
                 openPrepAddSheet();
+                return;
+            }
+
+            // RESTOCK: name, then where you fetch it from
+            if (activeOpsCategory === 'restock') {
+                openSelectModal('NEED TO RESTOCK', [], null, {
+                    placeholder: 'What ran out?',
+                    btnLabel: 'NEXT',
+                    onSubmit: (val) => {
+                        const item = capitalize((val || '').trim());
+                        if (!item) return;
+                        setTimeout(() => {
+                            openSelectModal('WHERE FROM?', [
+                                { label: 'K2 · Big fridge', value: 'K2' },
+                                { label: 'K3 · Dry storage', value: 'K3' }
+                            ], (loc) => {
+                                opsData.restock.push({ text: item, completed: false, subtasks: [], loc });
+                                saveOps();
+                                renderOpsList();
+                            });
+                        }, 300);
+                    }
+                });
                 return;
             }
 
