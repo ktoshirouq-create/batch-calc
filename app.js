@@ -610,8 +610,8 @@ document.addEventListener('DOMContentLoaded', () => {
             specs.filter(s => s.includes(' — ') && !isStandaloneName(s)
                 && !specs.some(m => !m.includes(' — ') && s.startsWith(m + ' — ')))
                  .filter(matchesQuery);
-        // Standalone batches live behind the BATCHES chip, not in the drink list
-        if (vaultFilter !== 'batches') standalones = [];
+        // Standalone batches aren't used in practice — keep them out of the list
+        standalones = [];
         const toRender = [...mains, ...orphans, ...standalones];
 
         // Order: Signature → Twists → Classics → Batches, alphabetical inside each
@@ -2007,6 +2007,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <input type="number" class="shelf-abv-input" value="${data.abv || 0}" min="0" max="100" aria-label="ABV for ${name}">
                 <span class="shelf-abv-suffix">%</span>
                 <button class="shelf-bottle-btn" aria-label="Bottle size for ${name}">${bottle}ml</button>
+                <button class="shelf-loc-btn" aria-label="Restock location for ${name}">${data.loc || 'K2'}</button>
                 <button class="row-more" aria-label="Actions for ${name}">⋯</button>`;
             row.querySelector('.shelf-stock-btn').addEventListener('click', e => {
                 e.stopPropagation(); triggerHaptic('light');
@@ -2043,6 +2044,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 btn.className = `shelf-cat-btn ${next}`;
                 btn.innerText = shelfCatLabels[next] || 'SPIRIT';
                 row.className = `shelf-row ${next}${shelfData[name].inStock === false ? ' shelf-row-oos' : ''}`;
+            });
+            // Where you fetch it from — set once, auto-fills the restock list after
+            row.querySelector('.shelf-loc-btn').addEventListener('click', e => {
+                e.stopPropagation(); triggerHaptic('light');
+                const next = (shelfData[name].loc === 'K3') ? 'K2' : 'K3';
+                shelfData[name].loc = next;
+                saveShelf();
+                e.target.innerText = next;   // in place, no re-sort
             });
             row.querySelector('.shelf-bottle-btn').addEventListener('click', e => {
                 e.stopPropagation(); triggerHaptic('light');
@@ -3467,6 +3476,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                       .sort((a, b) => {
                                           if (groupRank(a) !== groupRank(b)) return groupRank(a) - groupRank(b);
                                           if (a.completed !== b.completed) return a.completed ? 1 : -1;
+                                          // Urgent beats everything else in the group
+                                          if (!!a.urgent !== !!b.urgent) return a.urgent ? -1 : 1;
                                           // BATCHES: most bottles first — that's the biggest job.
                                           // MISE keeps whatever order you dragged it into.
                                           if (a.kind !== 'mise' && b.kind !== 'mise') {
@@ -3708,6 +3719,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let rowClasses = `ops-row ${taskObj.completed ? 'completed' : ''}`;
             if (isPeriodic || isRestock) rowClasses += ' ops-cycling';
             if (isLinked) rowClasses += ' ops-row-linked';
+            if (taskObj.urgent && !taskObj.completed) rowClasses += ' ops-row-urgent';
             row.className = rowClasses;
             // Only arm dragging while the ≡ handle is held. A permanently draggable
             // row swallows long-press inside child inputs, so paste never appears.
@@ -3724,6 +3736,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             let labelHtml = '';
+            if (taskObj.urgent && !taskObj.completed) labelHtml += `<span class="urgent-dot" aria-label="Urgent">●</span>`;
             if (isLinked) {
                 labelHtml += `<span class="ops-link-glyph">🔗</span>`;
             }
@@ -3800,6 +3813,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (Array.isArray(task.subtasks)) task.subtasks.forEach(s => s.done = isNowComplete);
                     if (isPrep && isNowComplete) {
                         task.lastCompleted = Date.now();
+                        task.urgent = false;   // the emergency is over
                     }
                     if (isPeriodic) {
                         // MANUAL tick pushes to the log; MANUAL untick pops it (accidental-tap safety).
@@ -3996,6 +4010,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (isLinked) actions.push({ label: 'View Spec', value: 'view-spec' });
                     if (isPeriodic) actions.push({ label: 'Set Frequency', value: 'set-freq' });
                     if (isPeriodic) actions.push({ label: 'Log a Cleaning', value: 'log-done' });
+                    if (isPrep) actions.push({ label: taskObj.urgent ? 'Clear Urgent' : 'Mark Urgent', value: 'urgent' });
+                    if (isPrep) actions.push({ label: 'Add to Restock', value: 'to-restock' });
                     if (isPrep) actions.push({ label: taskObj.kind === 'mise' ? 'Move to Batches' : 'Move to Mise', value: 'move-kind' });
                     if (isPrep && isLinked) actions.push({ label: 'Batch Bottle Size', value: 'batch-size' });
                     actions.push({ label: 'Edit Task', value: 'edit' });
@@ -4038,6 +4054,17 @@ document.addEventListener('DOMContentLoaded', () => {
                                     }
                                 });
                             }, 350);
+                        } else if (val === 'urgent') {
+                            const t = opsData[activeOpsCategory][taskObj.originalIndex];
+                            t.urgent = !t.urgent;
+                            saveOps();
+                            renderOpsList();
+                            showToast(t.urgent ? 'Marked urgent' : 'Urgent cleared');
+                        } else if (val === 'to-restock') {
+                            const t = opsData[activeOpsCategory][taskObj.originalIndex];
+                            const known = Object.keys(shelfData || {}).find(k => k.toLowerCase() === (t.text || '').toLowerCase());
+                            addRestockItem(t.text, known ? (shelfData[known].loc || 'K2') : 'K2');
+                            showToast(`"${t.text}" added to restock`);
                         } else if (val === 'move-kind') {
                             const t = opsData[activeOpsCategory][taskObj.originalIndex];
                             t.kind = t.kind === 'mise' ? 'batch' : 'mise';
@@ -4245,6 +4272,102 @@ document.addEventListener('DOMContentLoaded', () => {
         sheetEl._applyKbLift = apply;
     }
 
+    // Adds to the running restock list. Suggestions come from the Shelf, so the
+    // location is already known for anything you've set before.
+    function addRestockItem(name, loc) {
+        if (!opsData.restock) opsData.restock = [];
+        const exists = opsData.restock.some(t => !t.completed && (t.text || '').toLowerCase() === name.toLowerCase());
+        if (exists) { showToast(`"${name}" is already on the list`); return; }
+        opsData.restock.push({ text: name, completed: false, subtasks: [], loc: loc || 'K2' });
+        saveOps();
+        renderOpsList();
+    }
+
+    function openRestockAddSheet() {
+        let sheet = document.getElementById('restock-add-sheet');
+        if (!sheet) {
+            document.body.insertAdjacentHTML('beforeend', `
+                <div id="restock-add-sheet" class="modal-overlay hidden">
+                    <div class="prep-sheet">
+                        <div class="prep-sheet-head">
+                            <span class="prep-sheet-title">NEED TO RESTOCK</span>
+                            <button class="prep-sheet-x">✕</button>
+                        </div>
+                        <div class="prep-input-row">
+                            <input type="text" id="restock-add-input" class="premium-text-input" placeholder="What ran out?" autocomplete="off" style="margin-bottom:0;">
+                            <button id="restock-add-save" class="prep-save-btn">ADD</button>
+                        </div>
+                        <div id="restock-add-sugs"></div>
+                    </div>
+                </div>`);
+            sheet = document.getElementById('restock-add-sheet');
+            sheet.addEventListener('click', (e) => { if (e.target === sheet) closeRestockAddSheet(); });
+            sheet.querySelector('.prep-sheet-x').addEventListener('click', closeRestockAddSheet);
+            const input = document.getElementById('restock-add-input');
+            input.addEventListener('input', () => {
+                renderRestockSuggestions();
+                if (sheet._applyKbLift) sheet._applyKbLift();
+            });
+            input.addEventListener('keydown', e => { if (e.key === 'Enter') commitRestockTyped(); });
+            document.getElementById('restock-add-save').addEventListener('click', () => { triggerHaptic('heavy'); commitRestockTyped(); });
+        }
+        sheet.classList.remove('hidden');
+        bindKeyboardLift(sheet);
+        renderRestockSuggestions();
+        setTimeout(() => {
+            document.getElementById('restock-add-input')?.focus();
+            if (sheet._applyKbLift) setTimeout(sheet._applyKbLift, 250);
+        }, 300);
+    }
+    function closeRestockAddSheet() {
+        const s = document.getElementById('restock-add-sheet');
+        if (s) { s.classList.add('hidden'); s.style.paddingBottom = ''; }
+        const i = document.getElementById('restock-add-input');
+        if (i) i.value = '';
+    }
+    function commitRestockTyped() {
+        const input = document.getElementById('restock-add-input');
+        const name = capitalize((input.value || '').trim());
+        if (!name) return;
+        const known = Object.keys(shelfData || {}).find(k => k.toLowerCase() === name.toLowerCase());
+        const loc = known ? (shelfData[known].loc || 'K2') : null;
+        const finish = (l) => { addRestockItem(known || name, l); input.value = ''; renderRestockSuggestions(); input.focus(); };
+        if (loc) finish(loc);
+        else {
+            closeRestockAddSheet();
+            setTimeout(() => openSelectModal('WHERE FROM?', [
+                { label: 'K2 · Big fridge', value: 'K2' },
+                { label: 'K3 · Dry storage', value: 'K3' }
+            ], (l) => addRestockItem(name, l)), 250);
+        }
+    }
+    function renderRestockSuggestions() {
+        const wrap = document.getElementById('restock-add-sugs');
+        const input = document.getElementById('restock-add-input');
+        if (!wrap || !input) return;
+        const q = (input.value || '').toLowerCase().trim();
+        wrap.innerHTML = '';
+        if (!q) return;
+        Object.keys(shelfData || {})
+            .filter(n => n.toLowerCase().includes(q))
+            .sort((a, b) => (a.toLowerCase().startsWith(q) ? 0 : 1) - (b.toLowerCase().startsWith(q) ? 0 : 1) || a.localeCompare(b))
+            .slice(0, 5)
+            .forEach(n => {
+                const loc = shelfData[n].loc || 'K2';
+                const el = document.createElement('div');
+                el.className = 'prep-sug';
+                el.innerHTML = `<span class="prep-sug-text">${n}</span><span class="prep-sug-qty">${loc}</span>`;
+                el.addEventListener('click', () => {
+                    triggerHaptic('light');
+                    addRestockItem(n, loc);
+                    input.value = '';
+                    renderRestockSuggestions();
+                    input.focus();
+                });
+                wrap.appendChild(el);
+            });
+    }
+
     function openPrepAddSheet() {
         let sheet = document.getElementById('prep-add-sheet');
         if (!sheet) {
@@ -4382,26 +4505,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // RESTOCK: name, then where you fetch it from
+            // RESTOCK: type-first with shelf suggestions; location auto-fills from
+            // the shelf when we know it, otherwise it asks once.
             if (activeOpsCategory === 'restock') {
-                openSelectModal('NEED TO RESTOCK', [], null, {
-                    placeholder: 'What ran out?',
-                    btnLabel: 'NEXT',
-                    onSubmit: (val) => {
-                        const item = capitalize((val || '').trim());
-                        if (!item) return;
-                        setTimeout(() => {
-                            openSelectModal('WHERE FROM?', [
-                                { label: 'K2 · Big fridge', value: 'K2' },
-                                { label: 'K3 · Dry storage', value: 'K3' }
-                            ], (loc) => {
-                                opsData.restock.push({ text: item, completed: false, subtasks: [], loc });
-                                saveOps();
-                                renderOpsList();
-                            });
-                        }, 300);
-                    }
-                });
+                openRestockAddSheet();
                 return;
             }
 

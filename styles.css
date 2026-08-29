@@ -766,3 +766,10 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .ops-row.completed .ops-ring circle:last-of-type { stroke: var(--done-green) !important; }
 .ops-row.completed .ops-count .num.done-date { color: var(--done-green); }
 .ops-row.completed .ops-count .lbl { color: var(--done-green); opacity: 0.7; }
+
+/* --- URGENT PREP --- */
+.ops-row-urgent { border-left: 3px solid var(--overdue-red); }
+.urgent-dot { color: var(--overdue-red); font-size: 0.6rem; margin-right: 6px; }
+
+/* Shelf restock-location chip */
+.shelf-loc-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(200,169,126,0.3); color: var(--nodee-gold); border-radius: 5px; padding: 4px 5px; font-size: 0.55rem; font-weight: 900; cursor: pointer; flex-shrink: 0; width: 30px; text-align: center; }
