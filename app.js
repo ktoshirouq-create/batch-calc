@@ -2,14 +2,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- BATCHING ENGINE RULES (THE BOUNCER) ---
     const BATCH_CONFIG = {
-        'Spirit Batch': { allowedCategories: ['amber-glow', 'neon-cyan', 'magenta-glow'] }, 
-        'Juice Batch': { allowedCategories: ['juice-glow', 'puree-mango', 'magenta-glow', 'mixer-fizz'] }, 
-        'Espresso Batch': { allowedCategories: ['coffee-dark'] },
-        // A clarified batch is spirits, juice, syrup and milk in one vessel —
-        // the usual bucket rules don't apply.
-        'Clarified Batch': { allowedCategories: ['amber-glow', 'neon-cyan', 'juice-glow', 'puree-mango', 'magenta-glow', 'coffee-dark', 'mixer-fizz', 'static-ruby'] }
+
+
     };
 
+    // Category restrictions removed — real batches mix spirits, juice, syrup and
+    // milk (clarified drinks especially), and the rules blocked valid specs.
     function canAddToBatch(catClass, batchType) {
         if (batchType === 'Mocktail' || batchType === 'Custom') return true; 
         const config = BATCH_CONFIG[batchType];
@@ -840,6 +838,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             ? getMocktailName(capitalize((document.getElementById('builder-name')?.value || '').trim()) || 'Mocktail').toUpperCase()
                             : sec.name
                     }</span>
+                    ${(secIdx > 0 && isBatchSection(sec.name))
+                        ? `<button class="builder-section-rename" aria-label="Rename ${sec.name}">✎</button>` : ''}
                     ${(secIdx > 0 && isMocktailSection(sec.name))
                         ? `<button class="builder-mocktail-name" aria-label="Name this mocktail">✎ name</button>` : ''}
                     ${(secIdx > 0 && isBatchSection(sec.name))
@@ -1062,6 +1062,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
+            const renameBtn = sectionEl.querySelector('.builder-section-rename');
+            if (renameBtn) {
+                renameBtn.addEventListener('click', () => {
+                    triggerHaptic('light');
+                    openSelectModal('BATCH NAME', [], null, {
+                        placeholder: 'e.g. Cherry Clarified',
+                        btnLabel: 'RENAME',
+                        prefill: sec.name,
+                        onSubmit: (v) => {
+                            let nm = capitalize((v || '').trim());
+                            if (!nm) return;
+                            // keep it recognised as a batch so it stays bottle-scaled
+                            if (!isBatchSection(nm)) nm = `${nm} Batch`;
+                            const old = builderState.sections[secIdx].name;
+                            builderState.sections[secIdx].name = nm;
+                            // carry the MAIN reference across
+                            const mainSec = builderState.sections.find(s => s.name === 'MAIN');
+                            if (mainSec) {
+                                const ref = mainSec.ingredients.find(i => (i.name || '').toLowerCase() === old.toLowerCase());
+                                if (ref) ref.name = nm;
+                            }
+                            renderBuilder();
+                        }
+                    });
+                });
+            }
             const yieldBtn = sectionEl.querySelector('.builder-section-yield');
             if (yieldBtn) {
                 yieldBtn.addEventListener('click', () => {
@@ -1494,15 +1520,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById('batch-form-container');
         if (!container) return;
         if (!batchBuilderState) { container.innerHTML = ''; return; }
-        const types = ['Spirit Batch', 'Juice Batch', 'Clarified Batch', 'Espresso Batch', 'Custom'];
+        const types = ['Spirit Batch', 'Juice Batch', 'Clarified Batch', 'Espresso Batch'];
         
         container.innerHTML = `
             <div class="batch-form">
                 <h4 class="batch-form-title">NEW BATCH</h4>
+                <input type="text" class="premium-text-input batch-name-input" placeholder="Batch name" value="${(batchBuilderState.type === 'Custom' ? batchBuilderState.customType : batchBuilderState.type).replace(/"/g, '&quot;')}">
                 <div class="batch-type-pills">
                     ${types.map(t => `<button class="batch-type-pill ${batchBuilderState.type === t ? 'active' : ''}" data-type="${t}">${t.replace(' Batch', '')}</button>`).join('')}
                 </div>
-                ${batchBuilderState.type === 'Custom' ? `<input type="text" class="premium-text-input batch-custom-input" placeholder="Batch name" value="${batchBuilderState.customType.replace(/"/g, '&quot;')}">` : ''}
                 <div class="batch-mode-pills">
                     <button class="batch-mode-pill ${batchBuilderState.mode === 'bottle' ? 'active' : ''}" data-mode="bottle">PER BOTTLE</button>
                     <button class="batch-mode-pill ${batchBuilderState.mode === 'drink' ? 'active' : ''}" data-mode="drink">PER DRINK</button>
@@ -1558,7 +1584,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 batchBuilderState.ingredients = [];
                 batchBuilderState.type = newType;
-                
+                batchBuilderState.customType = newType;
+
                 sweepIntoBatch(newType);
 
                 renderBuilder();
@@ -1597,8 +1624,12 @@ document.addEventListener('DOMContentLoaded', () => {
             updateBatchYieldDisplay();
         });
 
-        const customInput = container.querySelector('.batch-custom-input');
-        if (customInput) customInput.addEventListener('input', e => { batchBuilderState.customType = e.target.value; });
+        const nameInput = container.querySelector('.batch-name-input');
+        if (nameInput) nameInput.addEventListener('input', e => {
+            batchBuilderState.type = 'Custom';
+            batchBuilderState.customType = e.target.value;
+            container.querySelectorAll('.batch-type-pill').forEach(p => p.classList.remove('active'));
+        });
         
         renderBatchIngredients();
         
@@ -2052,12 +2083,14 @@ document.addEventListener('DOMContentLoaded', () => {
             row.innerHTML = `
                 <button class="shelf-stock-btn ${data.inStock === false ? 'oos' : 'in-stock'}" aria-label="Toggle stock for ${name}">${data.inStock === false ? '○' : '●'}</button>
                 <span class="shelf-ing-name">${name}</span>
-                <button class="shelf-cat-btn ${data.category}" aria-label="Category for ${name}">${shelfCatLabels[data.category] || 'SPIRIT'}</button>
-                <input type="number" class="shelf-abv-input" value="${data.abv || 0}" min="0" max="100" aria-label="ABV for ${name}">
-                <span class="shelf-abv-suffix">%</span>
-                <button class="shelf-bottle-btn" aria-label="Bottle size for ${name}">${bottle}ml</button>
-                <button class="shelf-loc-btn" aria-label="Restock location for ${name}">${data.loc || 'K2'}</button>
-                <button class="row-more" aria-label="Actions for ${name}">⋯</button>`;
+                <button class="row-more" aria-label="Actions for ${name}">⋯</button>
+                <span class="shelf-controls">
+                    <button class="shelf-cat-btn ${data.category}" aria-label="Category for ${name}">${shelfCatLabels[data.category] || 'SPIRIT'}</button>
+                    <input type="number" class="shelf-abv-input" value="${data.abv || 0}" min="0" max="100" aria-label="ABV for ${name}">
+                    <span class="shelf-abv-suffix">%</span>
+                    <button class="shelf-bottle-btn" aria-label="Bottle size for ${name}">${bottle}ml</button>
+                    <button class="shelf-loc-btn" aria-label="Restock location for ${name}">${data.loc || 'K2'}</button>
+                </span>`;
             row.querySelector('.shelf-stock-btn').addEventListener('click', e => {
                 e.stopPropagation(); triggerHaptic('light');
                 const nowIn = (shelfData[name].inStock === false);
