@@ -21,7 +21,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let editingCocktailName = null;
 
     window.lastUsedRound = 1;
-    let abvDilution = 20;
     let activeAbvSpec = null;
 
    // --- HELPERS ---
@@ -137,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (scrollArea.scrollTop === 0 && touchStartY > 0) {
                 const pullDistance = e.changedTouches[0].clientY - touchStartY;
                 if (pullDistance > 70) {
-                    ptrIndicator.innerText = "REFRESHING...";
+                    ptrIndicator.innerText = "REFRESHING…";
                     triggerHaptic('heavy');
                     setTimeout(() => window.location.reload(true), 150); 
                 } else {
@@ -175,7 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
             wrap.className = 'modal-custom-input';
             const prefillVal = (customInput.prefill || '').replace(/"/g, '&quot;');
             wrap.innerHTML = `
-                <input type="text" class="premium-text-input" placeholder="${customInput.placeholder || 'Custom...'}" value="${prefillVal}" style="margin-bottom: 0;">
+                <input type="text" class="premium-text-input" placeholder="${customInput.placeholder || 'Custom…'}" value="${prefillVal}" style="margin-bottom: 0;">
                 <button class="btn-primary" style="margin-top: 12px;">${customInput.btnLabel || 'ADD'}</button>
             `;
             const input = wrap.querySelector('input');
@@ -419,7 +418,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let vaultLive = false;  // true only when recipeVault reflects a successful live fetch
 
     async function loadVault() {
-        showLoader("SYNCING CODEX...");
+        showLoader("SYNCING CODEX…");
         const attempt = async () => {
             const res = await fetch(API_URL);
             if (!res.ok) throw new Error("Network error");
@@ -480,6 +479,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += `<div class="result-row ${ing.color}"><span class="ing-name">${ing.name}</span>`;
                 if (isToppedRow(ing)) {
                     html += `<span class="ing-amount">top</span></div>`;
+                } else if (isClarifyRow(ing)) {
+                    html += `<span class="ing-amount">${Math.round((ing.amount || 0) * round)}ml <span class="unit-note">clarify</span></span></div>`;
                 } else if (ing.color === 'static-ruby') {
                     html += `<span class="ing-amount">${Math.round((ing.amount || 0) * round)} ${ing.unit || 'dash'}</span></div>`;
                 } else {
@@ -525,7 +526,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     : ((mode === 'bottle' || ratioSum <= 0) ? 1 : (bottleML / ratioSum));
 
                 const mainRef = mainIngs.find(i => i.name === label);
-                const perBottle = ratioSum > 0 ? Math.round(ratioSum * factor) : bottleML;
+                const measured = getBatchYield(sbName);
+                const perBottle = measured > 0 ? measured
+                    : (ratioSum > 0 ? Math.round(ratioSum * factor) : bottleML);
 
                 const section = document.createElement('div');
                 section.className = 'vault-subbatch' + (isBatch ? '' : ' vault-altrecipe')
@@ -540,6 +543,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     let amtHtml;
                     if (isToppedRow(ing)) {
                         amtHtml = 'top';
+                    } else if (isClarifyRow(ing)) {
+                        amtHtml = `${formatAmount(Math.round((ing.amount || 0) * factor))}ml <span class="unit-note">clarify</span>`;
                     } else if (ing.color === 'static-ruby') {
                         amtHtml = `${ing.amount || 0} ${ing.unit || 'dash'}`;
                     } else {
@@ -550,7 +555,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Fixed bottle-worth: doesn't move with SERVES (batches only)
                 if (isBatch && mainRef && mainRef.amount > 0) {
                     const cocktails = Math.floor(perBottle / mainRef.amount);
-                    html += `<div class="sb-worth">1 bottle (${perBottle}ml) = ${cocktails} cocktails at ${formatAmount(mainRef.amount)}ml</div>`;
+                    html += `<div class="sb-worth">${measured > 0 ? 'Yields' : '1 bottle'} ${perBottle}ml = ${cocktails} cocktails at ${formatAmount(mainRef.amount)}ml${measured > 0 ? ' <span class="sb-measured">measured</span>' : ''}</div>`;
                 }
                 section.innerHTML = html;
                 const sizeBtn = section.querySelector('.sb-size');
@@ -793,14 +798,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const nameInput = document.getElementById('builder-name');
         if (nameInput) nameInput.placeholder = isBatch ? 'Batch Name (e.g. Passion+Lem)' : 'Cocktail Name';
         const note = document.getElementById('builder-yield-note');
-        if (note) note.innerText = isBatch ? 'STANDALONE BATCH — NOT TIED TO ONE COCKTAIL' : 'STANDARD YIELD: 1 COCKTAIL';
+        if (note) note.innerText = isBatch ? 'STANDALONE BATCH — NOT TIED TO ONE COCKTAIL' : '';
         document.getElementById('standalone-bottle-row')?.classList.toggle('hidden', !isBatch);
         // A standalone batch IS the batch — no sub-batches or extra sections
         document.getElementById('add-batch-btn')?.classList.toggle('hidden', isBatch);
         document.getElementById('add-section-btn')?.classList.toggle('hidden', isBatch);
     }
     const catLabels = { 'amber-glow': 'SPIRIT', 'neon-cyan': 'LIQUEUR', 'juice-glow': 'JUICE', 'magenta-glow': 'SYRUP', 'coffee-dark': 'ESPRESSO', 'puree-mango': 'PUREE', 'mixer-fizz': 'MIXER', 'static-ruby': 'OTHER' };
-    const STATIC_UNITS = ['dash', 'squeeze'];
+    // 'clarify' takes a real ml amount (milk for a milk-clarified batch) and
+    // scales with the batch, but is EXCLUDED from the yield total — it comes
+    // back out as curds, so counting it would corrupt every per-bottle figure.
+    const STATIC_UNITS = ['dash', 'squeeze', 'clarify'];
+    const isClarify = (x) => x && x.cat === 'static-ruby' && x.unit === 'clarify';
+    const isClarifyRow = (r) => r && r.color === 'static-ruby' && r.unit === 'clarify';
     // Mixers are normally topped, not measured — but can be given an ml amount
     // when they're part of a batch rather than poured at service.
     const MIXER_UNITS = ['top', 'ml'];
@@ -824,6 +834,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     ${(secIdx > 0 && isMocktailSection(sec.name))
                         ? `<button class="builder-mocktail-name" aria-label="Name this mocktail">✎ name</button>` : ''}
                     ${(secIdx > 0 && isBatchSection(sec.name))
+                        ? `<button class="builder-section-yield" aria-label="Measured yield for ${sec.name}">${sec.yieldML ? sec.yieldML + 'ml yield' : '+ yield'}</button>` : ''}
+                    ${(secIdx > 0 && isBatchSection(sec.name))
                         ? `<button class="builder-section-size" aria-label="Bottle size for ${sec.name}">${sec.bottleML || getBatchSize(`${(document.getElementById('builder-name')?.value || '').trim()} — ${sec.name}`)}ml</button>` : ''}
                     ${secIdx > 0 ? '<button class="builder-section-remove">×</button>' : ''}
                 </div>
@@ -841,8 +853,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (ing.cat === 'static-ruby') {
                     const u = ing.unit || 'dash';
                     // 'top' has no meaningful count — hide the number input entirely
-                    const countInput = u === 'top' ? '' :
-                        `<span class="static-step"><button class="ss-btn" data-d="-1">−</button><span class="ss-n">${ing.amount || 0}</span><button class="ss-btn" data-d="1">+</button></span>`;
+                    const countInput = u === 'top' ? ''
+                        : u === 'clarify'
+                            ? `<input type="number" class="builder-row-amount" value="${ing.amount || ''}" placeholder="0">`
+                            : `<span class="static-step"><button class="ss-btn" data-d="-1">−</button><span class="ss-n">${ing.amount || 0}</span><button class="ss-btn" data-d="1">+</button></span>`;
                     amountHtml = `
                         <div style="display:flex; align-items:center; gap:4px; margin-right:4px;">
                            ${countInput}
@@ -869,6 +883,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
                 
                 if (ing.cat === 'static-ruby') {
+                    const clarInput = row.querySelector('.builder-row-amount');
+                    if (clarInput) clarInput.addEventListener('input', e => {
+                        builderState.sections[secIdx].ingredients[ingIdx].amount = parseFloat(e.target.value) || 0;
+                    });
                     row.querySelectorAll('.ss-btn').forEach(b => {
                         b.addEventListener('click', (e) => {
                             e.preventDefault();
@@ -1035,6 +1053,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
+            const yieldBtn = sectionEl.querySelector('.builder-section-yield');
+            if (yieldBtn) {
+                yieldBtn.addEventListener('click', () => {
+                    triggerHaptic('light');
+                    const cocktailNow = (document.getElementById('builder-name')?.value || '').trim();
+                    const cur = sec.yieldML || getBatchYield(`${cocktailNow} — ${sec.name}`) || (sec.bottleML || BATCH_BOTTLE_ML);
+                    openNumberModal(`${sec.name.toUpperCase()} YIELD`, cur, 'ml', (ml) => {
+                        builderState.sections[secIdx].yieldML = ml;
+                        renderBuilder();
+                    });
+                });
+            }
             const sizeBtn = sectionEl.querySelector('.builder-section-size');
             if (sizeBtn) {
                 sizeBtn.addEventListener('click', () => {
@@ -1184,7 +1214,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     else { builderState.sections.push({ name: val, ingredients: [] }); renderBuilder(); }
                 },
                 {
-                    placeholder: 'Or type custom section name...',
+                    placeholder: 'Or type custom section name…',
                     btnLabel: 'ADD CUSTOM',
                     onSubmit: (val) => {
                         // Custom: no rule — checklist opens unticked
@@ -1232,7 +1262,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     openAlertModal({ title: 'NO INGREDIENTS', message: 'Add at least one ingredient with name and amount.' });
                     return;
                 }
-                showLoader("SAVING BATCH...");
+                showLoader("SAVING BATCH…");
                 try {
                     const toDelete = editingCocktailName ? [editingCocktailName] : [fullName];
                     for (const n of toDelete) {
@@ -1250,6 +1280,7 @@ document.addEventListener('DOMContentLoaded', () => {
             builderState.sections.forEach(sec => {
                 const sectionName = sec.name === 'MAIN' ? name : `${name} — ${sec.name}`;
                 // Remember the bottle size entered in the builder header
+                if (sec.name !== 'MAIN' && sec.yieldML) setBatchYield(sectionName, sec.yieldML);
                 if (sec.name !== 'MAIN' && sec.bottleML) {
                     setBatchSize(sectionName, sec.bottleML);
                     setBatchMode(sectionName, getBatchMode(sectionName) || 'drink');
@@ -1274,7 +1305,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 openAlertModal({ title: 'NO INGREDIENTS', message: 'Add at least one ingredient with name and amount.' });
                 return;
             }
-            showLoader("SAVING SPEC...");
+            showLoader("SAVING SPEC…");
             try {
                 if (editingCocktailName) {
                     const toDelete = [editingCocktailName, ...Object.keys(recipeVault).filter(n => n.startsWith(editingCocktailName + ' — '))];
@@ -1473,17 +1504,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span class="batch-per-drink-suffix">ml</span>
                     </div>
                 </div>` : ''}
-                <h5 class="batch-section-label">${batchBuilderState.mode === 'bottle' ? 'CONSTITUENTS (PER BOTTLE)' : 'CONSTITUENTS (1-COCKTAIL RATIO)'}</h5>
+                <h5 class="batch-section-label">${batchBuilderState.mode === 'bottle' ? 'INGREDIENTS (PER BOTTLE)' : 'INGREDIENTS (RATIO)'}</h5>
                 <div id="batch-ingredients-list"></div>
                 <button id="batch-add-ing-btn" class="builder-add-ing">＋ INGREDIENT</button>
                 
                 <div class="batch-per-drink-row" style="flex-direction: column; align-items: stretch; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 15px;">
                     <div style="display:flex; justify-content: space-between; margin-bottom: 12px; align-items: center;">
-                        <span class="text-muted text-xs">${batchBuilderState.mode === 'bottle' ? 'BATCH TOTAL:' : 'RATIO SUM:'}</span>
+                        <span class="text-muted text-xs">${batchBuilderState.mode === 'bottle' ? 'BATCH TOTAL:' : 'INGREDIENTS TOTAL:'}</span>
                         <span id="batch-auto-sum" class="text-muted text-xs" style="font-size: 0.9rem;">0 ml</span>
                     </div>
                     <div style="display:flex; justify-content: space-between; align-items: center;">
-                        <span class="batch-per-drink-label text-gold" style="font-size: 0.75rem; letter-spacing: 1.5px;">SERVICE POUR:</span>
+                        <span class="batch-per-drink-label text-gold" style="font-size: 0.75rem; letter-spacing: 1.5px;">POUR:</span>
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <button class="batch-stepper-btn" id="batch-per-drink-minus">−5</button>
                             <input type="number" id="batch-per-drink-input" class="batch-per-drink-input" value="${batchBuilderState.perDrink}">
@@ -1600,8 +1631,10 @@ document.addEventListener('DOMContentLoaded', () => {
             let amountHtml = '';
             if (ing.cat === 'static-ruby') {
                 const u = ing.unit || 'dash';
-                const countInput = u === 'top' ? '' :
-                    `<span class="static-step"><button class="ss-btn" data-d="-1">−</button><span class="ss-n">${ing.amount || 0}</span><button class="ss-btn" data-d="1">+</button></span>`;
+                const countInput = u === 'top' ? ''
+                    : u === 'clarify'
+                        ? `<input type="number" class="builder-row-amount" value="${ing.amount || ''}" placeholder="0">`
+                        : `<span class="static-step"><button class="ss-btn" data-d="-1">−</button><span class="ss-n">${ing.amount || 0}</span><button class="ss-btn" data-d="1">+</button></span>`;
                 amountHtml = `
                     <div style="display:flex; align-items:center; gap:4px; margin-right:4px;">
                        ${countInput}
@@ -1628,6 +1661,11 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             
             if (ing.cat === 'static-ruby') {
+                const clarInput2 = row.querySelector('.builder-row-amount');
+                if (clarInput2) clarInput2.addEventListener('input', e => {
+                    batchBuilderState.ingredients[idx].amount = parseFloat(e.target.value) || 0;
+                    updateBatchYieldDisplay();
+                });
                 row.querySelectorAll('.ss-btn').forEach(b => {
                     b.addEventListener('click', (e) => {
                         e.preventDefault();
@@ -1974,8 +2012,8 @@ document.addEventListener('DOMContentLoaded', () => {
         form.querySelector('.shelf-add-save').addEventListener('click', () => {
             triggerHaptic('heavy');
             const name = capitalize(shelfAddState.name.trim());
-            if (!name) return openAlertModal({ title: 'NOTICE', message: 'Ingredient name required.' });
-            if (shelfData[name]) return openAlertModal({ title: 'NOTICE', message: `"${name}" is already on the shelf.` });
+            if (!name) return openAlertModal({ title: 'NAME REQUIRED', message: 'Give the ingredient a name.' });
+            if (shelfData[name]) return openAlertModal({ title: 'ALREADY ON SHELF', message: `"${name}" is already there.` });
             shelfData[name] = { category: shelfAddState.cat, abv: shelfAddState.abv, inStock: true };
             saveShelf();
             toggleShelfAddForm();
@@ -2064,8 +2102,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const shelfActions = () => {
                 triggerHaptic('medium');
                 openSelectModal(name.toUpperCase(), [
-                    { label: 'Rename / Merge', value: 'rename' },
-                    { label: 'Remove from shelf', value: 'remove' }
+                    { label: 'Rename / merge', value: 'rename' },
+                    { label: 'Remove ingredient', value: 'remove' }
                 ], (val) => {
                     if (val === 'rename') setTimeout(() => renameShelfIngredient(name), 350);
                     else setTimeout(() => confirmRemoveShelf(name), 350);
@@ -2113,7 +2151,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 const doIt = async () => {
-                    showLoader(isMerge ? "MERGING..." : "RENAMING...");
+                    showLoader(isMerge ? "MERGING…" : "RENAMING…");
                     try {
                         for (const specName of affected) {
                             const rows = [];
@@ -2323,7 +2361,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const isMain = sectionName === name;
             const secLabel = isMain ? 'MAIN' : sectionName.replace(name + ' — ', '');
             const sec = { name: secLabel, ingredients: [] };
-            if (!isMain && isBatchSection(secLabel)) sec.bottleML = getBatchSize(sectionName);
+            if (!isMain && isBatchSection(secLabel)) {
+                sec.bottleML = getBatchSize(sectionName);
+                const y = getBatchYield(sectionName);
+                if (y) sec.yieldML = y;
+            }
             (recipeVault[sectionName] || []).forEach(ing => {
                 sec.ingredients.push({ amount: ing.amount, name: ing.name, cat: ing.color, unit: ing.unit });
             });
@@ -2381,7 +2423,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         });
                     });
                 });
-                showLoader("RENAMING...");
+                showLoader("RENAMING…");
                 try {
                     for (const n of related) {
                         await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'delete', cocktailName: n }) });
@@ -2422,7 +2464,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 confirmLabel: 'REMOVE',
                 danger: true,
                 onConfirm: async () => {
-                    showLoader('REMOVING...');
+                    showLoader('REMOVING…');
                     try {
                         await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'delete', cocktailName: sectionName }) });
                         await loadVault();
@@ -2462,7 +2504,7 @@ document.addEventListener('DOMContentLoaded', () => {
             openAlertModal({ title: 'NOTHING TO COPY', message: "Couldn't build an 18+ version from this spec." });
             return;
         }
-        showLoader('ADDING 18+...');
+        showLoader('ADDING 18+…');
         try {
             await fetch(API_URL, { method: 'POST', body: JSON.stringify(rows) });
             await loadVault();
@@ -2489,14 +2531,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         });
                     });
                 });
-                showLoader("DELETING...");
+                showLoader("DELETING…");
                 try {
                     for (const n of related) {
                         await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'delete', cocktailName: n }) });
                     }
                     await loadVault();
                     showToast(`Deleted "${isStandaloneName(name) ? standaloneLabel(name) : name}"`, async () => {
-                        showLoader("RESTORING...");
+                        showLoader("RESTORING…");
                         try {
                             await fetch(API_URL, { method: 'POST', body: JSON.stringify(snapshot) });
                             await loadVault();
@@ -2644,7 +2686,7 @@ document.addEventListener('DOMContentLoaded', () => {
         syncBtn.addEventListener('click', async () => {
             if(parsedStagingData.length === 0) return;
             triggerHaptic('heavy');
-            showLoader("PUSHING TO CODEX...");
+            showLoader("PUSHING TO CODEX…");
             try {
                 if (editingCocktailName) {
                     const toDelete = [editingCocktailName, ...Object.keys(recipeVault).filter(n => n.startsWith(editingCocktailName + ' — '))];
@@ -2704,7 +2746,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 {label: '1.85:1 Ratio (Weight)', value: '1.85:1', data: 1/1.85},
                 {label: '2:1 Ratio (Weight)', value: '2:1', data: 0.5},
                 {label: '3:1 Ratio (Weight)', value: '3:1', data: 1/3},
-                {label: 'Custom Brix Target', value: 'custom', data: null}
+                {label: 'Custom brix target', value: 'custom', data: null}
             ], (v, l, data) => {
                 activeSyrupTarget = { type: v === 'custom' ? 'custom' : 'ratio', val: data };
                 btnSyrupTarget.innerText = l;
@@ -2999,6 +3041,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ['mocktail_names', 'codex_mocktail_names_v1'],
         ['drink_types', 'codex_drink_types_v1'],
         ['batch_sizes', 'codex_batch_sizes_v1'],
+        ['batch_yields', 'codex_batch_yields_v1'],
         ['shelf',       'codex_shelf_v1']
     ];
     const SETTINGS_PUSHED_KEY = 'codex_settings_pushed_v1';   // "scope:entry" -> {sig, ts}
@@ -3277,6 +3320,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const BATCH_MODE_KEY = 'codex_batch_modes_v1';
     const BATCH_SIZE_KEY = 'codex_batch_sizes_v1';
+    // Measured yield — what you ACTUALLY get after clarifying, reducing or
+    // diluting. Without it the app assumes yield = sum of ingredients.
+    const BATCH_YIELD_KEY = 'codex_batch_yields_v1';
+    function loadBatchYields() {
+        try { return JSON.parse(localStorage.getItem(BATCH_YIELD_KEY)) || {}; } catch { return {}; }
+    }
+    function getBatchYield(fullName) {
+        return loadBatchYields()[(fullName || '').toLowerCase().trim()] || 0;
+    }
+    function setBatchYield(fullName, ml) {
+        const m = loadBatchYields();
+        const k = (fullName || '').toLowerCase().trim();
+        if (ml > 0) m[k] = ml; else delete m[k];
+        try { localStorage.setItem(BATCH_YIELD_KEY, JSON.stringify(m)); } catch {}
+        if (typeof scheduleSettingsPush === 'function') scheduleSettingsPush();
+    }
     function loadBatchModes() {
         try { return JSON.parse(localStorage.getItem(BATCH_MODE_KEY)) || {}; } catch { return {}; }
     }
@@ -3548,12 +3607,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     e.stopPropagation();
                     triggerHaptic('light');
                     const wasDone = task.subtasks[sIdx].done;
+                    const wasParentDone = !!task.completed;
                     task.subtasks[sIdx].done = !wasDone;
                     const allDone = task.subtasks.length > 0 && task.subtasks.every(s => s.done);
                     if (allDone) { task.completed = true; if (isPeriodic || isPrep) task.lastCompleted = Date.now(); }
                     else if (task.completed) { task.completed = false; }
                     saveOps();
-                    renderOpsList();
+                    // Only rebuild the whole list when the PARENT state flipped —
+                    // otherwise ticking a step collapsed the row you were working in.
+                    if (!!task.completed !== wasParentDone) renderOpsList();
+                    else rerenderSubtasks(rowEl, cat, taskIdx);
                 });
                 // edit subtask inline (tap text OR the pencil)
                 const startSubEdit = (e) => {
@@ -4007,17 +4070,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     triggerHaptic('medium');
                     
                     const actions = [];
-                    if (isLinked) actions.push({ label: 'View Spec', value: 'view-spec' });
-                    if (isPeriodic) actions.push({ label: 'Set Frequency', value: 'set-freq' });
-                    if (isPeriodic) actions.push({ label: 'Log a Cleaning', value: 'log-done' });
-                    if (isPrep) actions.push({ label: taskObj.urgent ? 'Clear Urgent' : 'Mark Urgent', value: 'urgent' });
+                    if (isLinked) actions.push({ label: 'View spec', value: 'view-spec' });
+                    if (isPeriodic) actions.push({ label: 'Set frequency', value: 'set-freq' });
+                    if (isPeriodic) actions.push({ label: 'Log a cleaning', value: 'log-done' });
+                    if (isPrep) actions.push({ label: taskObj.urgent ? 'Clear urgent' : 'Mark urgent', value: 'urgent' });
                     if (isPrep) actions.push({ label: 'Add to Restock', value: 'to-restock' });
-                    if (isPrep) actions.push({ label: taskObj.kind === 'mise' ? 'Move to Batches' : 'Move to Mise', value: 'move-kind' });
-                    if (isPrep && isLinked) actions.push({ label: 'Batch Bottle Size', value: 'batch-size' });
-                    actions.push({ label: 'Edit Task', value: 'edit' });
-                    actions.push({ label: 'Delete Task', value: 'delete' });
+                    if (isPrep) actions.push({ label: taskObj.kind === 'mise' ? 'Move to batches' : 'Move to mise', value: 'move-kind' });
+                    if (isPrep && isLinked) actions.push({ label: 'Batch bottle size', value: 'batch-size' });
+                    const noun = isRestock ? 'Item' : (isNumberedSop ? 'Step' : 'Task');
+                    actions.push({ label: `Edit ${noun}`, value: 'edit' });
+                    actions.push({ label: `Delete ${noun}`, value: 'delete' });
                     
-                    openSelectModal('TASK ACTIONS', actions, (val) => {
+                    openSelectModal(isRestock ? 'ITEM ACTIONS' : 'TASK ACTIONS', actions, (val) => {
                         if (val === 'delete') {
                             const cat = activeOpsCategory;
                             const idx = taskObj.originalIndex;
@@ -4061,10 +4125,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             renderOpsList();
                             showToast(t.urgent ? 'Marked urgent' : 'Urgent cleared');
                         } else if (val === 'to-restock') {
-                            const t = opsData[activeOpsCategory][taskObj.originalIndex];
-                            const known = Object.keys(shelfData || {}).find(k => k.toLowerCase() === (t.text || '').toLowerCase());
-                            addRestockItem(t.text, known ? (shelfData[known].loc || 'K2') : 'K2');
-                            showToast(`"${t.text}" added to restock`);
+                            setTimeout(() => openRestockPicker(activeOpsCategory, taskObj.originalIndex), 300);
                         } else if (val === 'move-kind') {
                             const t = opsData[activeOpsCategory][taskObj.originalIndex];
                             t.kind = t.kind === 'mise' ? 'batch' : 'mise';
@@ -4074,8 +4135,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             renderOpsList();
                         } else if (val === 'edit') {
                             setTimeout(() => {
-                                openSelectModal('EDIT TASK', [], null, {
-                                    placeholder: 'Edit task text...',
+                                openSelectModal(`EDIT ${noun.toUpperCase()}`, [], null, {
+                                    placeholder: `Edit ${noun.toLowerCase()}…`,
                                     btnLabel: 'SAVE',
                                     prefill: opsData[activeOpsCategory][taskObj.originalIndex].text,
                                     onSubmit: (newText) => {
@@ -4115,7 +4176,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     saveOps();
                                     renderOpsList();
                                 }, {
-                                    placeholder: 'Custom days...',
+                                    placeholder: 'Custom days…',
                                     btnLabel: 'SET',
                                     onSubmit: (val) => {
                                         const days = parseInt(val);
@@ -4280,7 +4341,76 @@ document.addEventListener('DOMContentLoaded', () => {
         if (exists) { showToast(`"${name}" is already on the list`); return; }
         opsData.restock.push({ text: name, completed: false, subtasks: [], loc: loc || 'K2' });
         saveOps();
+        pushPrepHistory({ text: name, restock: true, loc: loc || 'K2' });
         renderOpsList();
+    }
+
+    // Pick which of a batch's ingredients you're short of. Amounts are the same
+    // figures the batch card shows, so you can see what a full make costs you.
+    function openRestockPicker(cat, taskIdx) {
+        const task = opsData[cat][taskIdx];
+        const specName = task.linkedSection ? `${task.linkedSpec} — ${task.linkedSection}` : task.linkedSpec;
+        const ings = (recipeVault[specName] || []).filter(i => !isToppedRow(i));
+        if (!ings.length) { openRestockAddSheet(); return; }   // mise or unlinked → typed add
+
+        const perDrinkTotal = ings.filter(i => i.color !== 'static-ruby').reduce((s, i) => s + (i.amount || 0), 0);
+        const bottleML = task.bottleML || getBatchSize(specName);
+        const mode = getBatchMode(specName);
+        const factor = (mode === 'bottle' || perDrinkTotal <= 0) ? 1 : (bottleML / perDrinkTotal);
+        const qty = task.qty || 1;
+
+        triggerHaptic();
+        document.getElementById('selection-modal-title').innerText = 'ADD TO RESTOCK';
+        const list = document.getElementById('selection-modal-list');
+        list.innerHTML = '';
+        const wrap = document.createElement('div');
+        wrap.className = 'restock-picker';
+        wrap.innerHTML = `<div class="rp-sub">${(specName || '').toUpperCase()} · ×${qty}</div>`;
+
+        const chosen = new Set();
+        ings.forEach((ing, i) => {
+            const total = Math.round((ing.amount || 0) * factor * qty);
+            const bottled = ['amber-glow', 'neon-cyan'].includes(ing.color);
+            const size = getIngBottleSize(ing.name);
+            const bottles = bottled ? (total / size) : 0;
+            const needTxt = bottled ? `${bottles.toFixed(1).replace(/\.0$/, '')} btl` : `${total}ml`;
+            const shelf = Object.keys(shelfData || {}).find(k => k.toLowerCase() === ing.name.toLowerCase());
+            const outOfStock = shelf && shelfData[shelf].inStock === false;
+            const loc = shelf ? (shelfData[shelf].loc || 'K2') : 'K2';
+            // Pre-tick when it'll eat most of a bottle, or it's already flagged out
+            if ((bottled && bottles >= 0.6) || outOfStock) chosen.add(i);
+            const row = document.createElement('div');
+            row.className = 'rp-row' + (chosen.has(i) ? ' on' : '');
+            row.innerHTML = `<div class="rp-tick">${chosen.has(i) ? '✓' : ''}</div>
+                <span class="rp-name">${ing.name}</span>
+                <span class="rp-need">${needTxt}</span>
+                <span class="rp-loc">${loc}</span>`;
+            row.addEventListener('click', () => {
+                triggerHaptic('light');
+                if (chosen.has(i)) chosen.delete(i); else chosen.add(i);
+                row.classList.toggle('on', chosen.has(i));
+                row.querySelector('.rp-tick').innerText = chosen.has(i) ? '✓' : '';
+                wrap.querySelector('.rp-add').innerText = chosen.size ? `ADD ${chosen.size} ITEM${chosen.size > 1 ? 'S' : ''}` : 'ADD';
+            });
+            row._data = { name: ing.name, loc };
+            wrap.appendChild(row);
+        });
+
+        const actions = document.createElement('div');
+        actions.className = 'modal-actions';
+        actions.innerHTML = `<button class="btn-secondary">CANCEL</button><button class="btn-primary rp-add">${chosen.size ? `ADD ${chosen.size} ITEM${chosen.size > 1 ? 'S' : ''}` : 'ADD'}</button>`;
+        actions.children[0].addEventListener('click', () => { triggerHaptic('light'); closeSelectModal(); });
+        actions.children[1].addEventListener('click', () => {
+            triggerHaptic('heavy');
+            const rows = [...wrap.querySelectorAll('.rp-row')];
+            let n = 0;
+            [...chosen].forEach(i => { const d = rows[i]._data; if (d) { addRestockItem(d.name, d.loc); n++; } });
+            closeSelectModal();
+            if (n) showToast(`${n} item${n > 1 ? 's' : ''} added to restock`);
+        });
+        wrap.appendChild(actions);
+        list.appendChild(wrap);
+        modal.classList.remove('hidden');
     }
 
     function openRestockAddSheet() {
@@ -4331,7 +4461,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!name) return;
         const known = Object.keys(shelfData || {}).find(k => k.toLowerCase() === name.toLowerCase());
         const loc = known ? (shelfData[known].loc || 'K2') : null;
-        const finish = (l) => { addRestockItem(known || name, l); input.value = ''; renderRestockSuggestions(); input.focus(); };
+        const finish = (l) => { addRestockItem(known || name, l); closeRestockAddSheet(); };
         if (loc) finish(loc);
         else {
             closeRestockAddSheet();
@@ -4347,7 +4477,24 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!wrap || !input) return;
         const q = (input.value || '').toLowerCase().trim();
         wrap.innerHTML = '';
-        if (!q) return;
+        if (!q) {
+            // Recents — things you've restocked before, most recent first
+            const hist = loadPrepHistory().filter(h => h.restock).slice(0, 3);
+            if (!hist.length) return;
+            wrap.insertAdjacentHTML('beforeend', '<div class="prep-sug-label">RECENT</div>');
+            hist.forEach(h => {
+                const el = document.createElement('div');
+                el.className = 'prep-sug';
+                el.innerHTML = `<span class="prep-sug-text">${h.text}</span><span class="prep-sug-qty">${h.loc || 'K2'}</span>`;
+                el.addEventListener('click', () => {
+                    triggerHaptic('light');
+                    addRestockItem(h.text, h.loc || 'K2');
+                    closeRestockAddSheet();
+                });
+                wrap.appendChild(el);
+            });
+            return;
+        }
         Object.keys(shelfData || {})
             .filter(n => n.toLowerCase().includes(q))
             .sort((a, b) => (a.toLowerCase().startsWith(q) ? 0 : 1) - (b.toLowerCase().startsWith(q) ? 0 : 1) || a.localeCompare(b))
@@ -4360,9 +4507,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 el.addEventListener('click', () => {
                     triggerHaptic('light');
                     addRestockItem(n, loc);
-                    input.value = '';
-                    renderRestockSuggestions();
-                    input.focus();
+                    closeRestockAddSheet();
                 });
                 wrap.appendChild(el);
             });
@@ -4423,9 +4568,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isBatchy = remembered ? (remembered === 'batch') : BATCH_TEXT_RE.test(query);
         const text = (!isBatchy && qty > 1) ? `${qty}x ${clean}` : clean;
         commitPrepTask({ text, qty: isBatchy ? qty : 1 });
-        input.value = '';
-        renderPrepSuggestions();
-        input.focus();
+        closePrepAddSheet();
     }
 
     function closePrepAddSheet() {
@@ -4485,10 +4628,7 @@ document.addEventListener('DOMContentLoaded', () => {
             el.addEventListener('click', () => {
                 triggerHaptic('light');
                 commitPrepTask({ text: r.text, linkedSpec: r.linkedSpec, linkedSection: r.linkedSection, qty });
-                const input = document.getElementById('prep-add-input');
-                input.value = '';
-                renderPrepSuggestions();
-                input.focus();
+                closePrepAddSheet();
             });
             wrap.appendChild(el);
         });
@@ -4515,7 +4655,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // PERIODIC: type name, then pick frequency
             if (activeOpsCategory === 'periodic') {
                 openSelectModal('NEW UPKEEP TASK', [], null, {
-                    placeholder: 'Task name (e.g. Deep clean well)...',
+                    placeholder: 'Task name (e.g. Deep clean well)…',
                     btnLabel: 'NEXT',
                     onSubmit: (val) => {
                         const taskText = val.trim();
@@ -4532,7 +4672,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 saveOps();
                                 renderOpsList();
                             }, {
-                                placeholder: 'Custom days...',
+                                placeholder: 'Custom days…',
                                 btnLabel: 'ADD',
                                 onSubmit: (d) => {
                                     const days = parseInt(d) || 30;
@@ -4547,8 +4687,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             
-            openSelectModal('NEW TASK', [], null, {
-                placeholder: 'Type main task here...',
+            const addNoun = (activeOpsCategory === 'opening' || activeOpsCategory === 'closing') ? 'STEP' : 'TASK';
+            openSelectModal(`NEW ${addNoun}`, [], null, {
+                placeholder: addNoun === 'STEP' ? 'Describe the step…' : 'What needs doing?',
                 btnLabel: 'ADD',
                 onSubmit: (val) => {
                     opsData[activeOpsCategory].push({ text: val, completed: false, subtasks: [] });
