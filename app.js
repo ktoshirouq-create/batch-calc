@@ -4,7 +4,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const BATCH_CONFIG = {
         'Spirit Batch': { allowedCategories: ['amber-glow', 'neon-cyan', 'magenta-glow'] }, 
         'Juice Batch': { allowedCategories: ['juice-glow', 'puree-mango', 'magenta-glow', 'mixer-fizz'] }, 
-        'Espresso Batch': { allowedCategories: ['coffee-dark'] }
+        'Espresso Batch': { allowedCategories: ['coffee-dark'] },
+        // A clarified batch is spirits, juice, syrup and milk in one vessel —
+        // the usual bucket rules don't apply.
+        'Clarified Batch': { allowedCategories: ['amber-glow', 'neon-cyan', 'juice-glow', 'puree-mango', 'magenta-glow', 'coffee-dark', 'mixer-fizz', 'static-ruby'] }
     };
 
     function canAddToBatch(catClass, batchType) {
@@ -650,7 +653,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (/spirit/.test(l)) return 1;
                 if (/juice/.test(l)) return 2;
                 if (/espresso|coffee/.test(l)) return 3;
-                if (/cream/.test(l)) return 4;
+                if (/clarified/.test(l)) return 4;
+                if (/cream/.test(l)) return 5;
                 if (/^18\+|u21/.test(l)) return 5;
                 if (/mocktail/.test(l)) return 6;
                 return 7;
@@ -783,8 +787,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const isStandaloneName = (n) => (n || '').startsWith(STANDALONE_OWNER + ' — ');
     // A "batch" is something you bottle. A Mocktail (or any other named section)
     // is an ALTERNATE RECIPE for the same drink — made per serve, never bottled.
-    const BATCH_SECTIONS = ['spirit batch', 'juice batch', 'espresso batch', 'cream', 'cream batch'];
-    const isBatchSection = (sectionLabel) => BATCH_SECTIONS.includes((sectionLabel || '').toLowerCase().trim());
+    const BATCH_SECTIONS = ['spirit batch', 'juice batch', 'espresso batch', 'cream', 'cream batch', 'clarified batch'];
+    // Anything named "... Batch" is bottle-scaled, so custom batches behave
+    // correctly instead of being treated as a per-serve recipe.
+    const isBatchSection = (sectionLabel) => {
+        const l = (sectionLabel || '').toLowerCase().trim();
+        return BATCH_SECTIONS.includes(l) || /\bbatch$/.test(l);
+    };
     const isMocktailSection = (sectionLabel) => /mocktail/i.test(sectionLabel || '');
     // A low-ABV swap (e.g. Vodka U21 in place of the spirit) — a recipe, not a batch
     const isU21Section = (sectionLabel) => /^18\+|u21/i.test((sectionLabel || '').trim());
@@ -1115,7 +1124,8 @@ document.addEventListener('DOMContentLoaded', () => {
         'Spirit Batch': (ing) => ['amber-glow', 'neon-cyan', 'magenta-glow'].includes(ing.cat),
         'Juice Batch':  (ing) => ['juice-glow', 'puree-mango', 'magenta-glow'].includes(ing.cat),
         'Mocktail':     (ing) => ['juice-glow', 'puree-mango', 'magenta-glow'].includes(ing.cat),
-        'Cream':        (ing) => /cream|milk|coconut|dairy/i.test(ing.name || '') || ing.cat === 'magenta-glow'
+        'Cream':        (ing) => /cream|milk|coconut|dairy/i.test(ing.name || '') || ing.cat === 'magenta-glow',
+        'Clarified Batch': () => true
     };
 
     // Checklist modal: pick MAIN ingredients to move into a new section.
@@ -1190,6 +1200,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 { label: 'Spirit Batch', value: 'Spirit Batch' },
                 { label: 'Juice Batch', value: 'Juice Batch' },
                 { label: 'Cream', value: 'Cream' },
+                { label: 'Clarified Batch', value: 'Clarified Batch' },
                 { label: 'Mocktail', value: 'Mocktail' },
                 { label: '18+ Version', value: '18+' }
             ];
@@ -1483,7 +1494,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById('batch-form-container');
         if (!container) return;
         if (!batchBuilderState) { container.innerHTML = ''; return; }
-        const types = ['Spirit Batch', 'Juice Batch', 'Espresso Batch', 'Mocktail', 'Custom'];
+        const types = ['Spirit Batch', 'Juice Batch', 'Clarified Batch', 'Espresso Batch', 'Custom'];
         
         container.innerHTML = `
             <div class="batch-form">
@@ -2377,7 +2388,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (/spirit/.test(l)) return 1;
             if (/juice/.test(l)) return 2;
             if (/espresso|coffee/.test(l)) return 3;
-            if (/cream/.test(l)) return 4;
+            if (/clarified/.test(l)) return 4;
+            if (/cream/.test(l)) return 5;
             if (/^18\+|u21/.test(l)) return 5;
             if (/mocktail/.test(l)) return 6;
             return 7;
@@ -3352,7 +3364,11 @@ document.addEventListener('DOMContentLoaded', () => {
         try { return JSON.parse(localStorage.getItem(BATCH_SIZE_KEY)) || {}; } catch { return {}; }
     }
     function getBatchSize(fullName) {
-        return loadBatchSizes()[(fullName || '').toLowerCase().trim()] || BATCH_BOTTLE_ML;
+        const stored = loadBatchSizes()[(fullName || '').toLowerCase().trim()];
+        if (stored) return stored;
+        // Clarified makes are bigger than a bottle by nature
+        if (/clarified/i.test(fullName || '')) return 1350;
+        return BATCH_BOTTLE_ML;
     }
     function setBatchSize(fullName, ml) {
         const m = loadBatchSizes();
