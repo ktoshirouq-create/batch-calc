@@ -4125,7 +4125,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             renderOpsList();
                             showToast(t.urgent ? 'Marked urgent' : 'Urgent cleared');
                         } else if (val === 'to-restock') {
-                            setTimeout(() => openRestockPicker(activeOpsCategory, taskObj.originalIndex), 300);
+                            setTimeout(() => openRestockPicker(activeOpsCategory, taskObj.originalIndex), 350);
                         } else if (val === 'move-kind') {
                             const t = opsData[activeOpsCategory][taskObj.originalIndex];
                             t.kind = t.kind === 'mise' ? 'batch' : 'mise';
@@ -4348,7 +4348,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Pick which of a batch's ingredients you're short of. Amounts are the same
     // figures the batch card shows, so you can see what a full make costs you.
     function openRestockPicker(cat, taskIdx) {
-        const task = opsData[cat][taskIdx];
+        const task = opsData[cat] && opsData[cat][taskIdx];
+        if (!task) return;
         const specName = task.linkedSection ? `${task.linkedSpec} — ${task.linkedSection}` : task.linkedSpec;
         const ings = (recipeVault[specName] || []).filter(i => !isToppedRow(i));
         if (!ings.length) { openRestockAddSheet(); return; }   // mise or unlinked → typed add
@@ -4468,7 +4469,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => openSelectModal('WHERE FROM?', [
                 { label: 'K2 · Big fridge', value: 'K2' },
                 { label: 'K3 · Dry storage', value: 'K3' }
-            ], (l) => addRestockItem(name, l)), 250);
+            ], (l) => addRestockItem(name, l)), 350);
         }
     }
     function renderRestockSuggestions() {
