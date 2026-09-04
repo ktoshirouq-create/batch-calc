@@ -603,8 +603,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let mains = specs.filter(s => !s.includes(' — '));
         let standalones = specs.filter(s => isStandaloneName(s));
-        if (vaultFilter === 'cocktails') { standalones = []; }
-        else if (vaultFilter === 'mocktails') { mains = mains.filter(specHasMocktail); standalones = []; }
+        if (vaultFilter === 'mocktails') { mains = mains.filter(specHasMocktail); standalones = []; }
         else if (vaultFilter === 'u21') {
             mains = mains.filter(n => specs.some(s => s.startsWith(n + ' — ') && isU21Section(s.slice(n.length + 3))));
             standalones = [];
@@ -2916,7 +2915,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Signature of the meaningful fields — used to detect what actually changed
     function taskSig(t, cat) {
         return JSON.stringify([cat, t.text, !!t.completed, t.intervalDays || '', t.lastCompleted || '',
-            t.log || [], t.subtasks || [], t.kind || '', t.qty || '', t.bottleML || '',
+            t.log || [], t.subtasks || [], t.kind || '', t.qty || '', t.made || '', t.bottleML || '',
             t.linkedSpec || '', t.linkedSection || '', t.orderIndex]);
     }
 
@@ -3862,7 +3861,9 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // PREP batch rows: qty chip (always visible, doubles as the batch marker)
             if (isBatchKind && !taskObj.completed) {
-                html += `<span class="ops-qty-chip" data-qty="${taskObj.qty || 1}">×${taskObj.qty || 1}</span>`;
+                const made = taskObj.made || 0, need = taskObj.qty || 1;
+                const pState = taskObj.completed || made >= need ? 'done' : (made > 0 ? 'part' : 'none');
+                html += `<span class="ops-qty-chip prog-${pState}" data-qty="${need}">${made}/${need}</span>`;
             }
             if (hasSubtasks && isNumberedSop) {
                 html += `<span class="ops-subtask-badge"><span class="chevron">⌄</span><span class="count">${subDone}/${subCount}</span></span>`;
@@ -3911,6 +3912,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 checkTarget.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const task = opsData[activeOpsCategory][taskObj.originalIndex];
+                    // Batches are counted, not ticked — one tap = one bottle made,
+                    // so a half-finished batch reads honestly on the board.
+                    if (isPrep && taskObj.kind !== 'mise' && (task.qty || 1) > 1 && !task.completed) {
+                        triggerHaptic('light');
+                        task.made = Math.min((task.made || 0) + 1, task.qty || 1);
+                        if (task.made >= (task.qty || 1)) {
+                            task.completed = true;
+                            task.lastCompleted = Date.now();
+                            task.urgent = false;
+                        }
+                        saveOps();
+                        renderOpsList();
+                        return;
+                    }
                     // Already logged? Tapping again should record ANOTHER cleaning,
                     // not force an untick-then-tick dance.
                     if (isPeriodic && task.completed) {
@@ -3926,7 +3941,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (isPrep && isNowComplete) {
                         task.lastCompleted = Date.now();
                         task.urgent = false;   // the emergency is over
+                        task.made = task.qty || 1;
                     }
+                    if (isPrep && !isNowComplete) task.made = 0;
                     if (isPeriodic) {
                         // MANUAL tick pushes to the log; MANUAL untick pops it (accidental-tap safety).
                         // Render-time auto-uncheck (task come due again) never touches the log.
@@ -3946,59 +3963,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // PREP batch rows: qty chip → inline − N + stepper (auto-collapses)
-            const qtyChip = row.querySelector('.ops-qty-chip');
-            if (qtyChip) {
-                qtyChip.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    triggerHaptic('light');
-                    // collapse any other open stepper first
-                    document.querySelectorAll('.ops-qty-stepper').forEach(s => s.dispatchEvent(new Event('forceCollapse')));
-                    const task = opsData[activeOpsCategory][taskObj.originalIndex];
-                    const stepper = document.createElement('span');
-                    stepper.className = 'ops-qty-stepper';
-                    stepper.innerHTML = `<span class="qs-btn" data-d="-1">−</span><input type="number" class="qs-n qs-input" value="${task.qty || 1}" inputmode="numeric"><span class="qs-btn" data-d="1">＋</span>`;
-                    qtyChip.replaceWith(stepper);
-                    let collapseTimer = null;
-                    const collapse = () => {
-                        clearTimeout(collapseTimer);
-                        document.removeEventListener('pointerdown', outside, true);
-                        // full re-render restores the chip with all handlers wired
-                        renderOpsList();
-                    };
-                    const armTimer = () => { clearTimeout(collapseTimer); collapseTimer = setTimeout(collapse, 4000); };
-                    const outside = (ev) => { if (!stepper.contains(ev.target)) collapse(); };
-                    stepper.addEventListener('forceCollapse', collapse);
-                    stepper.querySelectorAll('.qs-btn').forEach(b => {
-                        b.addEventListener('click', (ev) => {
-                            ev.stopPropagation();
-                            triggerHaptic('light');
-                            const d = parseInt(b.getAttribute('data-d'));
-                            task.qty = Math.min(99, Math.max(1, (task.qty || 1) + d));
-                            stepper.querySelector('.qs-n').value = task.qty;
-                            saveOps();
-                            const bw = row.querySelector('.ops-batch-card');
-                            if (bw) buildBatchCard(bw, row, activeOpsCategory, taskObj.originalIndex);
-                            armTimer();
-                        });
-                    });
-                    const qi = stepper.querySelector('.qs-input');
-                    if (qi) {
-                        qi.addEventListener('click', ev => ev.stopPropagation());
-                        qi.addEventListener('input', () => {
-                            const v = parseInt(qi.value);
-                            if (!isNaN(v) && v > 0) {
-                                task.qty = Math.min(99, v);
-                                saveOps();
-                                const bw2 = row.querySelector('.ops-batch-card');
-                                if (bw2) buildBatchCard(bw2, row, activeOpsCategory, taskObj.originalIndex);
-                            }
-                            armTimer();
-                        });
-                    }
-                    document.addEventListener('pointerdown', outside, true);
-                    armTimer();
-                });
-            }
 
             // UPKEEP history block (rendered collapsed; shown when row expands)
             if (isPeriodic) {
@@ -4122,6 +4086,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (isLinked) actions.push({ label: 'View spec', value: 'view-spec' });
                     if (isPeriodic) actions.push({ label: 'Set frequency', value: 'set-freq' });
                     if (isPeriodic) actions.push({ label: 'Log a cleaning', value: 'log-done' });
+                    if (isPrep && taskObj.kind !== 'mise') {
+                        actions.push({ label: 'Change how many needed', value: 'set-qty' });
+                        if ((taskObj.made || 0) > 0 && !taskObj.completed) actions.push({ label: 'Mark all made', value: 'all-made' });
+                        if ((taskObj.made || 0) > 0) actions.push({ label: 'Reset progress', value: 'reset-made' });
+                    }
                     if (isPrep) actions.push({ label: taskObj.urgent ? 'Clear urgent' : 'Mark urgent', value: 'urgent' });
                     if (isPrep) actions.push({ label: 'Add to Restock', value: 'to-restock' });
                     if (isPrep) actions.push({ label: taskObj.kind === 'mise' ? 'Move to batches' : 'Move to mise', value: 'move-kind' });
@@ -4167,6 +4136,30 @@ document.addEventListener('DOMContentLoaded', () => {
                                     }
                                 });
                             }, 350);
+                        } else if (val === 'set-qty') {
+                            setTimeout(() => {
+                                const t = opsData[activeOpsCategory][taskObj.originalIndex];
+                                openNumberModal('HOW MANY NEEDED', t.qty || 1, 'bottles', (n) => {
+                                    t.qty = Math.max(1, Math.round(n));
+                                    if ((t.made || 0) > t.qty) t.made = t.qty;
+                                    t.completed = (t.made || 0) >= t.qty;
+                                    saveOps(); renderOpsList();
+                                });
+                            }, 350);
+                        } else if (val === 'all-made') {
+                            const t = opsData[activeOpsCategory][taskObj.originalIndex];
+                            t.made = t.qty || 1;
+                            t.completed = true;
+                            t.lastCompleted = Date.now();
+                            t.urgent = false;
+                            saveOps(); renderOpsList();
+                            showToast('Marked all made');
+                        } else if (val === 'reset-made') {
+                            const t = opsData[activeOpsCategory][taskObj.originalIndex];
+                            t.made = 0;
+                            t.completed = false;
+                            saveOps(); renderOpsList();
+                            showToast('Progress reset');
                         } else if (val === 'urgent') {
                             const t = opsData[activeOpsCategory][taskObj.originalIndex];
                             t.urgent = !t.urgent;

@@ -799,3 +799,10 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 
 .batch-name-input { margin-bottom: 10px !important; }
 .builder-section-rename { background: rgba(255,255,255,0.05); border: 1px solid rgba(200,169,126,0.3); color: var(--nodee-gold); border-radius: 6px; padding: 4px 8px; font-size: 0.62rem; cursor: pointer; margin-left: 8px; }
+
+/* --- BATCH PROGRESS (made / needed) --- */
+/* grey = not started, gold = in progress, green = done.
+   Red stays reserved for urgent and overdue. */
+.ops-qty-chip.prog-none { color: var(--text-muted); background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); }
+.ops-qty-chip.prog-part { color: var(--nodee-gold); background: rgba(200,169,126,0.12); border-color: rgba(200,169,126,0.4); }
+.ops-qty-chip.prog-done { color: var(--done-green); background: rgba(111,191,139,0.1); border-color: rgba(111,191,139,0.45); }
