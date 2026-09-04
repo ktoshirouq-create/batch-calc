@@ -812,3 +812,11 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .ops-hist-del { background: none; border: none; color: var(--text-muted); font-size: 0.7rem; padding: 3px 5px; margin-left: 8px; cursor: pointer; flex-shrink: 0; opacity: 0.6; }
 .ops-hist-del:active { color: var(--overdue-red); opacity: 1; }
 .ops-hist-row { align-items: center; }
+
+/* --- INGREDIENT USAGE --- */
+.usage-count { font-size: 0.58rem; font-weight: 900; letter-spacing: 2px; color: var(--nodee-gold); margin-bottom: 10px; }
+.usage-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 11px 2px; border-bottom: 1px solid #1a1a1a; }
+.usage-name { font-size: 0.88rem; color: var(--text-main); }
+.usage-via { font-size: 0.6rem; color: var(--text-muted); letter-spacing: 0.5px; flex-shrink: 0; }
+.usage-empty { color: var(--text-muted); font-size: 0.82rem; padding: 8px 0 4px; }
+.shelf-row { cursor: pointer; }

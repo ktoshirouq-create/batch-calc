@@ -1991,9 +1991,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     window.autoSeedShelf = function() {
+        // Build the set of REAL section names from the vault rather than guessing
+        // patterns — "Clarified Batch" slipped past the old regex and landed on
+        // the shelf as if it were a bottle you could buy.
+        const sectionNames = new Set();
+        Object.keys(recipeVault || {}).forEach(k => {
+            const i = k.indexOf(' — ');
+            if (i > -1) sectionNames.add(k.slice(i + 3).toLowerCase().trim());
+        });
         const isBatchRef = (name) => {
-            const low = (name || '').toLowerCase();
-            return /^(spirit|juice|cream).*batch$/.test(low) || /^mocktail$/.test(low);
+            const low = (name || '').toLowerCase().trim();
+            return sectionNames.has(low) || /\bbatch$/.test(low) || /^mocktail$/.test(low) || /^18\+$/.test(low);
         };
         let changed = false;
         Object.keys(recipeVault || {}).forEach(cocktailName => {
@@ -2008,6 +2016,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     changed = true;
                 }
             });
+        });
+        // Clean out anything a previous version seeded that is actually a batch
+        Object.keys(shelfData).forEach(n => {
+            if (isBatchRef(n)) { delete shelfData[n]; changed = true; }
         });
         if (changed) saveShelf();
     };
@@ -2170,6 +2182,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             };
             row.querySelector('.row-more').addEventListener('click', e => { e.stopPropagation(); shelfActions(); });
+
+            // Tapping the row answers "what do I lose if this runs out?"
+            row.addEventListener('click', e => {
+                if (e.target.closest('button') || e.target.closest('input')) return;
+                triggerHaptic('light');
+                showIngredientUsage(name);
+            });
             list.appendChild(row);
         });
     };
@@ -2177,6 +2196,47 @@ document.addEventListener('DOMContentLoaded', () => {
     // Rename an ingredient everywhere it appears. If the new name already exists,
     // this becomes a MERGE — the two shelf entries collapse into one and every
     // spec row is rewritten. Fixes twins like "Simple" vs "Simple Syrup".
+    // Every spec that contains this ingredient, including via a batch it's in.
+    function showIngredientUsage(name) {
+        const low = name.toLowerCase();
+        const direct = [];
+        Object.keys(recipeVault || {}).forEach(spec => {
+            if ((recipeVault[spec] || []).some(i => (i.name || '').toLowerCase() === low)) direct.push(spec);
+        });
+        // Roll sub-batches up to the drink that owns them
+        const byDrink = new Map();
+        direct.forEach(spec => {
+            const i = spec.indexOf(' — ');
+            const owner = i > -1 ? spec.slice(0, i) : spec;
+            const via = i > -1 ? spec.slice(i + 3) : null;
+            if (isStandaloneName(spec)) { byDrink.set(standaloneLabel(spec), 'batch'); return; }
+            if (!byDrink.has(owner)) byDrink.set(owner, via);
+            else if (via && byDrink.get(owner) === null) byDrink.set(owner, via);
+        });
+
+        document.getElementById('selection-modal-title').innerText = name.toUpperCase();
+        const list = document.getElementById('selection-modal-list');
+        list.innerHTML = '';
+        const wrap = document.createElement('div');
+        wrap.className = 'usage-list';
+        if (!byDrink.size) {
+            wrap.innerHTML = `<div class="usage-empty">Not used in any spec yet.</div>`;
+        } else {
+            wrap.innerHTML = `<div class="usage-count">USED IN ${byDrink.size} SPEC${byDrink.size > 1 ? 'S' : ''}</div>`;
+            [...byDrink.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([drink, via]) => {
+                wrap.insertAdjacentHTML('beforeend',
+                    `<div class="usage-row"><span class="usage-name">${drink}</span>${via ? `<span class="usage-via">${via === 'batch' ? 'batch' : via}</span>` : ''}</div>`);
+            });
+        }
+        const act = document.createElement('div');
+        act.className = 'modal-actions';
+        act.innerHTML = `<button class="btn-secondary">CLOSE</button>`;
+        act.children[0].addEventListener('click', () => { triggerHaptic('light'); closeSelectModal(); });
+        wrap.appendChild(act);
+        list.appendChild(wrap);
+        modal.classList.remove('hidden');
+    }
+
     async function renameShelfIngredient(oldName) {
         openSelectModal('RENAME INGREDIENT', [], null, {
             placeholder: 'New name…',
