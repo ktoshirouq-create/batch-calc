@@ -3738,6 +3738,21 @@ document.addEventListener('DOMContentLoaded', () => {
             subWrap.appendChild(addLine);
         }
 
+        // Ring for multi-bottle PREP batches: fill = made/needed, so a half-done
+        // batch is visible at a glance rather than looking untouched.
+        function buildBatchRing(t) {
+            const need = t.qty || 1;
+            const made = Math.min(t.made || 0, need);
+            const C = 88;
+            const done = t.completed || made >= need;
+            const dash = done ? C : (made / need) * C;
+            const color = done ? '#6FBF8B' : (made > 0 ? '#C8A97E' : 'rgba(255,255,255,0.15)');
+            const glyph = done
+                ? '<span style="color:#6FBF8B;">✓</span>'
+                : `<span style="color:${made > 0 ? '#C8A97E' : '#888'};">${made}</span>`;
+            return `<div class="ops-ring batch-ring"><svg width="34" height="34"><circle class="track" cx="17" cy="17" r="14"/><circle cx="17" cy="17" r="14" stroke="${color}" fill="none" stroke-width="3" stroke-linecap="round" stroke-dasharray="${dash} ${C}"/></svg><div class="ops-ring-inner">${glyph}</div></div>`;
+        }
+
         // Ring builder for UPKEEP rows: fill = elapsed/interval. C = 2πr ≈ 88 at r=14.
         function buildRing(taskObj) {
             const interval = taskObj.intervalDays || 30;
@@ -3842,6 +3857,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += `<div class="ops-number">${displayIndex + 1}</div>`;
             } else if (isPeriodic) {
                 html += buildRing(taskObj);
+            } else if (isPrep && taskObj.kind !== 'mise' && (taskObj.qty || 1) > 1) {
+                html += buildBatchRing(taskObj);
             } else {
                 html += `<div class="ops-checkbox"></div>`;
             }
@@ -3906,7 +3923,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const checkTarget = isNumberedSop ? row.querySelector('.ops-number')
-                              : isPeriodic ? row.querySelector('.ops-ring')
+                              : (isPeriodic || row.querySelector('.batch-ring')) ? row.querySelector('.ops-ring')
                               : row.querySelector('.ops-checkbox');
             if (checkTarget) {
                 checkTarget.addEventListener('click', (e) => {
@@ -3934,6 +3951,19 @@ document.addEventListener('DOMContentLoaded', () => {
                         return;
                     }
                     triggerHaptic('light');
+                    // Snapshot so an accidental tap is one tap to undo
+                    const snapshot = JSON.parse(JSON.stringify({
+                        completed: task.completed, lastCompleted: task.lastCompleted || null,
+                        log: task.log || [], subtasks: task.subtasks || []
+                    }));
+                    const undoTick = () => {
+                        task.completed = snapshot.completed;
+                        task.lastCompleted = snapshot.lastCompleted;
+                        task.log = snapshot.log;
+                        task.subtasks = snapshot.subtasks;
+                        saveOps();
+                        renderOpsList();
+                    };
                     const isNowComplete = !task.completed;
                     task.completed = isNowComplete;
                     // manual completion also marks all subtasks done; unchecking clears them
@@ -3959,6 +3989,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     saveOps();
                     renderOpsList();
+                    if (isPeriodic) showToast(isNowComplete ? 'Logged as done' : 'Marked not done', undoTick);
                 });
             }
 
@@ -3997,7 +4028,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 gap = `<span class="ops-hist-gap${long ? ' long' : ''}">+${g}d</span>`;
                             }
                             const who = entry.by ? `<span class="ops-hist-by">${String(entry.by).replace(/</g,'&lt;')}</span>` : '';
-                            html += `<div class="ops-hist-row"><span class="ops-hist-check">✓</span><span class="ops-hist-date">${formatDate(entry.ts)}</span>${gap}${who}</div>`;
+                            html += `<div class="ops-hist-row" data-ts="${entry.ts}"><span class="ops-hist-check">✓</span><span class="ops-hist-date">${formatDate(entry.ts)}</span>${gap}${who}<button class="ops-hist-del" aria-label="Remove this entry">✕</button></div>`;
                         });
                         if (log.length > visibleCount) {
                             html += `<div class="ops-hist-older">${shown.length} OF ${log.length} · <span data-more="1">OLDER</span></div>`;
@@ -4005,6 +4036,31 @@ document.addEventListener('DOMContentLoaded', () => {
                             html += `<div class="ops-hist-older">${log.length} OF ${log.length}</div>`;
                         }
                         histWrap.innerHTML = html;
+                        // Remove a wrong entry — mis-taps happen, and the log is the
+                        // record everyone else relies on.
+                        histWrap.querySelectorAll('.ops-hist-del').forEach(btn => {
+                            btn.addEventListener('click', (ev) => {
+                                ev.stopPropagation();
+                                triggerHaptic('medium');
+                                const ts = parseFloat(btn.closest('.ops-hist-row').getAttribute('data-ts'));
+                                const t = opsData[activeOpsCategory][taskObj.originalIndex];
+                                const removed = (t.log || []).find(e => e.ts === ts);
+                                t.log = (t.log || []).filter(e => e.ts !== ts);
+                                t.lastCompleted = t.log.length ? t.log[t.log.length - 1].ts : null;
+                                if (!t.log.length) t.completed = false;
+                                saveOps();
+                                renderOpsList();
+                                showToast('Entry removed', () => {
+                                    if (!t.log) t.log = [];
+                                    if (removed) t.log.push(removed);
+                                    t.log.sort((a, b) => a.ts - b.ts);
+                                    t.lastCompleted = t.log.length ? t.log[t.log.length - 1].ts : null;
+                                    if (t.log.length) t.completed = true;
+                                    saveOps();
+                                    renderOpsList();
+                                });
+                            });
+                        });
                         const more = histWrap.querySelector('[data-more]');
                         if (more) more.addEventListener('click', (ev) => {
                             ev.stopPropagation();

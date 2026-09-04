@@ -806,3 +806,9 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .ops-qty-chip.prog-none { color: var(--text-muted); background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); }
 .ops-qty-chip.prog-part { color: var(--nodee-gold); background: rgba(200,169,126,0.12); border-color: rgba(200,169,126,0.4); }
 .ops-qty-chip.prog-done { color: var(--done-green); background: rgba(111,191,139,0.1); border-color: rgba(111,191,139,0.45); }
+
+.batch-ring .ops-ring-inner { font-size: 0.72rem; font-weight: 900; }
+
+.ops-hist-del { background: none; border: none; color: var(--text-muted); font-size: 0.7rem; padding: 3px 5px; margin-left: 8px; cursor: pointer; flex-shrink: 0; opacity: 0.6; }
+.ops-hist-del:active { color: var(--overdue-red); opacity: 1; }
+.ops-hist-row { align-items: center; }
