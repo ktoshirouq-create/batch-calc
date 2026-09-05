@@ -4397,18 +4397,45 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             // Chip = the target, ring = progress. Keeps the two numbers separate
             // without burying the common edit in a menu.
+            // Tap the chip to adjust the target inline with ± — no modal, no
+            // keyboard. The made count stays visible on the ring meanwhile.
             const progChip = row.querySelector('.ops-qty-chip');
             if (progChip) progChip.addEventListener('click', (e) => {
                 e.stopPropagation();
+                if (progChip.classList.contains('stepping')) return;
                 triggerHaptic('light');
                 const t = opsData[activeOpsCategory][taskObj.originalIndex];
-                openNumberModal('HOW MANY BOTTLES', t.qty || 1, 'bottles', (n) => {
-                    t.qty = Math.max(1, Math.round(n));
-                    if ((t.made || 0) > t.qty) t.made = t.qty;
-                    t.completed = (t.made || 0) >= t.qty;
-                    saveOps();
-                    renderOpsList();
+                const original = progChip.innerHTML;
+                const origClass = progChip.className;
+                progChip.classList.add('stepping');
+                progChip.innerHTML = `<button class="qc-btn" data-d="-1">−</button><span class="qc-n">${t.qty || 1}</span><button class="qc-btn" data-d="1">+</button>`;
+
+                let closeTimer = null;
+                const collapse = () => {
+                    clearTimeout(closeTimer);
+                    document.removeEventListener('pointerdown', outside, true);
+                    progChip.className = origClass;
+                    progChip.innerHTML = original;
+                    renderOpsList();   // re-scale the ring to the new target
+                };
+                const arm = () => { clearTimeout(closeTimer); closeTimer = setTimeout(collapse, 2000); };
+                const outside = (ev) => { if (!progChip.contains(ev.target)) collapse(); };
+
+                progChip.querySelectorAll('.qc-btn').forEach(b => {
+                    b.addEventListener('click', (ev) => {
+                        ev.stopPropagation();
+                        triggerHaptic('light');
+                        const d = parseInt(b.getAttribute('data-d'));
+                        t.qty = Math.min(99, Math.max(1, (t.qty || 1) + d));
+                        if ((t.made || 0) > t.qty) t.made = t.qty;
+                        t.completed = (t.made || 0) >= t.qty;
+                        progChip.querySelector('.qc-n').innerText = t.qty;
+                        saveOps();
+                        arm();
+                    });
                 });
+                document.addEventListener('pointerdown', outside, true);
+                arm();
             });
 
             const moreBtn = row.querySelector('.row-more');
