@@ -820,3 +820,5 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .usage-via { font-size: 0.6rem; color: var(--text-muted); letter-spacing: 0.5px; flex-shrink: 0; }
 .usage-empty { color: var(--text-muted); font-size: 0.82rem; padding: 8px 0 4px; }
 .shelf-row { cursor: pointer; }
+
+.ops-qty-chip { cursor: pointer; }

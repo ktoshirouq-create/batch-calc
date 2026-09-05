@@ -3986,8 +3986,45 @@ document.addEventListener('DOMContentLoaded', () => {
                               : (isPeriodic || row.querySelector('.batch-ring')) ? row.querySelector('.ops-ring')
                               : row.querySelector('.ops-checkbox');
             if (checkTarget) {
+                // Hold the ring to mark every bottle made at once — tapping four
+                // times for a ×4 batch you finished in one go is tedious.
+                if (isPrep && taskObj.kind !== 'mise' && (taskObj.qty || 1) > 1) {
+                    let holdTimer = null, held = false, hs = null;
+                    checkTarget.addEventListener('pointerdown', (e) => {
+                        held = false;
+                        hs = { x: e.clientX, y: e.clientY };
+                        holdTimer = setTimeout(() => {
+                            held = true;
+                            triggerHaptic('heavy');
+                            const t = opsData[activeOpsCategory][taskObj.originalIndex];
+                            const before = { made: t.made || 0, completed: !!t.completed, lastCompleted: t.lastCompleted || null };
+                            t.made = t.qty || 1;
+                            t.completed = true;
+                            t.lastCompleted = Date.now();
+                            t.urgent = false;
+                            saveOps();
+                            renderOpsList();
+                            showToast('All made', () => {
+                                t.made = before.made;
+                                t.completed = before.completed;
+                                t.lastCompleted = before.lastCompleted;
+                                saveOps();
+                                renderOpsList();
+                            });
+                        }, 450);
+                    });
+                    checkTarget.addEventListener('pointermove', (e) => {
+                        if (!holdTimer || !hs) return;
+                        if (Math.abs(e.clientX - hs.x) > 10 || Math.abs(e.clientY - hs.y) > 10) { clearTimeout(holdTimer); holdTimer = null; }
+                    });
+                    checkTarget.addEventListener('pointerup', () => { if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; } });
+                    checkTarget.addEventListener('pointercancel', () => { if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; } });
+                    checkTarget._wasHeld = () => held;
+                }
+
                 checkTarget.addEventListener('click', (e) => {
                     e.stopPropagation();
+                    if (checkTarget._wasHeld && checkTarget._wasHeld()) return;   // the hold already handled it
                     const task = opsData[activeOpsCategory][taskObj.originalIndex];
                     // Batches are counted, not ticked — one tap = one bottle made,
                     // so a half-finished batch reads honestly on the board.
@@ -4358,6 +4395,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 saveOps();
                 renderOpsList();
             });
+            // Chip = the target, ring = progress. Keeps the two numbers separate
+            // without burying the common edit in a menu.
+            const progChip = row.querySelector('.ops-qty-chip');
+            if (progChip) progChip.addEventListener('click', (e) => {
+                e.stopPropagation();
+                triggerHaptic('light');
+                const t = opsData[activeOpsCategory][taskObj.originalIndex];
+                openNumberModal('HOW MANY BOTTLES', t.qty || 1, 'bottles', (n) => {
+                    t.qty = Math.max(1, Math.round(n));
+                    if ((t.made || 0) > t.qty) t.made = t.qty;
+                    t.completed = (t.made || 0) >= t.qty;
+                    saveOps();
+                    renderOpsList();
+                });
+            });
+
             const moreBtn = row.querySelector('.row-more');
             if (moreBtn) moreBtn.addEventListener('click', (e) => { e.stopPropagation(); openTaskActions(); });
 
