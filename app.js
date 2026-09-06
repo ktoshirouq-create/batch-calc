@@ -3907,8 +3907,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isLinked) rowClasses += ' ops-row-linked';
             if (taskObj.urgent && !taskObj.completed) rowClasses += ' ops-row-urgent';
             row.className = rowClasses;
-            // Only arm dragging while the ≡ handle is held. A permanently draggable
-            // row swallows long-press inside child inputs, so paste never appears.
+            // Armed only for the duration of a touch on the row (see the hold
+            // handler below). A permanently draggable row swallows long-press
+            // inside child inputs, so paste never appears.
             row.setAttribute('draggable', 'false');
             
             let html = '';
@@ -3987,45 +3988,8 @@ document.addEventListener('DOMContentLoaded', () => {
                               : (isPeriodic || row.querySelector('.batch-ring')) ? row.querySelector('.ops-ring')
                               : row.querySelector('.ops-checkbox');
             if (checkTarget) {
-                // Hold the ring to mark every bottle made at once — tapping four
-                // times for a ×4 batch you finished in one go is tedious.
-                if (isPrep && taskObj.kind !== 'mise' && (taskObj.qty || 1) > 1) {
-                    let holdTimer = null, held = false, hs = null;
-                    checkTarget.addEventListener('pointerdown', (e) => {
-                        held = false;
-                        hs = { x: e.clientX, y: e.clientY };
-                        holdTimer = setTimeout(() => {
-                            held = true;
-                            triggerHaptic('heavy');
-                            const t = opsData[activeOpsCategory][taskObj.originalIndex];
-                            const before = { made: t.made || 0, completed: !!t.completed, lastCompleted: t.lastCompleted || null };
-                            t.made = t.qty || 1;
-                            t.completed = true;
-                            t.lastCompleted = Date.now();
-                            t.urgent = false;
-                            saveOps();
-                            renderOpsList();
-                            showToast('All made', () => {
-                                t.made = before.made;
-                                t.completed = before.completed;
-                                t.lastCompleted = before.lastCompleted;
-                                saveOps();
-                                renderOpsList();
-                            });
-                        }, 450);
-                    });
-                    checkTarget.addEventListener('pointermove', (e) => {
-                        if (!holdTimer || !hs) return;
-                        if (Math.abs(e.clientX - hs.x) > 10 || Math.abs(e.clientY - hs.y) > 10) { clearTimeout(holdTimer); holdTimer = null; }
-                    });
-                    checkTarget.addEventListener('pointerup', () => { if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; } });
-                    checkTarget.addEventListener('pointercancel', () => { if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; } });
-                    checkTarget._wasHeld = () => held;
-                }
-
                 checkTarget.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    if (checkTarget._wasHeld && checkTarget._wasHeld()) return;   // the hold already handled it
                     const task = opsData[activeOpsCategory][taskObj.originalIndex];
                     // Batches are counted, not ticked — one tap = one bottle made,
                     // so a half-finished batch reads honestly on the board.
@@ -4471,7 +4435,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // The ring still ticks bottle by bottle. Completed rows don't swipe.
             if (isPrep && !taskObj.completed) {
                 const main = row.querySelector('.ops-row-main');
-                const NOSWIPE = '.ops-checkbox, .ops-ring, .ops-qty-chip, .row-more, button, input, textarea, .ops-subtasks, .ops-batch-card';
+                // The ring and the qty chip must NOT be excluded: on a batch row
+                // they occupy the right-hand side, which is exactly where a
+                // leftward swipe starts. The ring's hold cancels itself at 10px
+                // and the chip's tap is killed by the capture blocker below.
+                const NOSWIPE = '.row-more, button, input, textarea, .ops-subtasks, .ops-batch-card';
                 let sx = 0, sy = 0, axis = null, dx = 0, armed = null, pid = null, t0 = 0, tLast = 0;
 
                 const setX = (v) => { main.style.transform = v ? `translateX(${v}px)` : ''; };
