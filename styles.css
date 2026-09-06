@@ -875,3 +875,9 @@ body.dragging-lock { overflow: hidden; touch-action: none; }
 #preps-list .ir.tot span { color: var(--nodee-gold); font-size: 0.55rem; font-weight: 900; letter-spacing: 2px; }
 .prep-method { font-size: 0.74rem; color: var(--text-muted); line-height: 1.5; margin-top: 11px; padding-top: 10px; border-top: 1px solid #1a1a1a; }
 .prep-tofix { width: 100%; margin-top: 12px; padding: 12px; background: none; border: 1px dashed rgba(200,169,126,0.35); border-radius: 10px; color: var(--nodee-gold); font-size: 0.64rem; font-weight: 800; letter-spacing: 1px; cursor: pointer; }
+
+/* Pill group was sized for two; three overflowed and overlapped. */
+#lab-module .pill-group { display: flex; gap: 4px; }
+#lab-module .pill-group .mod-pill { flex: 1 1 0; min-width: 0; padding: 12px 4px; font-size: 0.68rem; letter-spacing: 1px; white-space: nowrap; }
+/* The drag handle owns its gesture outright */
+.drag-handle-task { touch-action: none; padding: 10px 8px; }

@@ -4428,9 +4428,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (instant) begin(e.clientY);
                     else armTimer = setTimeout(() => { armTimer = null; begin(sy); }, 250);
                 };
+                // Handle only. touch-action must be set BEFORE the gesture starts —
+                // applying it inside begin() was always too late, because Chrome
+                // decides the touch is a scroll and cancels the pointer during the
+                // hold delay. A small fixed handle the browser never needs for
+                // scrolling is the one thing that works reliably.
                 const handle = row.querySelector('.drag-handle-task');
-                if (handle) handle.addEventListener('pointerdown', (e) => { e.preventDefault(); arm(e, true); });
-                row.addEventListener('pointerdown', (e) => { if (!e.target.closest('.drag-handle-task')) arm(e, false); });
+                if (handle) {
+                    handle.style.touchAction = 'none';
+                    handle.addEventListener('pointerdown', (e) => { e.preventDefault(); arm(e, true); });
+                }
             }
 
             const openTaskActions = () => {
