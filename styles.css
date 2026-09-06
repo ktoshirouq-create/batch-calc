@@ -214,8 +214,6 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .ops-number { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--text-muted); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 900; color: var(--text-muted); flex-shrink: 0; transition: all 0.2s ease; cursor: pointer; }
 .ops-time-tag { font-size: 0.65rem; color: var(--text-muted); margin-top: 4px; letter-spacing: 0.5px; }
 .ops-time-tag.text-red { color: #d97c8e; }
-.drag-handle-task { color: var(--text-muted); font-size: 1.2rem; padding: 0 10px; cursor: grab; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.drag-handle-task:active { cursor: grabbing; }
 
 /* Batch builder inline form */
 .batch-form { background: rgba(255,255,255,0.03); border: 1px solid rgba(200, 169, 126, 0.2); border-radius: 14px; padding: 16px; margin-top: 12px; }
@@ -840,3 +838,5 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .ops-row.arm-left .ops-swipe-bg .sw-urgent { transform: scale(1.15); opacity: 1; }
 .ops-row.swipe-return .ops-row-main { transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1); }
 .ops-row.swiping:active { transform: none; }
+.ops-row.drag-armed { box-shadow: 0 0 0 1px var(--nodee-gold), 0 6px 18px rgba(0,0,0,0.5); }
+.ops-row.drag-armed .ops-row-main { background: #100d0a; }

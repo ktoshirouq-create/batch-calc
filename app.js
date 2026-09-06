@@ -3956,9 +3956,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += `<button class="restock-loc" aria-label="Location">${taskObj.loc || 'K2'}</button>`;
             }
             html += `<button class="row-more" aria-label="Task actions">⋯</button>`;
-            if (isDraggable) {
-                html += `<div class="drag-handle-task" aria-label="Drag to reorder">≡</div>`;
-            }
             html += `</div>`;
             html += `<div class="ops-subtasks"></div>`;
             if (isPeriodic) {
@@ -4187,12 +4184,36 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (isDraggable) {
-                const handle = row.querySelector('.drag-handle-task');
-                if (handle) {
-                    handle.addEventListener('pointerdown', () => row.setAttribute('draggable', 'true'));
-                    handle.addEventListener('pointerup', () => row.setAttribute('draggable', 'false'));
-                    handle.addEventListener('pointercancel', () => row.setAttribute('draggable', 'false'));
-                }
+                // Hold a still finger on the row to arm dragging. Movement means a
+                // swipe instead, so the two gestures never both claim the touch.
+                // Row is only draggable during the hold: a permanently draggable
+                // row swallows long-press inside inputs and paste stops working.
+                const NODRAG = '.ops-checkbox, .ops-ring, .ops-qty-chip, .row-more, button, input, textarea, .ops-subtasks, .ops-batch-card';
+                let holdTimer = null, hx = 0, hy = 0;
+                const disarm = () => {
+                    clearTimeout(holdTimer); holdTimer = null;
+                    row.setAttribute('draggable', 'false');
+                    row.classList.remove('drag-armed');
+                };
+                row.addEventListener('pointerdown', (e) => {
+                    if (e.target.closest(NODRAG)) return;
+                    hx = e.clientX; hy = e.clientY;
+                    // Armed immediately — Chrome reads `draggable` at touchstart,
+                    // so arming on a timer is too late for the native lift. Any
+                    // movement disarms it well before Chrome's own ~500ms hold.
+                    row.setAttribute('draggable', 'true');
+                    clearTimeout(holdTimer);
+                    holdTimer = setTimeout(() => {
+                        row.classList.add('drag-armed');
+                        triggerHaptic('medium');
+                    }, 450);
+                });
+                row.addEventListener('pointermove', (e) => {
+                    if (!holdTimer) return;
+                    if (Math.hypot(e.clientX - hx, e.clientY - hy) >= 8) disarm();
+                });
+                row.addEventListener('pointerup', disarm);
+                row.addEventListener('pointercancel', disarm);
                 row.addEventListener('dragstart', (e) => {
                     e.dataTransfer.setData('text/plain', taskObj.originalIndex);
                     row.style.opacity = '0.4';
@@ -4231,6 +4252,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 row.addEventListener('dragend', () => {
                     row.setAttribute('draggable', 'false');
+                    row.classList.remove('drag-armed');
                     row.style.opacity = '1';
                     document.querySelectorAll('.ops-row').forEach(r => r.style.borderTop = 'none');
                 });
@@ -4449,8 +4471,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // The ring still ticks bottle by bottle. Completed rows don't swipe.
             if (isPrep && !taskObj.completed) {
                 const main = row.querySelector('.ops-row-main');
-                const NOSWIPE = '.ops-checkbox, .ops-ring, .ops-qty-chip, .row-more, .drag-handle-task, button, input, textarea, .ops-subtasks, .ops-batch-card';
-                let sx = 0, sy = 0, axis = null, dx = 0, armed = null, pid = null;
+                const NOSWIPE = '.ops-checkbox, .ops-ring, .ops-qty-chip, .row-more, button, input, textarea, .ops-subtasks, .ops-batch-card';
+                let sx = 0, sy = 0, axis = null, dx = 0, armed = null, pid = null, t0 = 0, tLast = 0;
 
                 const setX = (v) => { main.style.transform = v ? `translateX(${v}px)` : ''; };
                 const reset = () => {
@@ -4459,12 +4481,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     setX(0);
                     setTimeout(() => row.classList.remove('swipe-return'), 240);
                 };
-                const threshold = () => Math.min(row.offsetWidth * 0.45, 140);
+                const threshold = () => Math.min(row.offsetWidth * 0.30, 90);
 
                 main.addEventListener('pointerdown', (e) => {
                     if (e.target.closest(NOSWIPE)) return;
-                    if (e.clientX < 24) return;   // leave Android's back edge alone
+                    // Android gesture-nav owns BOTH screen edges for Back.
+                    if (e.clientX < 24 || e.clientX > window.innerWidth - 24) return;
                     sx = e.clientX; sy = e.clientY; axis = null; dx = 0; armed = null; pid = e.pointerId;
+                    t0 = e.timeStamp;
                 });
                 main.addEventListener('pointermove', (e) => {
                     if (pid === null || e.pointerId !== pid) return;
@@ -4480,6 +4504,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const t = threshold();
                     const shown = Math.abs(dx) <= t ? dx : Math.sign(dx) * (t + (Math.abs(dx) - t) * 0.28);
                     setX(shown);
+                    tLast = e.timeStamp;
                     const next = dx >= t ? 'right' : (dx <= -t ? 'left' : null);
                     if (next !== armed) {
                         armed = next;
@@ -4490,7 +4515,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 const finish = (e) => {
                     if (pid === null || (e && e.pointerId !== pid)) return;
-                    const fired = armed;
+                    // Flick escape: a fast short swipe commits without reaching
+                    // the full threshold — you rarely complete the travel in a hurry.
+                    let fired = armed;
+                    if (!fired && axis === 'x') {
+                        const dt = Math.max(1, tLast - t0);
+                        if (Math.abs(dx) / dt >= 0.6 && Math.abs(dx) >= 40) fired = dx > 0 ? 'right' : 'left';
+                    }
                     pid = null; axis = null; armed = null;
                     if (!fired) { reset(); return; }
                     row.classList.remove('swiping', 'arm-left', 'arm-right');
