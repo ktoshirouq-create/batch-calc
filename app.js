@@ -837,53 +837,62 @@ document.addEventListener('DOMContentLoaded', () => {
     ];
     const PREP_SCALE_KEY = 'codex_prep_scale_v1';
 
+    let openPrep = null;   // null = list view
+
     function renderPreps() {
         const list = document.getElementById('preps-list');
         if (!list) return;
         list.innerHTML = '';
-        HOUSE_PREPS.forEach((p, idx) => {
-            const item = document.createElement('div');
-            item.className = 'prep-item';
-            const sub = p.mode === 'brix' ? `TARGET ${p.brix} Bx`
-                : p.mode === 'ratio' ? `${p.ratio >= 1 ? p.ratio + ':1' : '20%'}${p.brix ? ' · ' + p.brix + ' Bx' : ''}`
-                : '48H';
-            item.innerHTML = `<div class="prep-head"><span class="prep-name">${p.name}</span><span class="prep-sub">${sub}</span></div><div class="prep-body"></div>`;
-            item.querySelector('.prep-head').addEventListener('click', () => {
+        if (openPrep) { renderPrepDetail(list, openPrep); return; }
+        HOUSE_PREPS.forEach(p => {
+            // Only show a sub-label when it says something. "Saline · 20%" and
+            // "Spicy Tincture · 48H" were just repeating the name.
+            let sub = '';
+            if (p.mode === 'brix') sub = `${p.brix} Bx`;
+            else if (p.mode === 'ratio' && p.ratio >= 1) sub = `${p.ratio}:1${p.brix ? ' · ' + p.brix + ' Bx' : ''}`;
+            else if (p.mode === 'ratio') sub = '20%';
+            const row = document.createElement('div');
+            row.className = 'prep-row-item';
+            row.innerHTML = `<span class="prep-name">${p.name}</span><span class="prep-sub">${sub}</span>`;
+            row.addEventListener('click', () => {
                 triggerHaptic('light');
-                item.classList.toggle('open');
-                if (item.classList.contains('open')) buildPrepBody(item.querySelector('.prep-body'), p);
+                openPrep = p;
+                renderPreps();
             });
-            list.appendChild(item);
+            list.appendChild(row);
         });
     }
 
-    function buildPrepBody(wrap, p) {
-        const savedScale = (() => {
-            try { return (JSON.parse(localStorage.getItem(PREP_SCALE_KEY)) || {})[p.name] || 1; } catch { return 1; }
+    function renderPrepDetail(list, p) {
+        const key = p.name;
+        let scale = (() => {
+            try { return (JSON.parse(localStorage.getItem(PREP_SCALE_KEY)) || {})[key] || 1; } catch { return 1; }
         })();
-        let scale = savedScale;
+        const header = p.mode === 'brix' ? `TARGET ${p.brix} Bx`
+            : p.mode === 'fixed' ? '48H MACERATION'
+            : (p.ratio >= 1 ? `${p.ratio}:1` : '20%');
+
         const draw = () => {
             let rows = '';
             if (p.mode === 'brix') {
-                // weight of sweetener : water to hit the target from the stored base
-                const w = (p.brix / p.base);
-                const water = 1 - w;
+                const w = p.brix / p.base;
                 const total = 1000 * scale;
-                const sweet = Math.round(total * w);
-                rows = `<div class="prep-row"><span>${p.name.replace(' Syrup','')}</span><span>${sweet}g</span></div>`
-                     + `<div class="prep-row"><span>Hot water</span><span>${Math.round(total * water)}g</span></div>`
-                     + `<div class="prep-row prep-total"><span>MAKES</span><span>${Math.round(total)}g at ${p.brix} Bx</span></div>`;
+                rows = `<div class="ir"><span>${p.name.replace(' Syrup', '')}</span><b>${Math.round(total * w)}g</b></div>`
+                     + `<div class="ir"><span>Hot water</span><b>${Math.round(total * (1 - w))}g</b></div>`
+                     + `<div class="ir tot"><span>MAKES</span><b>${Math.round(total)}g · ${p.brix} Bx</b></div>`;
             } else {
                 const sum = p.parts.reduce((s, x) => s + x[1], 0);
                 rows = p.parts.map(([n, v], i) => {
                     const u = (p.units && p.units[i] !== undefined) ? p.units[i] : 'g';
                     const whole = u === '';
                     const amt = whole ? v : Math.round(v * scale * (p.mode === 'ratio' ? (1000 / sum) : 1));
-                    return `<div class="prep-row"><span>${n}</span><span>${amt}${u}</span></div>`;
+                    return `<div class="ir"><span>${n}</span><b>${amt}${u}</b></div>`;
                 }).join('');
-                if (p.mode === 'ratio') rows += `<div class="prep-row prep-total"><span>MAKES</span><span>${Math.round(1000 * scale)}g${p.brix ? ' at ' + p.brix + ' Bx' : ''}</span></div>`;
+                if (p.mode === 'ratio') rows += `<div class="ir tot"><span>MAKES</span><b>${Math.round(1000 * scale)}g${p.brix ? ' · ' + p.brix + ' Bx' : ''}</b></div>`;
             }
-            wrap.innerHTML = `
+            list.innerHTML = `
+                <button class="prep-back">‹ ALL PREPARATIONS</button>
+                <div class="prep-detail-head"><span class="prep-name">${p.name}</span><span class="prep-sub">${header}</span></div>
                 <div class="prep-scale">
                     <span class="prep-scale-lbl">BATCH</span>
                     <button class="ps-btn" data-d="-1">−</button>
@@ -891,18 +900,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     <button class="ps-btn" data-d="1">+</button>
                 </div>
                 ${rows}
-                <div class="prep-method">${p.method}</div>`;
-            wrap.querySelectorAll('.ps-btn').forEach(b => b.addEventListener('click', (e) => {
-                e.stopPropagation();
+                <div class="prep-method">${p.method}</div>
+                ${p.mode === 'brix' ? `<button class="prep-tofix">MEASURED SOMETHING ELSE? → BRIX FIXER</button>` : ''}`;
+
+            list.querySelector('.prep-back').addEventListener('click', () => {
+                triggerHaptic('light');
+                openPrep = null;
+                renderPreps();
+            });
+            list.querySelectorAll('.ps-btn').forEach(b => b.addEventListener('click', () => {
                 triggerHaptic('light');
                 scale = Math.max(1, Math.min(20, scale + parseInt(b.getAttribute('data-d'))));
                 try {
                     const m = JSON.parse(localStorage.getItem(PREP_SCALE_KEY)) || {};
-                    m[p.name] = scale;
+                    m[key] = scale;
                     localStorage.setItem(PREP_SCALE_KEY, JSON.stringify(m));
                 } catch {}
                 draw();
             }));
+            const toFix = list.querySelector('.prep-tofix');
+            if (toFix) toFix.addEventListener('click', () => {
+                // Load this preparation's target, then click the FIXER pill so the
+                // existing switcher does the work rather than duplicating it.
+                const targetInput = document.getElementById('fix-target-brix');
+                if (targetInput) targetInput.value = p.brix;
+                document.querySelector('#lab-module .mod-pill[data-val="fix"]')?.click();
+            });
         };
         draw();
     }
@@ -2960,6 +2983,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         document.getElementById('ui-brix-build').classList.toggle('hidden', brixMode !== 'build');
         document.getElementById('ui-brix-fix').classList.toggle('hidden', brixMode !== 'fix');
+        document.getElementById('ui-preps')?.classList.toggle('hidden', brixMode !== 'preps');
+        if (brixMode === 'preps') renderPreps();
         document.getElementById('brix-results').innerHTML = '';
     }));
 
@@ -4283,6 +4308,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const begin = (y) => {
                     dragging = true;
                     triggerHaptic('medium');
+                    // Stop the browser claiming the gesture for scrolling — without
+                    // this it fires pointercancel the moment you move vertically,
+                    // which is why the row highlighted but never moved.
+                    row.style.touchAction = 'none';
+                    document.body.classList.add('dragging-lock');
                     const r = row.getBoundingClientRect();
                     grabDY = y - r.top;
                     gap = document.createElement('div');
@@ -4323,6 +4353,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const finish = (commit) => {
                     clearInterval(autoScroll);
+                    row.style.touchAction = '';
+                    document.body.classList.remove('dragging-lock');
                     container.classList.remove('drag-active');
                     row.classList.remove('dragging');
                     row.style.width = row.style.left = row.style.top = '';
@@ -4372,6 +4404,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const onMove = (e) => {
                     if (dragging) { e.preventDefault(); move(e.clientY); return; }
+                    // Horizontal movement means a swipe; cancel the arm. Vertical
+                    // movement is a scroll, so cancel that too — only a still
+                    // finger becomes a drag.
                     if (armTimer && Math.hypot(e.clientX - sx, e.clientY - sy) >= 10) { clearTimeout(armTimer); armTimer = null; }
                 };
                 const detach = () => {
@@ -4385,6 +4420,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const arm = (e, instant) => {
                     if (e.target.closest(NODRAG)) return;
                     sx = e.clientX; sy = e.clientY;
+                    // Keep receiving moves after the row is moved into <body>
+                    try { row.setPointerCapture(e.pointerId); } catch {}
                     document.addEventListener('pointermove', onMove, { passive: false });
                     document.addEventListener('pointerup', onUp);
                     document.addEventListener('pointercancel', onCancel);

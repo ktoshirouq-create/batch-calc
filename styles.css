@@ -854,20 +854,24 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .ops-fab.hidden { display: none; }
 .ops-fab:active { transform: scale(0.94); }
 
-/* --- HOUSE PREPARATIONS --- */
-.prep-item { border-bottom: 1px solid #1a1a1a; }
-.prep-item:last-child { border-bottom: none; }
-.prep-head { display: flex; justify-content: space-between; align-items: baseline; padding: 15px 2px; cursor: pointer; gap: 12px; }
-.prep-name { font-size: 0.95rem; color: var(--text-main); font-weight: 600; }
-.prep-sub { font-size: 0.6rem; color: var(--nodee-gold); font-weight: 800; letter-spacing: 1px; flex-shrink: 0; }
-.prep-body { display: none; padding: 4px 2px 16px; }
-.prep-item.open .prep-body { display: block; }
+
+body.dragging-lock { overflow: hidden; touch-action: none; }
+.ops-row.dragging { touch-action: none; }
+
+/* --- HOUSE PREPARATIONS (inside the LAB engine) --- */
+.prep-row-item { display: flex; justify-content: space-between; align-items: baseline; padding: 13px 2px; border-bottom: 1px solid #1a1a1a; cursor: pointer; gap: 12px; }
+.prep-row-item:last-child { border-bottom: none; }
+.prep-name { font-size: 0.88rem; color: var(--text-main); font-weight: 600; }
+.prep-sub { font-size: 0.58rem; color: var(--nodee-gold); font-weight: 800; letter-spacing: 1px; flex-shrink: 0; }
+.prep-back { background: none; border: none; color: var(--text-muted); font-size: 0.62rem; font-weight: 800; letter-spacing: 1.5px; padding: 2px 0 10px; cursor: pointer; }
+.prep-detail-head { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid rgba(200,169,126,0.25); gap: 12px; }
 .prep-scale { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
-.prep-scale-lbl { font-size: 0.55rem; font-weight: 900; letter-spacing: 2px; color: var(--text-muted); margin-right: auto; }
+.prep-scale-lbl { font-size: 0.53rem; font-weight: 900; letter-spacing: 2px; color: var(--text-muted); margin-right: auto; }
 .prep-scale .ps-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(200,169,126,0.35); color: var(--nodee-gold); border-radius: 7px; width: 30px; height: 30px; font-size: 1rem; font-weight: 900; cursor: pointer; }
 .prep-scale .ps-n { color: var(--text-main); font-weight: 800; font-size: 0.8rem; min-width: 30px; text-align: center; }
-.prep-row { display: flex; justify-content: space-between; padding: 7px 0; font-size: 0.85rem; color: var(--text-muted); }
-.prep-row span:last-child { color: var(--text-main); font-weight: 700; font-family: 'JetBrains Mono', monospace; }
-.prep-total { border-top: 1px solid rgba(200,169,126,0.25); margin-top: 6px; padding-top: 10px; }
-.prep-total span:first-child { color: var(--nodee-gold); font-size: 0.6rem; font-weight: 900; letter-spacing: 2px; }
-.prep-method { font-size: 0.75rem; color: var(--text-muted); line-height: 1.5; margin-top: 12px; padding-top: 10px; border-top: 1px solid #1a1a1a; }
+#preps-list .ir { display: flex; justify-content: space-between; padding: 7px 0; font-size: 0.84rem; color: var(--text-muted); }
+#preps-list .ir b { color: var(--text-main); font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+#preps-list .ir.tot { border-top: 1px solid rgba(200,169,126,0.25); margin-top: 6px; padding-top: 9px; }
+#preps-list .ir.tot span { color: var(--nodee-gold); font-size: 0.55rem; font-weight: 900; letter-spacing: 2px; }
+.prep-method { font-size: 0.74rem; color: var(--text-muted); line-height: 1.5; margin-top: 11px; padding-top: 10px; border-top: 1px solid #1a1a1a; }
+.prep-tofix { width: 100%; margin-top: 12px; padding: 12px; background: none; border: 1px dashed rgba(200,169,126,0.35); border-radius: 10px; color: var(--nodee-gold); font-size: 0.64rem; font-weight: 800; letter-spacing: 1px; cursor: pointer; }

@@ -14,7 +14,7 @@
     <link rel="icon" type="image/png" href="icon-512.png">
     <link rel="apple-touch-icon" href="icon-512.png">
     
-    <link rel="stylesheet" href="styles.css?v=88">
+    <link rel="stylesheet" href="styles.css?v=89">
 </head>
 <body>
     <div id="loader" class="loader-overlay"><span class="loader-text">SYNCING CODEX...</span></div>
@@ -92,16 +92,13 @@
 
         <section id="lab-module" class="module">
             <div class="card glass-panel">
-                <h2 class="card-title text-gold">HOUSE PREPARATIONS</h2>
-                <div id="preps-list"></div>
-            </div>
-
-            <div class="card glass-panel">
                 <h2 class="card-title text-gold">SYRUP & BRIX ENGINE</h2>
                 <div class="pill-group">
-                    <button class="mod-pill active" data-val="build">BUILD SYRUP</button>
-                    <button class="mod-pill" data-val="fix">BRIX FIXER</button>
+                    <button class="mod-pill active" data-val="build">BUILD</button>
+                    <button class="mod-pill" data-val="fix">FIXER</button>
+                    <button class="mod-pill" data-val="preps">PREPS</button>
                 </div>
+                <div id="ui-preps" class="hidden"><div id="preps-list"></div></div>
 
                 <div id="ui-brix-build">
                     <div class="flex-row mb-20">
@@ -279,6 +276,6 @@
         </button>
     </nav>
 
-    <script src="app.js?v=88"></script>
+    <script src="app.js?v=89"></script>
 </body>
 </html>
