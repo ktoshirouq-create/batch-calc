@@ -827,3 +827,16 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .ops-qty-chip.stepping { display: inline-flex; align-items: center; gap: 1px; background: rgba(200,169,126,0.14); border-color: rgba(200,169,126,0.55); padding: 2px; }
 .ops-qty-chip .qc-btn { background: none; border: none; color: var(--nodee-gold); font-size: 0.95rem; font-weight: 900; padding: 3px 9px; line-height: 1; cursor: pointer; }
 .ops-qty-chip .qc-n { color: var(--text-main); font-weight: 900; font-size: 0.76rem; min-width: 16px; text-align: center; }
+
+/* --- PREP ROW SWIPE ACTIONS --- */
+.ops-row { position: relative; overflow: hidden; }
+.ops-row-main { position: relative; background: #080808; touch-action: pan-y; }
+.ops-swipe-bg { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; font-size: 0.68rem; font-weight: 900; letter-spacing: 1.5px; pointer-events: none; opacity: 0; }
+.ops-row.swiping .ops-swipe-bg { opacity: 1; }
+.ops-swipe-bg span { display: inline-block; transition: transform 0.14s ease, opacity 0.14s ease; opacity: 0.45; }
+.ops-swipe-bg .sw-done { color: var(--done-green); }
+.ops-swipe-bg .sw-urgent { color: var(--overdue-red); }
+.ops-row.arm-right .ops-swipe-bg .sw-done { transform: scale(1.15); opacity: 1; }
+.ops-row.arm-left .ops-swipe-bg .sw-urgent { transform: scale(1.15); opacity: 1; }
+.ops-row.swipe-return .ops-row-main { transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1); }
+.ops-row.swiping:active { transform: none; }

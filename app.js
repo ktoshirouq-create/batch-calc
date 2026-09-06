@@ -3911,7 +3911,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // row swallows long-press inside child inputs, so paste never appears.
             row.setAttribute('draggable', 'false');
             
-            let html = `<div class="ops-row-main">`;
+            let html = '';
+            if (isPrep && !taskObj.completed) {
+                html += `<div class="ops-swipe-bg"><span class="sw-done">✓ ALL MADE</span><span class="sw-urgent">URGENT ●</span></div>`;
+            }
+            html += `<div class="ops-row-main">`;
             
             if (isNumberedSop) {
                 html += `<div class="ops-number">${displayIndex + 1}</div>`;
@@ -4440,6 +4444,88 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const moreBtn = row.querySelector('.row-more');
             if (moreBtn) moreBtn.addEventListener('click', (e) => { e.stopPropagation(); openTaskActions(); });
+
+            // Swipe right = finish the whole job; swipe left = toggle urgent.
+            // The ring still ticks bottle by bottle. Completed rows don't swipe.
+            if (isPrep && !taskObj.completed) {
+                const main = row.querySelector('.ops-row-main');
+                const NOSWIPE = '.ops-checkbox, .ops-ring, .ops-qty-chip, .row-more, .drag-handle-task, button, input, textarea, .ops-subtasks, .ops-batch-card';
+                let sx = 0, sy = 0, axis = null, dx = 0, armed = null, pid = null;
+
+                const setX = (v) => { main.style.transform = v ? `translateX(${v}px)` : ''; };
+                const reset = () => {
+                    row.classList.add('swipe-return');
+                    row.classList.remove('swiping', 'arm-left', 'arm-right');
+                    setX(0);
+                    setTimeout(() => row.classList.remove('swipe-return'), 240);
+                };
+                const threshold = () => Math.min(row.offsetWidth * 0.45, 140);
+
+                main.addEventListener('pointerdown', (e) => {
+                    if (e.target.closest(NOSWIPE)) return;
+                    if (e.clientX < 24) return;   // leave Android's back edge alone
+                    sx = e.clientX; sy = e.clientY; axis = null; dx = 0; armed = null; pid = e.pointerId;
+                });
+                main.addEventListener('pointermove', (e) => {
+                    if (pid === null || e.pointerId !== pid) return;
+                    dx = e.clientX - sx;
+                    const dy = e.clientY - sy;
+                    if (!axis) {
+                        if (Math.hypot(dx, dy) < 10) return;
+                        axis = Math.abs(dx) > Math.abs(dy) * 1.2 ? 'x' : 'y';
+                        if (axis === 'y') { pid = null; return; }
+                        row.classList.add('swiping');
+                        try { main.setPointerCapture(pid); } catch (err) {}
+                    }
+                    const t = threshold();
+                    const shown = Math.abs(dx) <= t ? dx : Math.sign(dx) * (t + (Math.abs(dx) - t) * 0.28);
+                    setX(shown);
+                    const next = dx >= t ? 'right' : (dx <= -t ? 'left' : null);
+                    if (next !== armed) {
+                        armed = next;
+                        row.classList.toggle('arm-right', armed === 'right');
+                        row.classList.toggle('arm-left', armed === 'left');
+                        if (armed) triggerHaptic('medium');
+                    }
+                });
+                const finish = (e) => {
+                    if (pid === null || (e && e.pointerId !== pid)) return;
+                    const fired = armed;
+                    pid = null; axis = null; armed = null;
+                    if (!fired) { reset(); return; }
+                    row.classList.remove('swiping', 'arm-left', 'arm-right');
+                    setX(0);
+                    const t = opsData[activeOpsCategory][taskObj.originalIndex];
+                    if (!t) return;
+                    if (fired === 'right') {
+                        const prev = { made: t.made || 0, completed: !!t.completed, lastCompleted: t.lastCompleted || null, urgent: !!t.urgent };
+                        t.made = t.qty || 1;
+                        t.completed = true;
+                        t.lastCompleted = Date.now();
+                        t.urgent = false;
+                        triggerHaptic('heavy');
+                        saveOps(); renderOpsList();
+                        showToast(`${prev.made > 0 ? 'Finished' : 'Made'} ${t.text}`, () => {
+                            const r = opsData[activeOpsCategory][taskObj.originalIndex];
+                            if (!r) return;
+                            r.made = prev.made; r.completed = prev.completed;
+                            r.lastCompleted = prev.lastCompleted; r.urgent = prev.urgent;
+                            saveOps(); renderOpsList();
+                        });
+                    } else {
+                        t.urgent = !t.urgent;
+                        triggerHaptic('medium');
+                        saveOps(); renderOpsList();
+                        showToast(t.urgent ? 'Marked urgent' : 'Urgent cleared');
+                    }
+                };
+                main.addEventListener('pointerup', finish);
+                main.addEventListener('pointercancel', () => { pid = null; axis = null; armed = null; reset(); });
+                // A finished drag must not also register as a tap on .ops-text
+                main.addEventListener('click', (e) => {
+                    if (Math.abs(dx) > 10) { e.stopPropagation(); e.preventDefault(); dx = 0; }
+                }, true);
+            }
 
             container.appendChild(row);
         });
