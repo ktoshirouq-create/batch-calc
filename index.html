@@ -14,7 +14,7 @@
     <link rel="icon" type="image/png" href="icon-512.png">
     <link rel="apple-touch-icon" href="icon-512.png">
     
-    <link rel="stylesheet" href="styles.css?v=87">
+    <link rel="stylesheet" href="styles.css?v=88">
 </head>
 <body>
     <div id="loader" class="loader-overlay"><span class="loader-text">SYNCING CODEX...</span></div>
@@ -91,6 +91,11 @@
         </section>
 
         <section id="lab-module" class="module">
+            <div class="card glass-panel">
+                <h2 class="card-title text-gold">HOUSE PREPARATIONS</h2>
+                <div id="preps-list"></div>
+            </div>
+
             <div class="card glass-panel">
                 <h2 class="card-title text-gold">SYRUP & BRIX ENGINE</h2>
                 <div class="pill-group">
@@ -253,6 +258,8 @@
         <button id="save-spec-btn" class="btn-primary">SAVE SPEC</button>
     </div>
 
+    <button id="ops-fab" class="ops-fab hidden" aria-label="Add">＋</button>
+
     <nav class="bottom-nav">
         <button class="nav-tab active" data-target="ops-module" aria-label="Operations">
             <svg class="nav-svg" width="24" height="24" viewBox="0 0 24 24"><path d="M4 6l1.5 1.5L8 5"/><path d="M11 6h9"/><path d="M4 12l1.5 1.5L8 11"/><path d="M11 12h9"/><path d="M4 18l1.5 1.5L8 17"/><path d="M11 18h6"/></svg>
@@ -272,6 +279,6 @@
         </button>
     </nav>
 
-    <script src="app.js?v=87"></script>
+    <script src="app.js?v=88"></script>
 </body>
 </html>

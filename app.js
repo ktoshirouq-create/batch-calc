@@ -194,9 +194,44 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         modal.classList.remove('hidden');
+        pushSheetState();
     }
 
-    function closeSelectModal() {
+    // --- SHEET DISMISSAL ---
+    // Every sheet closes by tapping the dimmed backdrop or with the Android back
+    // gesture. Back pushes a history entry so it pops the sheet instead of
+    // leaving the app entirely.
+    let sheetDepth = 0;
+    function pushSheetState() {
+        sheetDepth++;
+        try { history.pushState({ codexSheet: sheetDepth }, ''); } catch {}
+    }
+    function popSheetState() {
+        if (sheetDepth > 0) { sheetDepth--; try { history.back(); } catch {} }
+    }
+    function closeTopSheet() {
+        const open = [
+            ['prep-add-sheet', () => closePrepAddSheet()],
+            ['restock-add-sheet', () => closeRestockAddSheet()]
+        ];
+        for (const [id, fn] of open) {
+            const el = document.getElementById(id);
+            if (el && !el.classList.contains('hidden')) { fn(); return true; }
+        }
+        if (modal && !modal.classList.contains('hidden')) { closeSelectModal(true); return true; }
+        const sheet = document.getElementById('action-sheet-modal');
+        if (sheet && !sheet.classList.contains('hidden')) { sheet.classList.add('hidden'); return true; }
+        return false;
+    }
+    window.addEventListener('popstate', () => {
+        if (sheetDepth > 0) { sheetDepth--; closeTopSheet(); }
+    });
+
+    // Tapping the dimmed backdrop closes whatever sheet is open
+    if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) closeSelectModal(); });
+
+    function closeSelectModal(fromBack) {
+        if (!fromBack) popSheetState();
         if (!modalContent || !modal) return;
         triggerHaptic('light');
         modalContent.style.transform = `translateY(100%)`;
@@ -231,6 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
         actions.children[1].addEventListener('click', () => { triggerHaptic('heavy'); closeSelectModal(); if (onConfirm) onConfirm(); });
         list.appendChild(actions);
         modal.classList.remove('hidden');
+        pushSheetState();
     }
 
     // One typed-number pattern for every numeric setting — replaces the
@@ -261,6 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
         input.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); });
         list.appendChild(wrap);
         modal.classList.remove('hidden');
+        pushSheetState();
         setTimeout(() => { input.focus(); input.select(); }, 350);
     }
 
@@ -292,6 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         list.appendChild(wrap);
         modal.classList.remove('hidden');
+        pushSheetState();
     }
 
     // Names we've logged before, so you can attribute a cleaning to someone who
@@ -371,6 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         list.appendChild(wrap);
         modal.classList.remove('hidden');
+        pushSheetState();
     }
 
     function openAlertModal({ title = 'NOTICE', message, onClose }) {
@@ -388,6 +427,7 @@ document.addEventListener('DOMContentLoaded', () => {
         actions.children[0].addEventListener('click', () => { triggerHaptic('light'); closeSelectModal(); if (onClose) onClose(); });
         list.appendChild(actions);
         modal.classList.remove('hidden');
+        pushSheetState();
     }
 
     if (dragZone && dragHandle && modalContent) {
@@ -772,6 +812,102 @@ document.addEventListener('DOMContentLoaded', () => {
             renderVault();
         });
     });
+
+    // --- HOUSE PREPARATIONS ---
+    // The standing recipes everyone should make the same way. Ratio-based ones
+    // are deterministic; honey and agave vary by jar, so they target a Brix.
+    const HOUSE_PREPS = [
+        { name: 'Simple Syrup',   mode: 'ratio', ratio: 1,    brix: 50,
+          parts: [['Dry sugar', 1], ['Hot water', 1]],
+          method: 'Hot water from the tap, stir until fully dissolved.' },
+        { name: 'Demerara Syrup', mode: 'ratio', ratio: 1.5,  brix: 60,
+          parts: [['Demerara sugar', 1.5], ['Hot water', 1]],
+          method: 'Hot water from the tap, stir until fully dissolved.' },
+        { name: 'Honey Syrup',    mode: 'brix',  brix: 65.5,  base: 80,
+          method: 'Hot water from the tap. Honey varies by jar — measure and correct with the Brix Fixer below.' },
+        { name: 'Agave Syrup',    mode: 'brix',  brix: 65.5,  base: 75,
+          method: 'Hot water from the tap. Agave varies — measure and correct with the Brix Fixer below.' },
+        { name: 'Saline 20%',     mode: 'ratio', ratio: 0.25,
+          parts: [['Salt', 20], ['Water', 80]],
+          method: '20g salt to 80g water by weight. Stir until clear.' },
+        { name: 'Spicy Tincture', mode: 'fixed',
+          parts: [['Dried jalapeño', 2], ['Dried habanero', 1], ['Carolina Reaper (whole)', 1], ['Ghost pepper (whole)', 1], ['Absolut vodka', 500]],
+          units: ['g', 'g', '', '', 'ml'],
+          method: '48h maceration, then strain. Whole peppers stay fixed when scaling — heat does not scale linearly.' }
+    ];
+    const PREP_SCALE_KEY = 'codex_prep_scale_v1';
+
+    function renderPreps() {
+        const list = document.getElementById('preps-list');
+        if (!list) return;
+        list.innerHTML = '';
+        HOUSE_PREPS.forEach((p, idx) => {
+            const item = document.createElement('div');
+            item.className = 'prep-item';
+            const sub = p.mode === 'brix' ? `TARGET ${p.brix} Bx`
+                : p.mode === 'ratio' ? `${p.ratio >= 1 ? p.ratio + ':1' : '20%'}${p.brix ? ' · ' + p.brix + ' Bx' : ''}`
+                : '48H';
+            item.innerHTML = `<div class="prep-head"><span class="prep-name">${p.name}</span><span class="prep-sub">${sub}</span></div><div class="prep-body"></div>`;
+            item.querySelector('.prep-head').addEventListener('click', () => {
+                triggerHaptic('light');
+                item.classList.toggle('open');
+                if (item.classList.contains('open')) buildPrepBody(item.querySelector('.prep-body'), p);
+            });
+            list.appendChild(item);
+        });
+    }
+
+    function buildPrepBody(wrap, p) {
+        const savedScale = (() => {
+            try { return (JSON.parse(localStorage.getItem(PREP_SCALE_KEY)) || {})[p.name] || 1; } catch { return 1; }
+        })();
+        let scale = savedScale;
+        const draw = () => {
+            let rows = '';
+            if (p.mode === 'brix') {
+                // weight of sweetener : water to hit the target from the stored base
+                const w = (p.brix / p.base);
+                const water = 1 - w;
+                const total = 1000 * scale;
+                const sweet = Math.round(total * w);
+                rows = `<div class="prep-row"><span>${p.name.replace(' Syrup','')}</span><span>${sweet}g</span></div>`
+                     + `<div class="prep-row"><span>Hot water</span><span>${Math.round(total * water)}g</span></div>`
+                     + `<div class="prep-row prep-total"><span>MAKES</span><span>${Math.round(total)}g at ${p.brix} Bx</span></div>`;
+            } else {
+                const sum = p.parts.reduce((s, x) => s + x[1], 0);
+                rows = p.parts.map(([n, v], i) => {
+                    const u = (p.units && p.units[i] !== undefined) ? p.units[i] : 'g';
+                    const whole = u === '';
+                    const amt = whole ? v : Math.round(v * scale * (p.mode === 'ratio' ? (1000 / sum) : 1));
+                    return `<div class="prep-row"><span>${n}</span><span>${amt}${u}</span></div>`;
+                }).join('');
+                if (p.mode === 'ratio') rows += `<div class="prep-row prep-total"><span>MAKES</span><span>${Math.round(1000 * scale)}g${p.brix ? ' at ' + p.brix + ' Bx' : ''}</span></div>`;
+            }
+            wrap.innerHTML = `
+                <div class="prep-scale">
+                    <span class="prep-scale-lbl">BATCH</span>
+                    <button class="ps-btn" data-d="-1">−</button>
+                    <span class="ps-n">×${scale}</span>
+                    <button class="ps-btn" data-d="1">+</button>
+                </div>
+                ${rows}
+                <div class="prep-method">${p.method}</div>`;
+            wrap.querySelectorAll('.ps-btn').forEach(b => b.addEventListener('click', (e) => {
+                e.stopPropagation();
+                triggerHaptic('light');
+                scale = Math.max(1, Math.min(20, scale + parseInt(b.getAttribute('data-d'))));
+                try {
+                    const m = JSON.parse(localStorage.getItem(PREP_SCALE_KEY)) || {};
+                    m[p.name] = scale;
+                    localStorage.setItem(PREP_SCALE_KEY, JSON.stringify(m));
+                } catch {}
+                draw();
+            }));
+        };
+        draw();
+    }
+
+    renderPreps();
 
     // --- SPEC BUILDER ---
     let builderState = { name: '', sections: [{ name: 'MAIN', ingredients: [] }] };
@@ -1215,6 +1351,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         list.appendChild(actions);
         modal.classList.remove('hidden');
+        pushSheetState();
     }
 
     const addSectionBtn = document.getElementById('add-section-btn');
@@ -2235,6 +2372,7 @@ document.addEventListener('DOMContentLoaded', () => {
         wrap.appendChild(act);
         list.appendChild(wrap);
         modal.classList.remove('hidden');
+        pushSheetState();
     }
 
     async function renameShelfIngredient(oldName) {
@@ -2434,6 +2572,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const delBtn = sheet.querySelector('[data-action="delete"]');
         if (delBtn) delBtn.classList.toggle('hidden', inMocktails);
         sheet.classList.remove('hidden');
+        pushSheetState();
     };
     
     // --- EDIT & DELETE ---
@@ -3561,6 +3700,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     window.renderOpsList = function() {
+        // Floating add — the list add button sits below the fold on long lists
+        const fab = document.getElementById('ops-fab');
+        if (fab) fab.classList.toggle('hidden', !document.getElementById('ops-module')?.classList.contains('active'));
         // END SHIFT resets the opening/closing checklists — it has no meaning on
         // the prep board or upkeep, so keep it off those tabs.
         const endBtn = document.getElementById('ops-reset-btn');
@@ -3854,25 +3996,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const header = document.createElement('div');
             header.className = 'ops-prep-section';
             header.innerText = label;
-            header.addEventListener('dragover', (e) => { e.preventDefault(); header.classList.add('drop-hover'); });
-            header.addEventListener('dragleave', () => header.classList.remove('drop-hover'));
-            header.addEventListener('drop', (e) => {
-                e.preventDefault();
-                header.classList.remove('drop-hover');
-                const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
-                if (isNaN(fromIdx)) return;
-                const wantKind = label === 'MISE' ? 'mise' : 'batch';
-                const item = opsData[activeOpsCategory].splice(fromIdx, 1)[0];
-                if (!item) return;
-                if (item.kind !== wantKind) {
-                    item.kind = wantKind;
-                    if (wantKind === 'batch' && !item.qty) item.qty = 1;
-                    rememberPrepKind(item.text, wantKind);
-                }
-                opsData[activeOpsCategory].push(item);
-                saveOps();
-                renderOpsList();
-            });
             return header;
         }
 
@@ -3907,6 +4030,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isLinked) rowClasses += ' ops-row-linked';
             if (taskObj.urgent && !taskObj.completed) rowClasses += ' ops-row-urgent';
             row.className = rowClasses;
+            if (taskObj.taskId) row.setAttribute('data-task-id', taskObj.taskId);
             // Armed only for the duration of a touch on the row (see the hold
             // handler below). A permanently draggable row swallows long-press
             // inside child inputs, so paste never appears.
@@ -4148,78 +4272,128 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (isDraggable) {
-                // Hold a still finger on the row to arm dragging. Movement means a
-                // swipe instead, so the two gestures never both claim the touch.
-                // Row is only draggable during the hold: a permanently draggable
-                // row swallows long-press inside inputs and paste stops working.
+                // Pointer-based drag. HTML5 drag has no lift, no drop preview and
+                // no auto-scroll on touch — this moves the row with your finger,
+                // parts the list to show where it lands, and scrolls near edges.
                 const NODRAG = '.ops-checkbox, .ops-ring, .ops-qty-chip, .row-more, button, input, textarea, .ops-subtasks, .ops-batch-card';
-                let holdTimer = null, hx = 0, hy = 0;
-                const disarm = () => {
-                    clearTimeout(holdTimer); holdTimer = null;
-                    row.setAttribute('draggable', 'false');
-                    row.classList.remove('drag-armed');
+                let armTimer = null, dragging = false, grabDY = 0, lastY = 0;
+                let gap = null, autoScroll = null, sx = 0, sy = 0;
+                const scroller = document.getElementById('scroll-area') || document.scrollingElement;
+
+                const begin = (y) => {
+                    dragging = true;
+                    triggerHaptic('medium');
+                    const r = row.getBoundingClientRect();
+                    grabDY = y - r.top;
+                    gap = document.createElement('div');
+                    gap.className = 'ops-drop-gap';
+                    gap.style.height = r.height + 'px';
+                    row.parentNode.insertBefore(gap, row);
+                    row.style.width = r.width + 'px';
+                    row.style.left = r.left + 'px';
+                    row.style.top = r.top + 'px';
+                    row.classList.add('dragging');
+                    document.body.appendChild(row);
+                    container.classList.add('drag-active');
+                    lastY = y;
+                    autoScroll = setInterval(() => {
+                        const pad = 90, vh = window.innerHeight;
+                        let d = 0;
+                        if (lastY < pad) d = -Math.ceil((pad - lastY) / 6);
+                        else if (lastY > vh - pad) d = Math.ceil((lastY - (vh - pad)) / 6);
+                        if (d && scroller) { scroller.scrollTop += d; move(lastY); }
+                    }, 16);
                 };
-                row.addEventListener('pointerdown', (e) => {
-                    if (e.target.closest(NODRAG)) return;
-                    hx = e.clientX; hy = e.clientY;
-                    // Armed immediately — Chrome reads `draggable` at touchstart,
-                    // so arming on a timer is too late for the native lift. Any
-                    // movement disarms it well before Chrome's own ~500ms hold.
-                    row.setAttribute('draggable', 'true');
-                    clearTimeout(holdTimer);
-                    holdTimer = setTimeout(() => {
-                        row.classList.add('drag-armed');
-                        triggerHaptic('medium');
-                    }, 450);
-                });
-                row.addEventListener('pointermove', (e) => {
-                    if (!holdTimer) return;
-                    if (Math.hypot(e.clientX - hx, e.clientY - hy) >= 8) disarm();
-                });
-                row.addEventListener('pointerup', disarm);
-                row.addEventListener('pointercancel', disarm);
-                row.addEventListener('dragstart', (e) => {
-                    e.dataTransfer.setData('text/plain', taskObj.originalIndex);
-                    row.style.opacity = '0.4';
-                });
-                row.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    row.style.borderTop = '2px solid var(--nodee-gold)';
-                });
-                row.addEventListener('dragleave', (e) => {
-                    row.style.borderTop = 'none';
-                });
-                row.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    row.style.borderTop = 'none';
-                    const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
-                    const toIdx = taskObj.originalIndex;
-                    if (fromIdx !== toIdx && !isNaN(fromIdx)) {
-                        const item = opsData[activeOpsCategory].splice(fromIdx, 1)[0];
-                        // PREP: dropping across the BATCHES/MISE divider re-files the task
-                        if (isPrep && item.kind !== taskObj.kind) {
-                            item.kind = taskObj.kind === 'mise' ? 'mise' : 'batch';
-                            if (item.kind === 'batch' && !item.qty) item.qty = 1;
-                            rememberPrepKind(item.text, item.kind);
+
+                const move = (y) => {
+                    lastY = y;
+                    row.style.top = (y - grabDY) + 'px';
+                    const others = [...container.querySelectorAll('.ops-row')];
+                    let placed = false;
+                    for (const r of others) {
+                        const b = r.getBoundingClientRect();
+                        if (y < b.top + b.height / 2) {
+                            if (gap.nextSibling !== r) container.insertBefore(gap, r);
+                            placed = true;
+                            break;
                         }
-                        opsData[activeOpsCategory].splice(toIdx, 0, item);
-                        // Midpoint ordering: only this task's orderIndex changes,
-                        // so simultaneous drags on other devices don't collide.
-                        const arr = opsData[activeOpsCategory];
-                        const pos = arr.indexOf(item);
-                        const before = pos > 0 ? (arr[pos - 1].orderIndex || 0) : 0;
-                        const after = pos < arr.length - 1 ? (arr[pos + 1].orderIndex || before + 2000) : before + 2000;
-                        item.orderIndex = (before + after) / 2;
-                        saveOps();
-                        renderOpsList();
                     }
-                });
-                row.addEventListener('dragend', () => {
-                    row.setAttribute('draggable', 'false');
-                    row.classList.remove('drag-armed');
-                    row.style.opacity = '1';
-                    document.querySelectorAll('.ops-row').forEach(r => r.style.borderTop = 'none');
-                });
+                    if (!placed && container.lastElementChild !== gap) container.appendChild(gap);
+                };
+
+                const finish = (commit) => {
+                    clearInterval(autoScroll);
+                    container.classList.remove('drag-active');
+                    row.classList.remove('dragging');
+                    row.style.width = row.style.left = row.style.top = '';
+                    if (gap) { gap.parentNode.insertBefore(row, gap); gap.remove(); gap = null; }
+                    dragging = false;
+                    if (!commit) { renderOpsList(); return; }
+
+                    const arr = opsData[activeOpsCategory];
+                    // Which section did it land under?
+                    let header = null;
+                    for (const el of container.children) {
+                        if (el === row) break;
+                        if (el.classList.contains('ops-prep-section')) header = el.innerText;
+                    }
+                    const item = arr.splice(taskObj.originalIndex, 1)[0];
+                    if (!item) { renderOpsList(); return; }
+
+                    // Position from the DOM neighbours, mapped back to the array
+                    const domRows = [...container.querySelectorAll('.ops-row')];
+                    const at = domRows.indexOf(row);
+                    const idxOf = (el) => {
+                        if (!el) return -1;
+                        const id = el.getAttribute('data-task-id');
+                        return arr.findIndex(x => x.taskId === id);
+                    };
+                    const bi = idxOf(domRows[at - 1]);
+                    const ai = idxOf(domRows[at + 1]);
+                    const target = bi > -1 ? bi + 1 : (ai > -1 ? ai : arr.length);
+                    arr.splice(Math.max(0, Math.min(target, arr.length)), 0, item);
+
+                    if (isPrep && header) {
+                        const wantKind = /MISE/i.test(header) ? 'mise' : 'batch';
+                        if (item.kind !== wantKind) {
+                            item.kind = wantKind;
+                            if (wantKind === 'batch' && !item.qty) item.qty = 1;
+                            rememberPrepKind(item.text, wantKind);
+                        }
+                    }
+                    // Midpoint ordering so simultaneous drags elsewhere don't collide
+                    const pos = arr.indexOf(item);
+                    const before = pos > 0 ? (arr[pos - 1].orderIndex || 0) : 0;
+                    const after = pos < arr.length - 1 ? (arr[pos + 1].orderIndex || before + 2000) : before + 2000;
+                    item.orderIndex = (before + after) / 2;
+                    saveOps();
+                    renderOpsList();
+                };
+
+                const onMove = (e) => {
+                    if (dragging) { e.preventDefault(); move(e.clientY); return; }
+                    if (armTimer && Math.hypot(e.clientX - sx, e.clientY - sy) >= 10) { clearTimeout(armTimer); armTimer = null; }
+                };
+                const detach = () => {
+                    document.removeEventListener('pointermove', onMove);
+                    document.removeEventListener('pointerup', onUp);
+                    document.removeEventListener('pointercancel', onCancel);
+                };
+                const onUp = () => { if (armTimer) { clearTimeout(armTimer); armTimer = null; } if (dragging) finish(true); detach(); };
+                const onCancel = () => { if (armTimer) { clearTimeout(armTimer); armTimer = null; } if (dragging) finish(false); detach(); };
+
+                const arm = (e, instant) => {
+                    if (e.target.closest(NODRAG)) return;
+                    sx = e.clientX; sy = e.clientY;
+                    document.addEventListener('pointermove', onMove, { passive: false });
+                    document.addEventListener('pointerup', onUp);
+                    document.addEventListener('pointercancel', onCancel);
+                    if (instant) begin(e.clientY);
+                    else armTimer = setTimeout(() => { armTimer = null; begin(sy); }, 250);
+                };
+                const handle = row.querySelector('.drag-handle-task');
+                if (handle) handle.addEventListener('pointerdown', (e) => { e.preventDefault(); arm(e, true); });
+                row.addEventListener('pointerdown', (e) => { if (!e.target.closest('.drag-handle-task')) arm(e, false); });
             }
 
             const openTaskActions = () => {
@@ -4230,11 +4404,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (isPeriodic) actions.push({ label: 'Set frequency', value: 'set-freq' });
                     if (isPeriodic) actions.push({ label: 'Log a cleaning', value: 'log-done' });
                     if (isPrep && taskObj.kind !== 'mise') {
-                        actions.push({ label: 'Change how many needed', value: 'set-qty' });
-                        if ((taskObj.made || 0) > 0 && !taskObj.completed) actions.push({ label: 'Mark all made', value: 'all-made' });
+                        // "How many" is the chip, "all made" is swipe-right — no menu duplicates.
                         if ((taskObj.made || 0) > 0) actions.push({ label: 'Reset progress', value: 'reset-made' });
                     }
-                    if (isPrep) actions.push({ label: taskObj.urgent ? 'Clear urgent' : 'Mark urgent', value: 'urgent' });
                     if (isPrep) actions.push({ label: 'Add to Restock', value: 'to-restock' });
                     if (isPrep) actions.push({ label: taskObj.kind === 'mise' ? 'Move to batches' : 'Move to mise', value: 'move-kind' });
                     if (isPrep && isLinked) actions.push({ label: 'Batch bottle size', value: 'batch-size' });
@@ -4735,6 +4907,7 @@ document.addEventListener('DOMContentLoaded', () => {
         wrap.appendChild(actions);
         list.appendChild(wrap);
         modal.classList.remove('hidden');
+        pushSheetState();
     }
 
     function openRestockAddSheet() {
@@ -4766,6 +4939,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('restock-add-save').addEventListener('click', () => { triggerHaptic('heavy'); commitRestockTyped(); });
         }
         sheet.classList.remove('hidden');
+        pushSheetState();
         bindKeyboardLift(sheet);
         renderRestockSuggestions();
         setTimeout(() => {
@@ -4775,7 +4949,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     function closeRestockAddSheet() {
         const s = document.getElementById('restock-add-sheet');
-        if (s) { s.classList.add('hidden'); s.style.paddingBottom = ''; }
+        if (s && !s.classList.contains('hidden')) { s.classList.add('hidden'); s.style.paddingBottom = ''; popSheetState(); }
         const i = document.getElementById('restock-add-input');
         if (i) i.value = '';
     }
@@ -4873,6 +5047,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
         sheet.classList.remove('hidden');
+        pushSheetState();
         bindKeyboardLift(sheet);
         renderPrepSuggestions();
         setTimeout(() => {
@@ -4897,7 +5072,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function closePrepAddSheet() {
         const sheet = document.getElementById('prep-add-sheet');
-        if (sheet) { sheet.classList.add('hidden'); sheet.style.paddingBottom = ''; }
+        if (sheet && !sheet.classList.contains('hidden')) { sheet.classList.add('hidden'); sheet.style.paddingBottom = ''; popSheetState(); }
         const input = document.getElementById('prep-add-input');
         if (input) input.value = '';
     }
@@ -4958,7 +5133,18 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-        const opsAddBtn = document.getElementById('ops-add-btn');
+        document.getElementById('ops-fab')?.addEventListener('click', () => {
+        triggerHaptic('light');
+        document.getElementById('ops-add-btn')?.click();
+    });
+    document.querySelectorAll('.nav-tab').forEach(t => t.addEventListener('click', () => {
+        setTimeout(() => {
+            const fab = document.getElementById('ops-fab');
+            if (fab) fab.classList.toggle('hidden', !document.getElementById('ops-module')?.classList.contains('active'));
+        }, 30);
+    }));
+
+    const opsAddBtn = document.getElementById('ops-add-btn');
     if (opsAddBtn) {
         opsAddBtn.addEventListener('click', () => {
             triggerHaptic('light');
