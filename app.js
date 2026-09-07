@@ -4142,17 +4142,22 @@ document.addEventListener('DOMContentLoaded', () => {
         // Countdown block for UPKEEP rows
         function buildCountdown(taskObj) {
             const interval = taskObj.intervalDays || 30;
-            if (taskObj.completed && taskObj.lastCompleted) {
-                return `<div class="ops-count done"><div class="num done-date">${formatDate(taskObj.lastCompleted)}</div><div class="lbl">DONE</div></div>`;
+            // Never done — nothing to count from, so just state the cadence.
+            if (!taskObj.lastCompleted) {
+                return `<div class="ops-count ok"><div class="num">${interval}d</div><div class="lbl">EVERY</div></div>`;
             }
-            if (taskObj.lastCompleted) {
-                const daysSince = Math.floor((Date.now() - taskObj.lastCompleted) / DAY_MS);
-                const due = interval - daysSince;
-                if (due < 0) return `<div class="ops-count overdue"><div class="num">−${Math.abs(due)}d</div><div class="lbl">OVERDUE</div></div>`;
-                const cls = due <= 3 ? 'soon' : 'ok';
-                return `<div class="ops-count ${cls}"><div class="num">${due}d</div><div class="lbl">DUE</div></div>`;
+            const daysSince = Math.floor((Date.now() - taskObj.lastCompleted) / DAY_MS);
+            const due = interval - daysSince;
+            if (due < 0) {
+                return `<div class="ops-count overdue"><div class="num">−${Math.abs(due)}d</div><div class="lbl">OVERDUE</div></div>`;
             }
-            return `<div class="ops-count ok"><div class="num">${interval}d</div><div class="lbl">EVERY</div></div>`;
+            // A ticked upkeep task is exactly the case where you want to know when
+            // it comes back — it un-ticks itself the moment the interval elapses.
+            // The green ring already says it is done, so the date earns its space
+            // better as the next due date than as the last completed one.
+            const dueDate = formatDate(taskObj.lastCompleted + interval * DAY_MS).toUpperCase();
+            const cls = taskObj.completed ? 'done' : (due <= 3 ? 'soon' : 'ok');
+            return `<div class="ops-count ${cls}"><div class="num">${due === 0 ? 'TODAY' : due + 'd'}</div><div class="lbl">${due === 0 ? 'DUE' : 'DUE ' + dueDate}</div></div>`;
         }
 
         let lastPrepGroup = null;  // section header tracker for the PREP loop
