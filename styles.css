@@ -891,7 +891,9 @@ body.dragging-lock { overflow: hidden; touch-action: none; }
 .pz-lk { font-style: normal; font-size: 0.52rem; font-weight: 900; letter-spacing: 1px; color: var(--nodee-gold); opacity: 0.75; margin-left: 5px; }
 .pz-fixbtn { width: 100%; margin-top: 12px; padding: 12px; background: none; border: 1px dashed rgba(200,169,126,0.35); border-radius: 10px; color: var(--nodee-gold); font-size: 0.64rem; font-weight: 800; letter-spacing: 1px; cursor: pointer; }
 .pz-fix { margin-top: 10px; }
-.pz-fixrow { display: flex; align-items: center; gap: 8px; }
+.pz-fixrow { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.pz-fixrow:last-of-type { margin-bottom: 0; }
+.pz-fixwt { width: 92px; background: rgba(255,255,255,0.04); border: 1px solid rgba(200,169,126,0.35); border-radius: 9px; color: var(--text-main); font-size: 0.9rem; font-family: 'JetBrains Mono', monospace; padding: 8px 10px; text-align: center; margin-right: 51px; }
 .pz-fixrow span { font-size: 0.62rem; font-weight: 800; letter-spacing: 1px; color: var(--text-muted); flex: 1; }
 .pz-fixin { width: 74px; background: rgba(255,255,255,0.04); border: 1px solid rgba(200,169,126,0.35); border-radius: 9px; color: var(--text-main); font-size: 0.9rem; font-family: 'JetBrains Mono', monospace; padding: 8px 10px; text-align: center; }
 .pz-fixgo { background: var(--nodee-gold); color: var(--bg-oled); border: none; border-radius: 9px; padding: 9px 15px; font-size: 0.62rem; font-weight: 900; letter-spacing: 1.5px; cursor: pointer; }

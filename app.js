@@ -976,6 +976,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ${total != null ? `<div class="ir tot"><span>MAKES</span><b>${fmtAmt(total, basePart(p).unit === 'ml' ? 'ml' : 'g')}${p.brix ? ' · ' + p.brix + ' Bx' : ''}</b></div>` : ''}
                 ${p.method ? `<div class="prep-method">${p.method}</div>` : ''}
                 ${p.brix ? `<button class="pz-fixbtn">MEASURE &amp; FIX</button><div class="pz-fix hidden">
+                    <div class="pz-fixrow"><span>Batch weight</span><input type="number" inputmode="decimal" class="pz-fixwt" placeholder="g" value="${total != null ? Math.round(total) : ''}"></div>
                     <div class="pz-fixrow"><span>Refractometer reading</span><input type="number" inputmode="decimal" class="pz-fixin" placeholder="Bx"><button class="pz-fixgo">GO</button></div>
                     <div class="pz-fixout"></div></div>` : ''}
                 <div class="pz-acts"><button class="pz-act pz-edit">EDIT</button><button class="pz-act pz-del">DELETE</button></div>`;
@@ -1013,20 +1014,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 triggerHaptic('heavy');
                 const cur = parseFloat(body.querySelector('.pz-fixin').value);
                 const out = body.querySelector('.pz-fixout');
+                // Never assume the pot weighs what the recipe predicted — losses,
+                // spills and eyeballed water all move it. Weigh it, type it.
+                const wt = parseFloat(body.querySelector('.pz-fixwt').value);
+                if (!(wt > 0)) {
+                    out.innerHTML = `<div class="ir"><span>Weigh the batch first</span><b>—</b></div>`;
+                    return;
+                }
                 if (!(cur > 0)) { out.innerHTML = ''; return; }
-                // The prep already knows its target and the batch weight, so a
-                // reading is the only thing missing.
                 const target = p.brix;
                 if (Math.abs(cur - target) < 0.05) {
                     out.innerHTML = `<div class="ir tot"><span>ON TARGET</span><b>${target} Bx</b></div>`;
                 } else if (cur > target) {
-                    const w = total * ((cur / target) - 1);
+                    const w = wt * ((cur / target) - 1);
                     out.innerHTML = `<div class="ir"><span>Water to add</span><b>${fmtAmt(w, 'g')}</b></div>`
-                                  + `<div class="ir tot"><span>NEW YIELD</span><b>${fmtAmt(total + w, 'g')}</b></div>`;
+                                  + `<div class="ir tot"><span>NEW YIELD</span><b>${fmtAmt(wt + w, 'g')}</b></div>`;
                 } else {
-                    const s = total * ((target - cur) / (100 - target));
-                    out.innerHTML = `<div class="ir"><span>Dry sugar to add</span><b>${fmtAmt(s, 'g')}</b></div>`
-                                  + `<div class="ir tot"><span>NEW YIELD</span><b>${fmtAmt(total + s, 'g')}</b></div>`;
+                    // Correct with whatever the prep is actually made of. Adding
+                    // dry sugar to a honey syrup would be the wrong ingredient.
+                    const richBrix = p.baseBrix || 100;
+                    const richName = p.baseBrix ? basePart(p).ing : 'Dry sugar';
+                    const add = wt * ((target - cur) / (richBrix - target));
+                    out.innerHTML = `<div class="ir"><span>${richName} to add</span><b>${fmtAmt(add, 'g')}</b></div>`
+                                  + `<div class="ir tot"><span>NEW YIELD</span><b>${fmtAmt(wt + add, 'g')}</b></div>`;
                 }
             });
             body.querySelector('.pz-edit').addEventListener('click', () => {
