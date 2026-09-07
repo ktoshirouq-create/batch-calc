@@ -458,6 +458,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const VAULT_CACHE_KEY = 'codex_vault_cache_v1';
     let vaultLive = false;  // true only when recipeVault reflects a successful live fetch
 
+    // Safe to call before OPS has initialised — it simply does nothing then.
+    function repaintBatchCards() {
+        try {
+            if (typeof window.renderOpsList === 'function') window.renderOpsList();
+        } catch (e) { console.error('Batch card repaint failed:', e); }
+    }
+
     async function loadVault() {
         showLoader("SYNCING CODEX…");
         const attempt = async () => {
@@ -480,6 +487,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Render OUTSIDE the network try/catch — a rendering bug must never
                 // be reported as "offline", which sends you hunting the wrong problem.
                 try { renderVault(); } catch (renderErr) { console.error('Render failed:', renderErr); }
+                // OPS renders from localStorage the moment the app opens, long
+                // before this fetch lands — so its batch cards were built while
+                // vaultLive was still false and got stuck showing "can't reach
+                // the Codex". Re-render them now that the specs are actually here.
+                repaintBatchCards();
                 hideLoader();
                 return;
             } catch (e) {
@@ -495,6 +507,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 recipeVault = JSON.parse(cached);
                 if (lText) lText.innerText = "OFFLINE — CACHED COPY";
                 renderVault();
+                repaintBatchCards();   // cached specs still beat an error message
                 setTimeout(hideLoader, 1200);
                 return;
             }
