@@ -843,7 +843,7 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .ops-swipe-bg .sw-urgent { color: var(--overdue-red); }
 .ops-row.arm-right .ops-swipe-bg .sw-done { transform: scale(1.15); opacity: 1; }
 .ops-row.arm-left .ops-swipe-bg .sw-urgent { transform: scale(1.15); opacity: 1; }
-.ops-row.swipe-return .ops-row-main { transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1); }
+.ops-row.swipe-return .ops-row-main { transition: transform 0.4s cubic-bezier(0.22, 0.85, 0.28, 1); }
 .ops-row.swiping:active { transform: none; }
 .ops-row.drag-armed { box-shadow: 0 0 0 1px var(--nodee-gold), 0 6px 18px rgba(0,0,0,0.5); }
 .ops-row.drag-armed .ops-row-main { background: #100d0a; }

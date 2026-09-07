@@ -3278,7 +3278,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function taskSig(t, cat) {
         return JSON.stringify([cat, t.text, !!t.completed, t.intervalDays || '', t.lastCompleted || '',
             t.log || [], t.subtasks || [], t.kind || '', t.qty || '', t.made || '', t.bottleML || '',
-            t.linkedSpec || '', t.linkedSection || '', t.orderIndex]);
+            t.linkedSpec || '', t.linkedSection || '', t.orderIndex, !!t.urgent]);
     }
 
     const OPS_CATS = ['opening', 'prep', 'closing', 'periodic', 'restock'];
@@ -3382,7 +3382,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 const localTask = foundCat ? opsData[foundCat][foundIdx] : null;
                 const localUpd = localTask ? (localTask.updatedAt || 0) : 0;
-                if (localTask && localUpd > (remote.updatedAt || 0)) return;   // ours is newer
+                if (localTask && localUpd >= (remote.updatedAt || 0)) return;  // ours is newer, or is this same version
 
                 if (remote.deleted) {
                     if (localTask) { opsData[foundCat].splice(foundIdx, 1); changed = true; }
@@ -3399,6 +3399,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     updatedAt: remote.updatedAt || 0,
                     updatedBy: remote.updatedBy || ''
                 };
+                if (remote.urgent)        merged.urgent        = true;
+                if (remote.made)          merged.made          = parseFloat(remote.made);
                 if (remote.intervalDays)  merged.intervalDays  = parseFloat(remote.intervalDays);
                 if (remote.lastCompleted) merged.lastCompleted = parseFloat(remote.lastCompleted);
                 if (remote.kind)          merged.kind          = remote.kind;
@@ -4827,9 +4829,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     row.classList.add('swipe-return');
                     row.classList.remove('swiping', 'arm-left', 'arm-right');
                     setX(0);
-                    setTimeout(() => row.classList.remove('swipe-return'), 240);
+                    setTimeout(() => row.classList.remove('swipe-return'), 420);
                 };
-                const threshold = () => Math.min(row.offsetWidth * 0.30, 90);
+                const threshold = () => Math.min(row.offsetWidth * 0.42, 130);
 
                 main.addEventListener('pointerdown', (e) => {
                     if (e.target.closest(NOSWIPE)) return;
@@ -4843,14 +4845,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     dx = e.clientX - sx;
                     const dy = e.clientY - sy;
                     if (!axis) {
-                        if (Math.hypot(dx, dy) < 10) return;
+                        if (Math.hypot(dx, dy) < 16) return;
                         axis = Math.abs(dx) > Math.abs(dy) * 1.2 ? 'x' : 'y';
                         if (axis === 'y') { pid = null; return; }
                         row.classList.add('swiping');
                         try { main.setPointerCapture(pid); } catch (err) {}
                     }
                     const t = threshold();
-                    const shown = Math.abs(dx) <= t ? dx : Math.sign(dx) * (t + (Math.abs(dx) - t) * 0.28);
+                    const shown = Math.abs(dx) <= t ? dx : Math.sign(dx) * (t + (Math.abs(dx) - t) * 0.18);
                     setX(shown);
                     tLast = e.timeStamp;
                     const next = dx >= t ? 'right' : (dx <= -t ? 'left' : null);
@@ -4868,7 +4870,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     let fired = armed;
                     if (!fired && axis === 'x') {
                         const dt = Math.max(1, tLast - t0);
-                        if (Math.abs(dx) / dt >= 0.6 && Math.abs(dx) >= 40) fired = dx > 0 ? 'right' : 'left';
+                        if (Math.abs(dx) / dt >= 1.1 && Math.abs(dx) >= 70) fired = dx > 0 ? 'right' : 'left';
                     }
                     pid = null; axis = null; armed = null;
                     if (!fired) { reset(); return; }
