@@ -873,6 +873,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const v = n >= 100 ? Math.round(n) : Math.round(n * 10) / 10;
         return u ? `${v} ${u}` : `${v}`;
     };
+    const fmtG = (n, unit) => {
+        const u = unit || '';
+        const v = n >= 100 ? Math.round(n) : Math.round(n * 10) / 10;
+        return u ? `${v} ${u}` : `${v}`;
+    };
     const basePart = (p) => (p.parts || [])[p.baseIdx || 0] || { amt: 1, unit: 'g', ing: '' };
     const baseAmountFor = (p) => {
         try {
@@ -897,8 +902,8 @@ document.addEventListener('DOMContentLoaded', () => {
         let total = 0;
         if (p.baseBrix && p.brix) {
             const water = baseAmt * ((p.baseBrix / p.brix) - 1);
-            rows.push({ ing: bp.ing, txt: fmtAmt(baseAmt, bp.unit), base: true });
-            rows.push({ ing: 'Water to add', txt: fmtAmt(water, 'g') });
+            rows.push({ ing: bp.ing, txt: fmtG(baseAmt, bp.unit), base: true });
+            rows.push({ ing: 'Water to add', txt: fmtG(water, 'g') });
             total = baseAmt + water;
         } else {
             const factor = bp.amt > 0 ? (baseAmt / bp.amt) : 1;
@@ -906,7 +911,7 @@ document.addEventListener('DOMContentLoaded', () => {
             (p.parts || []).forEach((part, i) => {
                 const isBase = i === (p.baseIdx || 0);
                 const amt = (part.locked || isBase) ? (isBase ? baseAmt : part.amt) : part.amt * factor;
-                rows.push({ ing: part.ing, txt: fmtAmt(amt, part.unit), base: isBase, locked: !!part.locked });
+                rows.push({ ing: part.ing, txt: fmtG(amt, part.unit), base: isBase, locked: !!part.locked });
                 if (part.unit === 'g' || part.unit === 'ml') { units.add(part.unit); total += amt; }
             });
             // A tincture is 500ml of vodka plus whole peppers — adding those
@@ -973,7 +978,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="pz-baseline">YOU HAVE ${fmtAmt(baseAmt, bp.unit)} ${String(bp.ing || '').toUpperCase()}</div>
                 ${rows.map(r => `<div class="ir${r.base ? ' pz-is-base' : ''}"><span>${r.ing}${r.locked ? ' <i class="pz-lk">locked</i>' : ''}</span><b>${r.txt}</b></div>`).join('')}
-                ${total != null ? `<div class="ir tot"><span>MAKES</span><b>${fmtAmt(total, basePart(p).unit === 'ml' ? 'ml' : 'g')}${p.brix ? ' · ' + p.brix + ' Bx' : ''}</b></div>` : ''}
+                ${total != null ? `<div class="ir tot"><span>MAKES</span><b>${fmtG(total, basePart(p).unit === 'ml' ? 'ml' : 'g')}${p.brix ? ' · ' + p.brix + ' Bx' : ''}</b></div>` : ''}
                 ${p.method ? `<div class="prep-method">${p.method}</div>` : ''}
                 ${p.brix ? `<button class="pz-fixbtn">MEASURE &amp; FIX</button><div class="pz-fix hidden">
                     <div class="pz-fixrow"><span>Batch weight</span><input type="number" inputmode="decimal" class="pz-fixwt" placeholder="g" value="${total != null ? Math.round(total) : ''}"></div>
@@ -1027,16 +1032,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     out.innerHTML = `<div class="ir tot"><span>ON TARGET</span><b>${target} Bx</b></div>`;
                 } else if (cur > target) {
                     const w = wt * ((cur / target) - 1);
-                    out.innerHTML = `<div class="ir"><span>Water to add</span><b>${fmtAmt(w, 'g')}</b></div>`
-                                  + `<div class="ir tot"><span>NEW YIELD</span><b>${fmtAmt(wt + w, 'g')}</b></div>`;
+                    out.innerHTML = `<div class="ir"><span>Water to add</span><b>${fmtG(w, 'g')}</b></div>`
+                                  + `<div class="ir tot"><span>NEW YIELD</span><b>${fmtG(wt + w, 'g')}</b></div>`;
                 } else {
                     // Correct with whatever the prep is actually made of. Adding
                     // dry sugar to a honey syrup would be the wrong ingredient.
                     const richBrix = p.baseBrix || 100;
                     const richName = p.baseBrix ? basePart(p).ing : 'Dry sugar';
                     const add = wt * ((target - cur) / (richBrix - target));
-                    out.innerHTML = `<div class="ir"><span>${richName} to add</span><b>${fmtAmt(add, 'g')}</b></div>`
-                                  + `<div class="ir tot"><span>NEW YIELD</span><b>${fmtAmt(wt + add, 'g')}</b></div>`;
+                    out.innerHTML = `<div class="ir"><span>${richName} to add</span><b>${fmtG(add, 'g')}</b></div>`
+                                  + `<div class="ir tot"><span>NEW YIELD</span><b>${fmtG(wt + add, 'g')}</b></div>`;
                 }
             });
             body.querySelector('.pz-edit').addEventListener('click', () => {
