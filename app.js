@@ -827,7 +827,7 @@ document.addEventListener('DOMContentLoaded', () => {
           method: 'Hot water from the tap. Honey varies by jar — measure and correct with the Brix Fixer below.' },
         { name: 'Agave Syrup',    mode: 'brix',  brix: 65.5,  base: 75,
           method: 'Hot water from the tap. Agave varies — measure and correct with the Brix Fixer below.' },
-        { name: 'Saline 20%',     mode: 'ratio', ratio: 0.25,
+        { name: 'Saline solution', mode: 'ratio', ratio: 0.25,
           parts: [['Salt', 20], ['Water', 80]],
           method: '20g salt to 80g water by weight. Stir until clear.' },
         { name: 'Spicy Tincture', mode: 'fixed',
@@ -4301,7 +4301,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // no auto-scroll on touch — this moves the row with your finger,
                 // parts the list to show where it lands, and scrolls near edges.
                 let gripPending = false, dragging = false, grabDY = 0, lastY = 0;
-                let gap = null, autoScroll = null, sx = 0, sy = 0;
+                let gap = null, autoScroll = null, sx = 0, sy = 0, rafId = null;
                 const scroller = document.getElementById('scroll-area') || document.scrollingElement;
 
                 const begin = (y) => {
@@ -4334,24 +4334,31 @@ document.addEventListener('DOMContentLoaded', () => {
                     }, 16);
                 };
 
-                const move = (y) => {
-                    lastY = y;
-                    row.style.top = (y - grabDY) + 'px';
+                const applyMove = () => {
+                    rafId = null;
+                    if (!dragging || !gap) return;
+                    const y = lastY;
+                    // Read every rect BEFORE writing the dragged row's position.
+                    // Interleaving reads and writes forced a synchronous layout
+                    // on each pointermove, which is what made the drag lag.
                     const others = [...container.querySelectorAll('.ops-row')];
-                    let placed = false;
+                    let target = null;
                     for (const r of others) {
                         const b = r.getBoundingClientRect();
-                        if (y < b.top + b.height / 2) {
-                            if (gap.nextSibling !== r) container.insertBefore(gap, r);
-                            placed = true;
-                            break;
-                        }
+                        if (y < b.top + b.height / 2) { target = r; break; }
                     }
-                    if (!placed && container.lastElementChild !== gap) container.appendChild(gap);
+                    if (target) { if (gap.nextSibling !== target) container.insertBefore(gap, target); }
+                    else if (container.lastElementChild !== gap) container.appendChild(gap);
+                    row.style.top = (y - grabDY) + 'px';
+                };
+                const move = (y) => {
+                    lastY = y;
+                    if (rafId === null) rafId = requestAnimationFrame(applyMove);
                 };
 
                 const finish = (commit) => {
                     clearInterval(autoScroll);
+                    if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
                     row.style.touchAction = '';
                     document.body.classList.remove('dragging-lock');
                     container.classList.remove('drag-active');
