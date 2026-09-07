@@ -866,22 +866,56 @@ body.dragging-lock { overflow: hidden; touch-action: none; }
 .ops-row.dragging { touch-action: none; }
 
 /* --- HOUSE PREPARATIONS (inside the LAB engine) --- */
-.prep-row-item { display: flex; justify-content: space-between; align-items: baseline; padding: 13px 2px; border-bottom: 1px solid #1a1a1a; cursor: pointer; gap: 12px; }
-.prep-row-item:last-child { border-bottom: none; }
 .prep-name { font-size: 0.88rem; color: var(--text-main); font-weight: 600; }
 .prep-sub { font-size: 0.58rem; color: var(--nodee-gold); font-weight: 800; letter-spacing: 1px; flex-shrink: 0; }
 .prep-back { background: none; border: none; color: var(--text-muted); font-size: 0.62rem; font-weight: 800; letter-spacing: 1.5px; padding: 2px 0 10px; cursor: pointer; }
-.prep-detail-head { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid rgba(200,169,126,0.25); gap: 12px; }
-.prep-scale { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
-.prep-scale-lbl { font-size: 0.53rem; font-weight: 900; letter-spacing: 2px; color: var(--text-muted); margin-right: auto; }
-.prep-scale .ps-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(200,169,126,0.35); color: var(--nodee-gold); border-radius: 7px; width: 30px; height: 30px; font-size: 1rem; font-weight: 900; cursor: pointer; }
-.prep-scale .ps-n { color: var(--text-main); font-weight: 800; font-size: 0.8rem; min-width: 30px; text-align: center; }
 #preps-list .ir { display: flex; justify-content: space-between; padding: 7px 0; font-size: 0.84rem; color: var(--text-muted); }
 #preps-list .ir b { color: var(--text-main); font-weight: 700; font-family: 'JetBrains Mono', monospace; }
 #preps-list .ir.tot { border-top: 1px solid rgba(200,169,126,0.25); margin-top: 6px; padding-top: 9px; }
 #preps-list .ir.tot span { color: var(--nodee-gold); font-size: 0.55rem; font-weight: 900; letter-spacing: 2px; }
 .prep-method { font-size: 0.74rem; color: var(--text-muted); line-height: 1.5; margin-top: 11px; padding-top: 10px; border-top: 1px solid #1a1a1a; }
-.prep-tofix { width: 100%; margin-top: 12px; padding: 12px; background: none; border: 1px dashed rgba(200,169,126,0.35); border-radius: 10px; color: var(--nodee-gold); font-size: 0.64rem; font-weight: 800; letter-spacing: 1px; cursor: pointer; }
+/* --- LAB: preparations list (rows expand in place) --- */
+.pz-item { border-bottom: 1px solid #1a1a1a; }
+.pz-item:last-of-type { border-bottom: none; }
+.pz-head { display: flex; justify-content: space-between; align-items: baseline; padding: 13px 2px; cursor: pointer; gap: 12px; }
+.pz-item.open .pz-head .prep-name { color: var(--nodee-gold); }
+.pz-body { padding: 2px 2px 16px; }
+.pz-chips { display: flex; gap: 6px; margin-bottom: 8px; }
+.pz-chip { flex: 1; padding: 9px 4px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 9px; color: var(--text-muted); font-size: 0.62rem; font-weight: 800; letter-spacing: 0.5px; cursor: pointer; }
+.pz-chip.on { background: rgba(200,169,126,0.14); border-color: rgba(200,169,126,0.55); color: var(--nodee-gold); }
+.pz-otherrow { display: flex; gap: 6px; margin-bottom: 8px; }
+.pz-otherrow input { flex: 1; min-width: 0; background: rgba(255,255,255,0.04); border: 1px solid rgba(200,169,126,0.35); border-radius: 9px; color: var(--text-main); font-size: 0.9rem; font-family: 'JetBrains Mono', monospace; padding: 9px 12px; }
+.pz-otherset { background: var(--nodee-gold); color: var(--bg-oled); border: none; border-radius: 9px; padding: 0 16px; font-size: 0.62rem; font-weight: 900; letter-spacing: 1.5px; cursor: pointer; }
+.pz-baseline { font-size: 0.53rem; font-weight: 900; letter-spacing: 2px; color: var(--text-muted); margin: 10px 0 2px; }
+#preps-list .ir.pz-is-base span, #preps-list .ir.pz-is-base b { color: #6a6a6a; }
+.pz-lk { font-style: normal; font-size: 0.52rem; font-weight: 900; letter-spacing: 1px; color: var(--nodee-gold); opacity: 0.75; margin-left: 5px; }
+.pz-fixbtn { width: 100%; margin-top: 12px; padding: 12px; background: none; border: 1px dashed rgba(200,169,126,0.35); border-radius: 10px; color: var(--nodee-gold); font-size: 0.64rem; font-weight: 800; letter-spacing: 1px; cursor: pointer; }
+.pz-fix { margin-top: 10px; }
+.pz-fixrow { display: flex; align-items: center; gap: 8px; }
+.pz-fixrow span { font-size: 0.62rem; font-weight: 800; letter-spacing: 1px; color: var(--text-muted); flex: 1; }
+.pz-fixin { width: 74px; background: rgba(255,255,255,0.04); border: 1px solid rgba(200,169,126,0.35); border-radius: 9px; color: var(--text-main); font-size: 0.9rem; font-family: 'JetBrains Mono', monospace; padding: 8px 10px; text-align: center; }
+.pz-fixgo { background: var(--nodee-gold); color: var(--bg-oled); border: none; border-radius: 9px; padding: 9px 15px; font-size: 0.62rem; font-weight: 900; letter-spacing: 1.5px; cursor: pointer; }
+.pz-fixout:not(:empty) { margin-top: 6px; }
+.pz-acts { display: flex; gap: 8px; margin-top: 14px; }
+.pz-act { flex: 1; padding: 11px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; color: var(--text-muted); font-size: 0.6rem; font-weight: 900; letter-spacing: 1.5px; cursor: pointer; }
+.pz-act.pz-del { color: #b4586a; border-color: rgba(180,88,106,0.3); }
+.pz-act.pz-save { background: var(--nodee-gold); color: var(--bg-oled); border-color: var(--nodee-gold); }
+.pz-add { width: 100%; margin-top: 16px; padding: 13px; background: none; border: 1px dashed rgba(200,169,126,0.35); border-radius: 10px; color: var(--nodee-gold); font-size: 0.64rem; font-weight: 800; letter-spacing: 1.5px; cursor: pointer; }
+/* --- LAB: add / edit form --- */
+.pz-f-lbl { font-size: 0.53rem; font-weight: 900; letter-spacing: 2px; color: var(--text-muted); margin: 16px 0 8px; }
+.pz-part { display: flex; align-items: center; gap: 5px; margin-bottom: 7px; }
+.pz-part input { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: var(--text-main); font-size: 0.78rem; padding: 9px 8px; min-width: 0; }
+.pz-f-amt { width: 52px; text-align: center; font-family: 'JetBrains Mono', monospace; }
+.pz-f-unit { width: 40px; text-align: center; }
+.pz-f-ing { flex: 1; }
+.pz-basepick, .pz-lock, .pz-rm { background: none; border: none; color: #4a4a4a; font-size: 0.85rem; padding: 4px 2px; cursor: pointer; flex-shrink: 0; }
+.pz-basepick.on { color: var(--nodee-gold); }
+.pz-lock.on { opacity: 1; }
+.pz-addpart { width: 100%; padding: 10px; background: none; border: 1px dashed rgba(255,255,255,0.12); border-radius: 9px; color: var(--text-muted); font-size: 0.6rem; font-weight: 800; letter-spacing: 1.5px; cursor: pointer; }
+.pz-f-grid { display: flex; gap: 7px; }
+.pz-f-grid label { flex: 1; font-size: 0.53rem; font-weight: 900; letter-spacing: 1.5px; color: var(--text-muted); }
+.pz-f-grid input { width: 100%; margin-top: 5px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: var(--text-main); font-size: 0.78rem; padding: 9px 8px; }
+.pz-f-method { margin-top: 14px; resize: none; }
 
 /* Three pills need tighter type. Gap stays 0 — the indicator's thirds are
    measured off the group, so any gap here pushes the gold off the labels. */

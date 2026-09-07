@@ -14,7 +14,7 @@
     <link rel="icon" type="image/png" href="icon-512.png">
     <link rel="apple-touch-icon" href="icon-512.png">
     
-    <link rel="stylesheet" href="styles.css?v=92">
+    <link rel="stylesheet" href="styles.css?v=93">
 </head>
 <body>
     <div id="loader" class="loader-overlay"><span class="loader-text">SYNCING CODEX...</span></div>
@@ -90,57 +90,8 @@
 
         <section id="lab-module" class="module">
             <div class="card glass-panel">
-                <h2 class="card-title text-gold">SYRUP & BRIX ENGINE</h2>
-                <div class="pill-group">
-                    <button class="mod-pill active" data-val="build">BUILD</button>
-                    <button class="mod-pill" data-val="fix">FIXER</button>
-                    <button class="mod-pill" data-val="preps">PREPS</button>
-                </div>
-                <div id="ui-preps" class="hidden"><div id="preps-list"></div></div>
-
-                <div id="ui-brix-build">
-                    <div class="flex-row mb-20">
-                        <div class="half-width">
-                            <label class="text-muted text-sm" style="display:block; margin-bottom:8px;">Sweetener Base</label>
-                            <button id="btn-syrup-base" class="premium-basic-input custom-select-btn w-100" style="margin-bottom:0;">Dry Sugar (100 Bx)</button>
-                        </div>
-                        <div class="half-width">
-                            <label class="text-muted text-sm" style="display:block; margin-bottom:8px;">Target Profile</label>
-                            <button id="btn-syrup-target" class="premium-basic-input custom-select-btn w-100" style="margin-bottom:0;">1:1 Ratio (Weight)</button>
-                        </div>
-                    </div>
-                    
-                    <div id="custom-brix-container" class="hidden mb-20" style="border-top:1px solid #333; padding-top:15px;">
-                        <label class="text-muted text-sm mb-10" style="display:block; text-align:center;">Custom Target Brix %</label>
-                        <div class="massive-input"><input type="number" id="custom-target-brix" placeholder="50" value=""></div>
-                    </div>
-
-                    <div class="input-group mt-20">
-                        <label class="text-muted text-sm mb-10" style="display:block; text-align:center;">Base Sweetener Weight (g)</label>
-                        <div class="massive-input"><input type="number" id="syrup-base-weight" placeholder="1000" value=""></div>
-                    </div>
-                    <button id="calc-build-btn" class="btn-primary mt-20">CALCULATE WATER</button>
-                </div>
-
-                <div id="ui-brix-fix" class="hidden">
-                    <div class="flex-row mb-20">
-                        <div class="half-width">
-                            <label class="text-muted text-sm mb-10" style="display:block; text-align:center;">Current Brix</label>
-                            <div class="massive-input"><input type="number" id="fix-current-brix" placeholder="65" value=""></div>
-                        </div>
-                        <div class="half-width">
-                            <label class="text-muted text-sm mb-10" style="display:block; text-align:center;">Target Brix</label>
-                            <div class="massive-input"><input type="number" id="fix-target-brix" placeholder="50" value=""></div>
-                        </div>
-                    </div>
-                    <div class="input-group" style="border-top:1px solid #333; padding-top:15px;">
-                        <label class="text-muted text-sm mb-10" style="display:block; text-align:center;">Current Syrup Weight (g)</label>
-                        <div class="massive-input"><input type="number" id="fix-current-weight" placeholder="1000" value=""></div>
-                    </div>
-                    <button id="calc-fix-btn" class="btn-primary burgundy-btn mt-20">CALCULATE FIX</button>
-                </div>
-
-                <div id="brix-results" class="output-container mt-20"></div>
+                <h2 class="card-title text-gold">PREPARATIONS</h2>
+                <div id="preps-list"></div>
             </div>
 
         </section>
@@ -263,6 +214,6 @@
         </button>
     </nav>
 
-    <script src="app.js?v=92"></script>
+    <script src="app.js?v=93"></script>
 </body>
 </html>

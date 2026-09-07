@@ -814,122 +814,343 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- HOUSE PREPARATIONS ---
-    // The standing recipes everyone should make the same way. Ratio-based ones
-    // are deterministic; honey and agave vary by jar, so they target a Brix.
-    const HOUSE_PREPS = [
-        { name: 'Simple Syrup',   mode: 'ratio', ratio: 1,    brix: 50,
-          parts: [['Dry sugar', 1], ['Hot water', 1]],
-          method: 'Hot water from the tap, stir until fully dissolved.' },
-        { name: 'Demerara Syrup', mode: 'ratio', ratio: 1.5,  brix: 60,
-          parts: [['Demerara sugar', 1.5], ['Hot water', 1]],
-          method: 'Hot water from the tap, stir until fully dissolved.' },
-        { name: 'Honey Syrup',    mode: 'brix',  brix: 65.5,  base: 80,
-          method: 'Hot water from the tap. Honey varies by jar — measure and correct with the Brix Fixer below.' },
-        { name: 'Agave Syrup',    mode: 'brix',  brix: 65.5,  base: 75,
-          method: 'Hot water from the tap. Agave varies — measure and correct with the Brix Fixer below.' },
-        { name: 'Saline solution', mode: 'ratio', ratio: 0.25,
-          parts: [['Salt', 20], ['Water', 80]],
-          method: '20g salt to 80g water by weight. Stir until clear.' },
-        { name: 'Spicy Tincture', mode: 'fixed',
-          parts: [['Dried jalapeño', 2], ['Dried habanero', 1], ['Carolina Reaper (whole)', 1], ['Ghost pepper (whole)', 1], ['Absolut vodka', 500]],
-          units: ['g', 'g', '', '', 'ml'],
-          method: '48h maceration, then strain. Whole peppers stay fixed when scaling — heat does not scale linearly.' }
-    ];
-    const PREP_SCALE_KEY = 'codex_prep_scale_v1';
+    // One editable list. Every prep is a set of PARTS, one of which is the BASE:
+    // the thing you actually have in front of you. You enter how much of it you
+    // have and everything else scales off that. Preps carrying a baseBrix derive
+    // their water from the Brix target instead of a stored ratio, because honey
+    // and agave are not a fixed ratio.
+    const PREPS_KEY     = 'codex_preps_v1';      // synced, shared with the team
+    const PREP_BASE_KEY = 'codex_prep_base_v1';  // last picked base amount, per device
 
-    let openPrep = null;   // null = list view
+    const SEED_PREPS = [
+        { id: 'p_demerara', name: 'Demerara Syrup', order: 1, brix: 60, baseIdx: 0, baseDefault: 1000,
+          parts: [{ amt: 1500, unit: 'g', ing: 'Demerara sugar' }, { amt: 1000, unit: 'g', ing: 'Hot water' }],
+          method: 'Hot water from the tap, stir until fully dissolved.' },
+        { id: 'p_honey', name: 'Honey Syrup', order: 2, brix: 65.5, baseBrix: 80, baseIdx: 0, baseDefault: 1000,
+          parts: [{ amt: 1000, unit: 'g', ing: 'Honey' }],
+          method: 'Hot water from the tap. Honey varies by jar — measure and correct below.' },
+        { id: 'p_agave', name: 'Agave Syrup', order: 3, brix: 65.5, baseBrix: 75, baseIdx: 0, baseDefault: 1000,
+          parts: [{ amt: 1000, unit: 'g', ing: 'Agave' }],
+          method: 'Hot water from the tap. Agave varies — measure and correct below.' },
+        { id: 'p_saline', name: 'Saline solution', order: 4, strength: '20%', baseIdx: 0, baseDefault: 20,
+          parts: [{ amt: 20, unit: 'g', ing: 'Salt' }, { amt: 80, unit: 'g', ing: 'Water' }],
+          method: '20g salt to 80g water by weight. Stir until clear.' },
+        { id: 'p_tincture', name: 'Spicy Tincture', order: 5, strength: '48H', baseIdx: 4, baseDefault: 500,
+          parts: [{ amt: 2, unit: 'g', ing: 'Dried jalapeño' }, { amt: 1, unit: 'g', ing: 'Dried habanero' },
+                  { amt: 1, unit: 'ea', ing: 'Carolina Reaper (whole)', locked: true },
+                  { amt: 1, unit: 'ea', ing: 'Ghost pepper (whole)', locked: true },
+                  { amt: 500, unit: 'ml', ing: 'Absolut vodka' }],
+          method: '48h maceration, then strain. Whole peppers stay locked when scaling — heat does not scale linearly.' }
+    ];
+
+    let prepsData = {};              // id -> prep
+    const openPreps = new Set();     // ids currently expanded — several may be open
+    let editingPrep = null;          // prep object being edited, or null
+
+    const readPreps = () => {
+        try { return JSON.parse(localStorage.getItem(PREPS_KEY) || '{}') || {}; } catch { return {}; }
+    };
+    function loadPreps() {
+        prepsData = readPreps();
+        // Seed once, then it is fully yours — edits and deletes stick.
+        if (!Object.keys(prepsData).length && !localStorage.getItem(PREPS_KEY)) {
+            SEED_PREPS.forEach(p => { prepsData[p.id] = JSON.parse(JSON.stringify(p)); });
+            savePreps();
+        }
+    }
+    function savePreps() {
+        try { localStorage.setItem(PREPS_KEY, JSON.stringify(prepsData)); } catch {}
+        if (typeof scheduleSettingsPush === 'function') scheduleSettingsPush();
+    }
+    const prepList = () => Object.values(prepsData)
+        .sort((a, b) => (a.order || 0) - (b.order || 0) || String(a.name).localeCompare(String(b.name)));
+
+    // Weight in, weight out. 1g of water is 1ml; everything else gets weighed.
+    const fmtAmt = (n, unit) => {
+        const u = unit || '';
+        if (u === 'g'  && n >= 1000) return (Math.round(n / 100) / 10).toString().replace(/\.0$/, '') + ' kg';
+        if (u === 'ml' && n >= 1000) return (Math.round(n / 100) / 10).toString().replace(/\.0$/, '') + ' L';
+        const v = n >= 100 ? Math.round(n) : Math.round(n * 10) / 10;
+        return u ? `${v} ${u}` : `${v}`;
+    };
+    const basePart = (p) => (p.parts || [])[p.baseIdx || 0] || { amt: 1, unit: 'g', ing: '' };
+    const baseAmountFor = (p) => {
+        try {
+            const m = JSON.parse(localStorage.getItem(PREP_BASE_KEY)) || {};
+            if (m[p.id] > 0) return m[p.id];
+        } catch {}
+        return p.baseDefault || basePart(p).amt || 1000;
+    };
+    const rememberBase = (id, amt) => {
+        try {
+            const m = JSON.parse(localStorage.getItem(PREP_BASE_KEY)) || {};
+            m[id] = amt;
+            localStorage.setItem(PREP_BASE_KEY, JSON.stringify(m));
+        } catch {}
+    };
+
+    // Everything the expanded row shows, derived from one number: how much base
+    // you have. Locked parts do not scale.
+    function computePrep(p, baseAmt) {
+        const bp = basePart(p);
+        const rows = [];
+        let total = 0;
+        if (p.baseBrix && p.brix) {
+            const water = baseAmt * ((p.baseBrix / p.brix) - 1);
+            rows.push({ ing: bp.ing, txt: fmtAmt(baseAmt, bp.unit), base: true });
+            rows.push({ ing: 'Water to add', txt: fmtAmt(water, 'g') });
+            total = baseAmt + water;
+        } else {
+            const factor = bp.amt > 0 ? (baseAmt / bp.amt) : 1;
+            const units = new Set();
+            (p.parts || []).forEach((part, i) => {
+                const isBase = i === (p.baseIdx || 0);
+                const amt = (part.locked || isBase) ? (isBase ? baseAmt : part.amt) : part.amt * factor;
+                rows.push({ ing: part.ing, txt: fmtAmt(amt, part.unit), base: isBase, locked: !!part.locked });
+                if (part.unit === 'g' || part.unit === 'ml') { units.add(part.unit); total += amt; }
+            });
+            // A tincture is 500ml of vodka plus whole peppers — adding those
+            // into one number would be a lie, so no yield line at all.
+            if (units.size !== 1) total = null;
+        }
+        return { rows, total };
+    }
 
     function renderPreps() {
         const list = document.getElementById('preps-list');
         if (!list) return;
         list.innerHTML = '';
-        if (openPrep) { renderPrepDetail(list, openPrep); return; }
-        HOUSE_PREPS.forEach(p => {
-            // Only show a sub-label when it says something. "Saline · 20%" and
-            // "Spicy Tincture · 48H" were just repeating the name.
-            let sub = '';
-            if (p.mode === 'brix') sub = `${p.brix} Bx`;
-            else if (p.mode === 'ratio' && p.ratio >= 1) sub = `${p.ratio}:1${p.brix ? ' · ' + p.brix + ' Bx' : ''}`;
-            else if (p.mode === 'ratio') sub = '20%';
-            const row = document.createElement('div');
-            row.className = 'prep-row-item';
-            row.innerHTML = `<span class="prep-name">${p.name}</span><span class="prep-sub">${sub}</span>`;
-            row.addEventListener('click', () => {
+        if (editingPrep) { renderPrepForm(list, editingPrep); return; }
+
+        prepList().forEach(p => {
+            const bp = basePart(p);
+            const badge = `${fmtAmt(p.baseDefault || bp.amt, bp.unit)} ${String(bp.ing || '').toLowerCase()}`.trim();
+            const wrap = document.createElement('div');
+            wrap.className = 'pz-item' + (openPreps.has(p.id) ? ' open' : '');
+            const head = document.createElement('div');
+            head.className = 'pz-head';
+            head.innerHTML = `<span class="prep-name">${p.name}</span><span class="prep-sub">${badge}</span>`;
+            head.addEventListener('click', () => {
                 triggerHaptic('light');
-                openPrep = p;
+                if (openPreps.has(p.id)) openPreps.delete(p.id); else openPreps.add(p.id);
                 renderPreps();
             });
-            list.appendChild(row);
+            wrap.appendChild(head);
+            if (openPreps.has(p.id)) wrap.appendChild(buildPrepBody(p));
+            list.appendChild(wrap);
         });
+
+        const add = document.createElement('button');
+        add.className = 'pz-add';
+        add.textContent = '＋ NEW PREPARATION';
+        add.addEventListener('click', () => {
+            triggerHaptic('light');
+            editingPrep = { id: 'p_' + Date.now().toString(36), name: '', order: prepList().length + 1,
+                            baseIdx: 0, parts: [{ amt: 1000, unit: 'g', ing: '' }], method: '' };
+            renderPreps();
+        });
+        list.appendChild(add);
     }
 
-    function renderPrepDetail(list, p) {
-        const key = p.name;
-        let scale = (() => {
-            try { return (JSON.parse(localStorage.getItem(PREP_SCALE_KEY)) || {})[key] || 1; } catch { return 1; }
-        })();
-        const header = p.mode === 'brix' ? `TARGET ${p.brix} Bx`
-            : p.mode === 'fixed' ? '48H MACERATION'
-            : (p.ratio >= 1 ? `${p.ratio}:1` : '20%');
+    function buildPrepBody(p) {
+        const body = document.createElement('div');
+        body.className = 'pz-body';
+        let baseAmt = baseAmountFor(p);
+        const bp = basePart(p);
+        const def = p.baseDefault || bp.amt || 1000;
 
         const draw = () => {
-            let rows = '';
-            if (p.mode === 'brix') {
-                const w = p.brix / p.base;
-                const total = 1000 * scale;
-                rows = `<div class="ir"><span>${p.name.replace(' Syrup', '')}</span><b>${Math.round(total * w)}g</b></div>`
-                     + `<div class="ir"><span>Hot water</span><b>${Math.round(total * (1 - w))}g</b></div>`
-                     + `<div class="ir tot"><span>MAKES</span><b>${Math.round(total)}g · ${p.brix} Bx</b></div>`;
-            } else {
-                const sum = p.parts.reduce((s, x) => s + x[1], 0);
-                rows = p.parts.map(([n, v], i) => {
-                    const u = (p.units && p.units[i] !== undefined) ? p.units[i] : 'g';
-                    const whole = u === '';
-                    const amt = whole ? v : Math.round(v * scale * (p.mode === 'ratio' ? (1000 / sum) : 1));
-                    return `<div class="ir"><span>${n}</span><b>${amt}${u}</b></div>`;
-                }).join('');
-                if (p.mode === 'ratio') rows += `<div class="ir tot"><span>MAKES</span><b>${Math.round(1000 * scale)}g${p.brix ? ' · ' + p.brix + ' Bx' : ''}</b></div>`;
-            }
-            list.innerHTML = `
-                <button class="prep-back">‹ ALL PREPARATIONS</button>
-                <div class="prep-detail-head"><span class="prep-name">${p.name}</span><span class="prep-sub">${header}</span></div>
-                <div class="prep-scale">
-                    <span class="prep-scale-lbl">BATCH</span>
-                    <button class="ps-btn" data-d="-1">−</button>
-                    <span class="ps-n">×${scale}</span>
-                    <button class="ps-btn" data-d="1">+</button>
+            const { rows, total } = computePrep(p, baseAmt);
+            const chips = [def / 2, def, def * 2];
+            body.innerHTML = `
+                <div class="pz-chips">
+                    ${chips.map(c => `<button class="pz-chip${Math.abs(c - baseAmt) < 0.01 ? ' on' : ''}" data-amt="${c}">${fmtAmt(c, bp.unit)}</button>`).join('')}
+                    <button class="pz-chip pz-other${chips.some(c => Math.abs(c - baseAmt) < 0.01) ? '' : ' on'}">OTHER</button>
                 </div>
-                ${rows}
-                <div class="prep-method">${p.method}</div>
-                ${p.mode === 'brix' ? `<button class="prep-tofix">MEASURED SOMETHING ELSE? → BRIX FIXER</button>` : ''}`;
+                <div class="pz-otherrow${chips.some(c => Math.abs(c - baseAmt) < 0.01) ? ' hidden' : ''}">
+                    <input type="number" inputmode="decimal" class="pz-otherin" placeholder="${bp.unit || 'g'}" value="${chips.some(c => Math.abs(c - baseAmt) < 0.01) ? '' : Math.round(baseAmt)}">
+                    <button class="pz-otherset">SET</button>
+                </div>
+                <div class="pz-baseline">YOU HAVE ${fmtAmt(baseAmt, bp.unit)} ${String(bp.ing || '').toUpperCase()}</div>
+                ${rows.map(r => `<div class="ir${r.base ? ' pz-is-base' : ''}"><span>${r.ing}${r.locked ? ' <i class="pz-lk">locked</i>' : ''}</span><b>${r.txt}</b></div>`).join('')}
+                ${total != null ? `<div class="ir tot"><span>MAKES</span><b>${fmtAmt(total, basePart(p).unit === 'ml' ? 'ml' : 'g')}${p.brix ? ' · ' + p.brix + ' Bx' : ''}</b></div>` : ''}
+                ${p.method ? `<div class="prep-method">${p.method}</div>` : ''}
+                ${p.brix ? `<button class="pz-fixbtn">MEASURE &amp; FIX</button><div class="pz-fix hidden">
+                    <div class="pz-fixrow"><span>Refractometer reading</span><input type="number" inputmode="decimal" class="pz-fixin" placeholder="Bx"><button class="pz-fixgo">GO</button></div>
+                    <div class="pz-fixout"></div></div>` : ''}
+                <div class="pz-acts"><button class="pz-act pz-edit">EDIT</button><button class="pz-act pz-del">DELETE</button></div>`;
 
-            list.querySelector('.prep-back').addEventListener('click', () => {
+            body.querySelectorAll('.pz-chip[data-amt]').forEach(c => c.addEventListener('click', () => {
                 triggerHaptic('light');
-                openPrep = null;
-                renderPreps();
-            });
-            list.querySelectorAll('.ps-btn').forEach(b => b.addEventListener('click', () => {
-                triggerHaptic('light');
-                scale = Math.max(1, Math.min(20, scale + parseInt(b.getAttribute('data-d'))));
-                try {
-                    const m = JSON.parse(localStorage.getItem(PREP_SCALE_KEY)) || {};
-                    m[key] = scale;
-                    localStorage.setItem(PREP_SCALE_KEY, JSON.stringify(m));
-                } catch {}
+                baseAmt = parseFloat(c.getAttribute('data-amt'));
+                rememberBase(p.id, baseAmt);
                 draw();
             }));
-            const toFix = list.querySelector('.prep-tofix');
-            if (toFix) toFix.addEventListener('click', () => {
-                // Load this preparation's target, then click the FIXER pill so the
-                // existing switcher does the work rather than duplicating it.
-                const targetInput = document.getElementById('fix-target-brix');
-                if (targetInput) targetInput.value = p.brix;
-                document.querySelector('#lab-module .mod-pill[data-val="fix"]')?.click();
+            body.querySelector('.pz-other')?.addEventListener('click', () => {
+                triggerHaptic('light');
+                const row = body.querySelector('.pz-otherrow');
+                row.classList.toggle('hidden');
+                if (!row.classList.contains('hidden')) row.querySelector('.pz-otherin').focus();
+            });
+            const setOther = () => {
+                const n = parseFloat(body.querySelector('.pz-otherin').value);
+                if (!(n > 0)) return;
+                triggerHaptic('light');
+                baseAmt = n; rememberBase(p.id, n); draw();
+            };
+            body.querySelector('.pz-otherset')?.addEventListener('click', setOther);
+            body.querySelector('.pz-otherin')?.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); setOther(); }
+            });
+            const fixBtn = body.querySelector('.pz-fixbtn');
+            if (fixBtn) fixBtn.addEventListener('click', () => {
+                triggerHaptic('light');
+                body.querySelector('.pz-fix').classList.toggle('hidden');
+                body.querySelector('.pz-fixin')?.focus();
+            });
+            const fixGo = body.querySelector('.pz-fixgo');
+            if (fixGo) fixGo.addEventListener('click', () => {
+                triggerHaptic('heavy');
+                const cur = parseFloat(body.querySelector('.pz-fixin').value);
+                const out = body.querySelector('.pz-fixout');
+                if (!(cur > 0)) { out.innerHTML = ''; return; }
+                // The prep already knows its target and the batch weight, so a
+                // reading is the only thing missing.
+                const target = p.brix;
+                if (Math.abs(cur - target) < 0.05) {
+                    out.innerHTML = `<div class="ir tot"><span>ON TARGET</span><b>${target} Bx</b></div>`;
+                } else if (cur > target) {
+                    const w = total * ((cur / target) - 1);
+                    out.innerHTML = `<div class="ir"><span>Water to add</span><b>${fmtAmt(w, 'g')}</b></div>`
+                                  + `<div class="ir tot"><span>NEW YIELD</span><b>${fmtAmt(total + w, 'g')}</b></div>`;
+                } else {
+                    const s = total * ((target - cur) / (100 - target));
+                    out.innerHTML = `<div class="ir"><span>Dry sugar to add</span><b>${fmtAmt(s, 'g')}</b></div>`
+                                  + `<div class="ir tot"><span>NEW YIELD</span><b>${fmtAmt(total + s, 'g')}</b></div>`;
+                }
+            });
+            body.querySelector('.pz-edit').addEventListener('click', () => {
+                triggerHaptic('light');
+                editingPrep = JSON.parse(JSON.stringify(p));
+                renderPreps();
+            });
+            body.querySelector('.pz-del').addEventListener('click', () => {
+                triggerHaptic('light');
+                openConfirmModal({
+                    title: 'DELETE PREPARATION',
+                    message: `Remove "${p.name}"? This deletes it for the whole team.`,
+                    confirmLabel: 'DELETE',
+                    danger: true,
+                    onConfirm: () => {
+                        delete prepsData[p.id];
+                        openPreps.delete(p.id);
+                        savePreps();
+                        renderPreps();
+                    }
+                });
+            });
+        };
+        draw();
+        return body;
+    }
+
+    function renderPrepForm(list, p) {
+        const draw = () => {
+            list.innerHTML = `
+                <button class="prep-back">‹ ALL PREPARATIONS</button>
+                <input type="text" class="premium-text-input pz-f-name" placeholder="Preparation name" value="${(p.name || '').replace(/"/g, '&quot;')}">
+                <div class="pz-f-lbl">PARTS — tap ⌾ to set which one you weigh first</div>
+                <div class="pz-parts">
+                ${(p.parts || []).map((pt, i) => `
+                    <div class="pz-part" data-i="${i}">
+                        <button class="pz-basepick${i === (p.baseIdx || 0) ? ' on' : ''}" title="Base ingredient">⌾</button>
+                        <input type="number" inputmode="decimal" class="pz-f-amt" value="${pt.amt}" placeholder="0">
+                        <input type="text" class="pz-f-unit" value="${(pt.unit || '').replace(/"/g, '&quot;')}" placeholder="g">
+                        <input type="text" class="pz-f-ing" value="${(pt.ing || '').replace(/"/g, '&quot;')}" placeholder="Ingredient">
+                        <button class="pz-lock${pt.locked ? ' on' : ''}" title="Does not scale">${pt.locked ? '🔒' : '🔓'}</button>
+                        <button class="pz-rm">✕</button>
+                    </div>`).join('')}
+                </div>
+                <button class="pz-addpart">＋ ADD PART</button>
+                <div class="pz-f-lbl">OPTIONAL</div>
+                <div class="pz-f-grid">
+                    <label>Target Bx<input type="number" inputmode="decimal" class="pz-f-brix" value="${p.brix != null ? p.brix : ''}" placeholder="—"></label>
+                    <label>Base Bx<input type="number" inputmode="decimal" class="pz-f-basebrix" value="${p.baseBrix != null ? p.baseBrix : ''}" placeholder="—"></label>
+                    <label>Label<input type="text" class="pz-f-strength" value="${(p.strength || '').replace(/"/g, '&quot;')}" placeholder="20% · 48H"></label>
+                </div>
+                <textarea class="premium-text-input pz-f-method" rows="3" placeholder="Method">${p.method || ''}</textarea>
+                <div class="pz-acts"><button class="pz-act pz-cancel">CANCEL</button><button class="pz-act pz-save">SAVE</button></div>`;
+
+            const harvest = () => {
+                p.name = list.querySelector('.pz-f-name').value.trim();
+                p.parts = [...list.querySelectorAll('.pz-part')].map(row => ({
+                    amt: parseFloat(row.querySelector('.pz-f-amt').value) || 0,
+                    unit: row.querySelector('.pz-f-unit').value.trim(),
+                    ing: row.querySelector('.pz-f-ing').value.trim(),
+                    locked: row.querySelector('.pz-lock').classList.contains('on')
+                }));
+                const b = parseFloat(list.querySelector('.pz-f-brix').value);
+                const bb = parseFloat(list.querySelector('.pz-f-basebrix').value);
+                if (b > 0) p.brix = b; else delete p.brix;
+                if (bb > 0) p.baseBrix = bb; else delete p.baseBrix;
+                const st = list.querySelector('.pz-f-strength').value.trim();
+                if (st) p.strength = st; else delete p.strength;
+                p.method = list.querySelector('.pz-f-method').value.trim();
+            };
+
+            list.querySelector('.prep-back').addEventListener('click', () => {
+                triggerHaptic('light'); editingPrep = null; renderPreps();
+            });
+            list.querySelector('.pz-cancel').addEventListener('click', () => {
+                triggerHaptic('light'); editingPrep = null; renderPreps();
+            });
+            list.querySelectorAll('.pz-basepick').forEach(b => b.addEventListener('click', () => {
+                triggerHaptic('light');
+                harvest();
+                p.baseIdx = parseInt(b.closest('.pz-part').getAttribute('data-i'));
+                draw();
+            }));
+            list.querySelectorAll('.pz-lock').forEach(b => b.addEventListener('click', () => {
+                triggerHaptic('light'); b.classList.toggle('on');
+                b.textContent = b.classList.contains('on') ? '🔒' : '🔓';
+            }));
+            list.querySelectorAll('.pz-rm').forEach(b => b.addEventListener('click', () => {
+                triggerHaptic('light');
+                harvest();
+                const i = parseInt(b.closest('.pz-part').getAttribute('data-i'));
+                if (p.parts.length > 1) {
+                    p.parts.splice(i, 1);
+                    if ((p.baseIdx || 0) >= p.parts.length) p.baseIdx = p.parts.length - 1;
+                    else if (i < (p.baseIdx || 0)) p.baseIdx = (p.baseIdx || 0) - 1;
+                }
+                draw();
+            }));
+            list.querySelector('.pz-addpart').addEventListener('click', () => {
+                triggerHaptic('light');
+                harvest();
+                p.parts.push({ amt: 0, unit: 'g', ing: '' });
+                draw();
+            });
+            list.querySelector('.pz-save').addEventListener('click', () => {
+                triggerHaptic('heavy');
+                harvest();
+                if (!p.name) return openAlertModal({ title: 'NAME REQUIRED', message: 'Give the preparation a name.' });
+                p.parts = p.parts.filter(x => x.ing);
+                if (!p.parts.length) return openAlertModal({ title: 'NO PARTS', message: 'Add at least one ingredient.' });
+                if ((p.baseIdx || 0) >= p.parts.length) p.baseIdx = 0;
+                p.baseDefault = basePart(p).amt;
+                if (!p.order) p.order = prepList().length + 1;
+                prepsData[p.id] = p;
+                savePreps();
+                editingPrep = null;
+                openPreps.add(p.id);
+                renderPreps();
             });
         };
         draw();
     }
 
+    loadPreps();
     renderPreps();
 
     // --- SPEC BUILDER ---
@@ -2973,121 +3194,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- THE LAB: SYRUP & BRIX ENGINE ---
-    let brixMode = 'build';
-    document.querySelectorAll('#lab-module .mod-pill').forEach(p => p.addEventListener('click', (e) => {
-        triggerHaptic('light');
-        document.querySelectorAll('#lab-module .mod-pill').forEach(btn => btn.classList.remove('active'));
-        e.target.classList.add('active');
-        brixMode = e.target.getAttribute('data-val');
-        
-        document.getElementById('ui-brix-build').classList.toggle('hidden', brixMode !== 'build');
-        document.getElementById('ui-brix-fix').classList.toggle('hidden', brixMode !== 'fix');
-        document.getElementById('ui-preps')?.classList.toggle('hidden', brixMode !== 'preps');
-        if (brixMode === 'preps') renderPreps();
-        document.getElementById('brix-results').innerHTML = '';
-    }));
-
-    let activeSyrupBase = { val: 100 }; 
-    const btnSyrupBase = document.getElementById('btn-syrup-base');
-    if (btnSyrupBase) {
-        btnSyrupBase.addEventListener('click', () => {
-            openSelectModal('SWEETENER BASE', [
-                {label: 'Dry Sugar (White/Demerara)', value: 100},
-                {label: 'Honey (~80 Bx)', value: 80},
-                {label: 'Agave (~75 Bx)', value: 75},
-                {label: 'Maple Syrup (~66 Bx)', value: 66}
-            ], (v, l) => {
-                activeSyrupBase.val = parseFloat(v); 
-                btnSyrupBase.innerText = l;
-            });
-        });
-    }
-
-    let activeSyrupTarget = { type: 'ratio', val: 1 };
-    const btnSyrupTarget = document.getElementById('btn-syrup-target');
-    if (btnSyrupTarget) {
-        btnSyrupTarget.addEventListener('click', () => {
-            openSelectModal('TARGET PROFILE', [
-                {label: '1:1 Ratio (Weight)', value: '1:1', data: 1},
-                {label: '1.5:1 Ratio (Weight)', value: '1.5:1', data: 1/1.5},
-                {label: '1.85:1 Ratio (Weight)', value: '1.85:1', data: 1/1.85},
-                {label: '2:1 Ratio (Weight)', value: '2:1', data: 0.5},
-                {label: '3:1 Ratio (Weight)', value: '3:1', data: 1/3},
-                {label: 'Custom brix target', value: 'custom', data: null}
-            ], (v, l, data) => {
-                activeSyrupTarget = { type: v === 'custom' ? 'custom' : 'ratio', val: data };
-                btnSyrupTarget.innerText = l;
-                document.getElementById('custom-brix-container').classList.toggle('hidden', v !== 'custom');
-            });
-        });
-    }
-
-    const calcBuildBtn = document.getElementById('calc-build-btn');
-    if (calcBuildBtn) {
-        calcBuildBtn.addEventListener('click', () => {
-            triggerHaptic('heavy');
-            const baseWeight = parseFloat(document.getElementById('syrup-base-weight').value) || 1000;
-            const res = document.getElementById('brix-results');
-            let waterToAdd = 0;
-            let finalBrix = 0;
-            const baseBrix = activeSyrupBase.val;
-            const totalSugar = baseWeight * (baseBrix / 100);
-
-            if (activeSyrupTarget.type === 'ratio') {
-                waterToAdd = baseWeight * activeSyrupTarget.val;
-                const totalWeight = baseWeight + waterToAdd;
-                finalBrix = (totalSugar / totalWeight) * 100;
-            } else {
-                const targetBrix = parseFloat(document.getElementById('custom-target-brix').value) || 50;
-                if (targetBrix >= baseBrix) {
-                    return openAlertModal({ title: 'INVALID BRIX', message: `Target Brix (${targetBrix.toFixed(1)}) must be lower than Base Brix (${baseBrix.toFixed(1)}).` });
-                }
-                const totalWeight = totalSugar / (targetBrix / 100);
-                waterToAdd = totalWeight - baseWeight;
-                finalBrix = targetBrix;
-            }
-
-            res.innerHTML = `
-                <h3 class="zone-header">SYRUP RECIPE</h3>
-                <div class="result-row neon-cyan"><span class="ing-name">Filtered Water to Add</span><span class="ing-amount">${waterToAdd.toFixed(1)}g</span></div>
-                <div class="result-row magenta-glow"><span class="ing-name">Final Yield (Weight)</span><span class="ing-amount">${(baseWeight + waterToAdd).toFixed(1)}g</span></div>
-                <div class="result-row mt-10"><span class="ing-name text-gold fw-bold">FINAL BRIX</span><span class="ing-amount">${finalBrix.toFixed(1)} Bx</span></div>
-            `;
-        });
-    }
-
-    const calcFixBtn = document.getElementById('calc-fix-btn');
-    if (calcFixBtn) {
-        calcFixBtn.addEventListener('click', () => {
-            triggerHaptic('heavy');
-            const currentBrix = parseFloat(document.getElementById('fix-current-brix').value) || 65;
-            const targetBrix = parseFloat(document.getElementById('fix-target-brix').value) || 50;
-            const currentWeight = parseFloat(document.getElementById('fix-current-weight').value) || 1000;
-            const res = document.getElementById('brix-results');
-
-            if (currentBrix === targetBrix) {
-                res.innerHTML = `<div class="result-row text-gold"><span class="ing-name">Already at Target Brix</span></div>`;
-                return;
-            }
-
-            if (currentBrix > targetBrix) {
-                const waterToAdd = currentWeight * ((currentBrix / targetBrix) - 1);
-                res.innerHTML = `
-                    <h3 class="zone-header">DILUTION REQUIRED</h3>
-                    <div class="result-row neon-cyan"><span class="ing-name">Filtered Water to Add</span><span class="ing-amount">${waterToAdd.toFixed(1)}g</span></div>
-                    <div class="result-row mt-10"><span class="ing-name text-gold fw-bold">NEW YIELD</span><span class="ing-amount">${(currentWeight + waterToAdd).toFixed(1)}g</span></div>
-                `;
-            } else {
-                const sugarToAdd = currentWeight * ((targetBrix - currentBrix) / (100 - targetBrix));
-                res.innerHTML = `
-                    <h3 class="zone-header">ENRICHMENT REQUIRED</h3>
-                    <div class="result-row magenta-glow"><span class="ing-name">Dry Sugar to Add</span><span class="ing-amount">${sugarToAdd.toFixed(1)}g</span></div>
-                    <div class="result-row mt-10"><span class="ing-name text-gold fw-bold">NEW YIELD</span><span class="ing-amount">${(currentWeight + sugarToAdd).toFixed(1)}g</span></div>
-                `;
-            }
-        });
-    }
+    // --- THE LAB ---
+    // The preparations list is the whole tab now. BUILD was "base weight ->
+    // water", which is exactly what a prep row does, and FIXER lives inside the
+    // row that already knows the target and the batch weight.
 
     // --- OPS MODULE ENGINE ---
     const OPS_KEY = 'codex_ops_v1';
@@ -3310,7 +3420,8 @@ document.addEventListener('DOMContentLoaded', () => {
         ['drink_types', 'codex_drink_types_v1'],
         ['batch_sizes', 'codex_batch_sizes_v1'],
         ['batch_yields', 'codex_batch_yields_v1'],
-        ['shelf',       'codex_shelf_v1']
+        ['shelf',       'codex_shelf_v1'],
+        ['preps',       'codex_preps_v1']
     ];
     const SETTINGS_PUSHED_KEY = 'codex_settings_pushed_v1';   // "scope:entry" -> {sig, ts}
     let settingsPushTimer = null;
@@ -3409,6 +3520,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (typeof refreshShelfDatalist === 'function') refreshShelfDatalist();
                 if (typeof renderShelf === 'function') renderShelf();
                 if (typeof renderVault === 'function') renderVault();
+                if (typeof loadPreps === 'function') { loadPreps(); renderPreps(); }
             }
             if (data.now) localStorage.setItem(SETTINGS_PULLTS_KEY, String(data.now));
         } catch (e) { console.error('Settings pull failed', e); }
