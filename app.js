@@ -4300,8 +4300,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Pointer-based drag. HTML5 drag has no lift, no drop preview and
                 // no auto-scroll on touch — this moves the row with your finger,
                 // parts the list to show where it lands, and scrolls near edges.
-                const NODRAG = '.ops-checkbox, .ops-ring, .ops-qty-chip, .row-more, button, input, textarea, .ops-subtasks, .ops-batch-card';
-                let armTimer = null, dragging = false, grabDY = 0, lastY = 0;
+                let gripPending = false, dragging = false, grabDY = 0, lastY = 0;
                 let gap = null, autoScroll = null, sx = 0, sy = 0;
                 const scroller = document.getElementById('scroll-area') || document.scrollingElement;
 
@@ -4404,39 +4403,57 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const onMove = (e) => {
                     if (dragging) { e.preventDefault(); move(e.clientY); return; }
-                    // Horizontal movement means a swipe; cancel the arm. Vertical
-                    // movement is a scroll, so cancel that too — only a still
-                    // finger becomes a drag.
-                    if (armTimer && Math.hypot(e.clientX - sx, e.clientY - sy) >= 10) { clearTimeout(armTimer); armTimer = null; }
+                    if (!gripPending) return;
+                    // Past the slop radius this is a drag, not a tap on the ⋯.
+                    if (Math.hypot(e.clientX - sx, e.clientY - sy) >= 8) {
+                        gripPending = false;
+                        e.preventDefault();
+                        blockNextClick();
+                        // Capture now, not on pointerdown — capturing early
+                        // interferes with the button's click and would cost us
+                        // the actions menu.
+                        try { row.setPointerCapture(e.pointerId); } catch {}
+                        begin(e.clientY);
+                    }
                 };
                 const detach = () => {
                     document.removeEventListener('pointermove', onMove);
                     document.removeEventListener('pointerup', onUp);
                     document.removeEventListener('pointercancel', onCancel);
                 };
-                const onUp = () => { if (armTimer) { clearTimeout(armTimer); armTimer = null; } if (dragging) finish(true); detach(); };
-                const onCancel = () => { if (armTimer) { clearTimeout(armTimer); armTimer = null; } if (dragging) finish(false); detach(); };
+                const onUp = () => { gripPending = false; if (dragging) finish(true); detach(); };
+                const onCancel = () => { gripPending = false; if (dragging) finish(false); detach(); };
 
-                const arm = (e, instant) => {
-                    if (e.target.closest(NODRAG)) return;
-                    sx = e.clientX; sy = e.clientY;
-                    // Keep receiving moves after the row is moved into <body>
-                    try { row.setPointerCapture(e.pointerId); } catch {}
-                    document.addEventListener('pointermove', onMove, { passive: false });
-                    document.addEventListener('pointerup', onUp);
-                    document.addEventListener('pointercancel', onCancel);
-                    if (instant) begin(e.clientY);
-                    else armTimer = setTimeout(() => { armTimer = null; begin(sy); }, 250);
+                // The ⋯ button is the drag grip. touch-action must be committed
+                // BEFORE the gesture starts — applying it inside begin() was
+                // always too late, because Chrome decides the touch is a scroll
+                // and cancels the pointer. A small fixed target the browser never
+                // needs for scrolling is the one thing that works reliably, and
+                // the ⋯ is already there, so it costs no row width.
+                const grip = row.querySelector('.row-more');
+                let clickBlock = null;
+                // A drag that started on the grip must not also fire its click.
+                // Capture-phase on the same node runs before the bubble handler
+                // that opens the actions menu.
+                const blockNextClick = () => {
+                    if (!grip || clickBlock) return;
+                    const release = () => { grip.removeEventListener('click', clickBlock, true); clickBlock = null; };
+                    clickBlock = (ev) => { ev.preventDefault(); ev.stopPropagation(); release(); };
+                    grip.addEventListener('click', clickBlock, true);
+                    // If no click ever lands (pointercancel), don't leave a
+                    // listener behind to swallow the next real tap.
+                    setTimeout(() => { if (clickBlock) release(); }, 500);
                 };
-                // Handle only. touch-action must be set BEFORE the gesture starts —
-                // applying it inside begin() was always too late, because Chrome
-                // decides the touch is a scroll and cancels the pointer during the
-                // hold delay. A small fixed handle the browser never needs for
-                // scrolling is the one thing that works reliably.
-                const handle = row.querySelector('.drag-handle-task');
-                if (handle) {
-                    handle.style.touchAction = 'none';
-                    handle.addEventListener('pointerdown', (e) => { e.preventDefault(); arm(e, true); });
+                if (grip) {
+                    grip.style.touchAction = 'none';
+                    grip.addEventListener('pointerdown', (e) => {
+                        // No preventDefault here — that would kill the tap.
+                        sx = e.clientX; sy = e.clientY;
+                        gripPending = true;
+                        document.addEventListener('pointermove', onMove, { passive: false });
+                        document.addEventListener('pointerup', onUp);
+                        document.addEventListener('pointercancel', onCancel);
+                    });
                 }
             }
 
