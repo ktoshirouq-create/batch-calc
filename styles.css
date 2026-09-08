@@ -510,7 +510,17 @@ body { background-color: var(--bg-oled); color: var(--text-main); display: flex;
 .ops-hist-older span { color: var(--nodee-gold); cursor: pointer; }
 
 /* --- PREP GROUPING + QTY --- */
-.ops-prep-section { font-size: 0.62rem; font-weight: 900; letter-spacing: 2.5px; color: var(--nodee-gold); margin: 16px 4px 2px; padding-bottom: 6px; border-bottom: 1px solid rgba(200,169,126,0.25); }
+.ops-prep-section { display: flex; align-items: center; gap: 8px; font-size: 0.62rem; font-weight: 900; letter-spacing: 2.5px; color: var(--nodee-gold); margin: 16px 4px 2px; padding-bottom: 6px; border-bottom: 1px solid rgba(200,169,126,0.25); }
+.ops-prep-section .grp-count { font-size: 0.6rem; font-weight: 800; letter-spacing: 1px; color: #5a5a5a; margin-left: auto; }
+.ops-prep-section .grp-more { background: none; border: none; color: var(--text-muted); font-size: 0.55rem; font-weight: 900; letter-spacing: 1.5px; padding: 2px 0 2px 10px; cursor: pointer; }
+/* Section colours — all four already exist in the palette. */
+.ops-prep-section.grp-juice-batch { color: var(--juice-glow); border-bottom-color: rgba(158,196,168,0.3); }
+.ops-prep-section.grp-clarified-batch { color: var(--magenta-glow); border-bottom-color: rgba(176,106,139,0.3); }
+.ops-prep-section.grp-mise { color: var(--mixer-fizz); border-bottom-color: rgba(155,138,196,0.3); }
+.ops-row.sec-juice-batch .ops-text { color: var(--juice-glow); }
+.ops-row.sec-clarified-batch .ops-text { color: var(--magenta-glow); }
+.ops-row.sec-mise .ops-text { color: var(--mixer-fizz); }
+.ops-row.completed .ops-text { color: var(--text-muted); }
 .ops-prep-section:first-child { margin-top: 4px; }
 .ops-qty-chip { color: var(--nodee-gold); font-weight: 900; font-size: 0.7rem; background: rgba(200,169,126,0.12); border: 1px solid rgba(200,169,126,0.35); padding: 3px 8px; border-radius: 7px; flex-shrink: 0; cursor: pointer; }
 .ops-qty-stepper { display: inline-flex; align-items: center; gap: 6px; background: rgba(200,169,126,0.1); border: 1px solid rgba(200,169,126,0.45); border-radius: 8px; padding: 2px 5px; flex-shrink: 0; box-shadow: 0 0 10px rgba(200,169,126,0.12); }

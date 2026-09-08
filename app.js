@@ -3451,7 +3451,8 @@ document.addEventListener('DOMContentLoaded', () => {
         ['batch_sizes', 'codex_batch_sizes_v1'],
         ['batch_yields', 'codex_batch_yields_v1'],
         ['shelf',       'codex_shelf_v1'],
-        ['preps',       'codex_preps_v1']
+        ['preps',       'codex_preps_v1'],
+        ['staples',     'codex_staples_v1']
     ];
     const SETTINGS_PUSHED_KEY = 'codex_settings_pushed_v1';   // "scope:entry" -> {sig, ts}
     let settingsPushTimer = null;
@@ -3951,6 +3952,13 @@ document.addEventListener('DOMContentLoaded', () => {
             sortedTasks = [...tasks].map((t, i) => ({...t, originalIndex: i}))
                                       .sort((a, b) => {
                                           if (groupRank(a) !== groupRank(b)) return groupRank(a) - groupRank(b);
+                                          // Within batches, keep each linked section contiguous.
+                                          const ga = prepGroupOf(a), gb = prepGroupOf(b);
+                                          if (ga !== gb) {
+                                              const ra = prepGroupRank(ga), rb = prepGroupRank(gb);
+                                              if (ra !== rb) return ra - rb;
+                                              return ga.localeCompare(gb);
+                                          }
                                           if (a.completed !== b.completed) return a.completed ? 1 : -1;
                                           // Urgent beats everything else in the group
                                           if (!!a.urgent !== !!b.urgent) return a.urgent ? -1 : 1;
@@ -4160,14 +4168,93 @@ document.addEventListener('DOMContentLoaded', () => {
             return `<div class="ops-count ${cls}"><div class="num">${due === 0 ? 'TODAY' : due + 'd'}</div><div class="lbl">${due === 0 ? 'DUE' : 'DUE ' + dueDate}</div></div>`;
         }
 
-        let lastPrepGroup = null;  // section header tracker for the PREP loop
+        // --- PREP SECTION GROUPING & STAPLES ---
+    const STAPLES_KEY = 'codex_staples_v1';
+    const readStaples = () => {
+        try { return JSON.parse(localStorage.getItem(STAPLES_KEY) || '{}') || {}; } catch { return {}; }
+    };
+    const isStaple = (t) => {
+        const k = stapleKey(t);
+        return !!(k && readStaples()[k]);
+    };
+    const stapleKey = (t) => (t.linkedSpec && t.linkedSection)
+        ? `${t.linkedSpec} — ${t.linkedSection}`.toLowerCase().trim()
+        : String(t.text || '').toLowerCase().trim();
+    function toggleStaple(t) {
+        const k = stapleKey(t);
+        if (!k) return;
+        const map = readStaples();
+        if (map[k]) delete map[k]; else map[k] = 1;
+        try { localStorage.setItem(STAPLES_KEY, JSON.stringify(map)); } catch {}
+        if (typeof scheduleSettingsPush === 'function') scheduleSettingsPush();
+    }
+    // Every juice batch is a staple today, so seed them rather than make Jack
+    // tap five rows. Unmarking still sticks — the seed runs once.
+    function seedStaples() {
+        if (localStorage.getItem(STAPLES_KEY)) return;
+        const map = {};
+        (opsData.prep || []).forEach(t => {
+            if (t.linkedSection && /juice batch/i.test(t.linkedSection)) map[stapleKey(t)] = 1;
+        });
+        try { localStorage.setItem(STAPLES_KEY, JSON.stringify(map)); } catch {}
+    }
+
+    // A task's group is its linked section. Hand-typed batches have no link and
+    // land in a plain BATCHES bucket so nothing goes missing.
+    const prepGroupOf = (t) => {
+        if (t.kind === 'mise') return 'MISE';
+        if (t.linkedSection) return String(t.linkedSection).toUpperCase().trim();
+        return 'BATCHES';
+    };
+    // MISE last, unlinked BATCHES just before it, real sections alphabetical.
+    const prepGroupRank = (g) => (g === 'MISE' ? 2 : g === 'BATCHES' ? 1 : 0);
+    // Under a "SPIRIT BATCH" header, "Blueberry Dream — Spirit Batch" says it twice.
+    const prepRowLabel = (t) => {
+        if (!t.linkedSection) return t.text;
+        const suffix = ` — ${t.linkedSection}`;
+        const txt = String(t.text || '');
+        return txt.toLowerCase().endsWith(suffix.toLowerCase())
+            ? txt.slice(0, txt.length - suffix.length) : txt;
+    };
+    const COLLAPSE_MIN = 5;    // sections shorter than this never hide anything
+    const COLLAPSE_KEEP = 4;   // ...and the first few always stay visible
+    const openPrepGroups = new Set();
+
+    let lastPrepGroup = null;  // section header tracker for the PREP loop
 
         // PREP section headers double as drop targets so you can drag a task
         // into a section even when it's empty.
-        function makePrepHeader(label) {
+        function prepGroupHidden(t, all) {
+            const grp = prepGroupOf(t);
+            if (openPrepGroups.has(grp)) return false;
+            const members = all.filter(x => prepGroupOf(x) === grp);
+            if (members.length < COLLAPSE_MIN) return false;
+            if (isStaple(t) || t.urgent || t.completed) return false;
+            if ((t.made || 0) > 0) return false;
+            // Always keep the top of the section visible. Batches are sorted by
+            // qty, so these are the biggest jobs — collapsing to a bare header
+            // on a fresh shift would hide the whole night's work.
+            const pos = members.findIndex(x => x.taskId === t.taskId && x.text === t.text);
+            return pos >= COLLAPSE_KEEP;
+        }
+        function makePrepHeader(label, members) {
             const header = document.createElement('div');
-            header.className = 'ops-prep-section';
-            header.innerText = label;
+            header.className = 'ops-prep-section grp-' + label.toLowerCase().replace(/[^a-z]+/g, '-');
+            const hidden = (members || []).filter(t => prepGroupHidden(t, members)).length;
+            header.innerHTML = `<span>${label}</span><span class="grp-count">${(members || []).length}</span>`;
+            if (hidden > 0 || openPrepGroups.has(label)) {
+                const more = document.createElement('button');
+                more.className = 'grp-more';
+                more.textContent = openPrepGroups.has(label) ? 'SHOW LESS' : `+${hidden} MORE`;
+                more.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    triggerHaptic('light');
+                    if (openPrepGroups.has(label)) openPrepGroups.delete(label);
+                    else openPrepGroups.add(label);
+                    renderOpsList();
+                });
+                header.appendChild(more);
+            }
             return header;
         }
 
@@ -4184,11 +4271,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             if (isPrep) {
-                const grp = taskObj.kind === 'mise' ? 'MISE' : 'BATCHES';
+                const grp = prepGroupOf(taskObj);
                 if (grp !== lastPrepGroup) {
-                    container.appendChild(makePrepHeader(grp));
+                    const members = sortedTasks.filter(t => prepGroupOf(t) === grp);
+                    container.appendChild(makePrepHeader(grp, members));
                     lastPrepGroup = grp;
                 }
+                // Long sections hide their non-staples, but never anything you
+                // are actually working on.
+                if (prepGroupHidden(taskObj, sortedTasks)) return;
             }
 
             const subCount = (taskObj.subtasks || []).length;
@@ -4200,6 +4291,8 @@ document.addEventListener('DOMContentLoaded', () => {
             let rowClasses = `ops-row ${taskObj.completed ? 'completed' : ''}`;
             if (isPeriodic || isRestock) rowClasses += ' ops-cycling';
             if (isLinked) rowClasses += ' ops-row-linked';
+            if (isPrep) rowClasses += ' sec-' + prepGroupOf(taskObj).toLowerCase().replace(/[^a-z]+/g, '-');
+            if (isPrep && isStaple(taskObj)) rowClasses += ' ops-row-staple';
             if (taskObj.urgent && !taskObj.completed) rowClasses += ' ops-row-urgent';
             row.className = rowClasses;
             if (taskObj.taskId) row.setAttribute('data-task-id', taskObj.taskId);
@@ -4229,7 +4322,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isLinked) {
                 labelHtml += `<span class="ops-link-glyph">🔗</span>`;
             }
-            labelHtml += taskObj.text;
+            labelHtml += isPrep ? prepRowLabel(taskObj) : taskObj.text;
             
             if (isPrep && isLinked && taskObj.lastCompleted) {
                 labelHtml += `<div class="ops-time-tag">Last batched: ${formatDate(taskObj.lastCompleted)}</div>`;
@@ -4622,6 +4715,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         // "How many" is the chip, "all made" is swipe-right — no menu duplicates.
                         if ((taskObj.made || 0) > 0) actions.push({ label: 'Reset progress', value: 'reset-made' });
                     }
+                    if (isPrep) actions.push({ label: isStaple(taskObj) ? 'Unmark staple' : 'Mark as staple', value: 'toggle-staple' });
                     if (isPrep) actions.push({ label: 'Add to Restock', value: 'to-restock' });
                     if (isPrep) actions.push({ label: taskObj.kind === 'mise' ? 'Move to batches' : 'Move to mise', value: 'move-kind' });
                     if (isPrep && isLinked) actions.push({ label: 'Batch bottle size', value: 'batch-size' });
@@ -4696,6 +4790,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             saveOps();
                             renderOpsList();
                             showToast(t.urgent ? 'Marked urgent' : 'Urgent cleared');
+                        } else if (val === 'toggle-staple') {
+                            toggleStaple(taskObj);
+                            renderOpsList();
                         } else if (val === 'to-restock') {
                             setTimeout(() => openRestockPicker(activeOpsCategory, taskObj.originalIndex), 350);
                         } else if (val === 'move-kind') {
@@ -4927,6 +5024,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     loadOps();
+    seedStaples();
     renderOpsList();
     ensureDeviceName();
     pullOpsFromCloud();   // reconcile with the sheet; local render already happened
