@@ -3557,6 +3557,58 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { console.error('Settings pull failed', e); }
     }
 
+    // --- PREP SECTION GROUPING & STAPLES ---
+    const STAPLES_KEY = 'codex_staples_v1';
+    const readStaples = () => {
+        try { return JSON.parse(localStorage.getItem(STAPLES_KEY) || '{}') || {}; } catch { return {}; }
+    };
+    const isStaple = (t) => {
+        const k = stapleKey(t);
+        return !!(k && readStaples()[k]);
+    };
+    const stapleKey = (t) => (t.linkedSpec && t.linkedSection)
+        ? `${t.linkedSpec} — ${t.linkedSection}`.toLowerCase().trim()
+        : String(t.text || '').toLowerCase().trim();
+    function toggleStaple(t) {
+        const k = stapleKey(t);
+        if (!k) return;
+        const map = readStaples();
+        if (map[k]) delete map[k]; else map[k] = 1;
+        try { localStorage.setItem(STAPLES_KEY, JSON.stringify(map)); } catch {}
+        if (typeof scheduleSettingsPush === 'function') scheduleSettingsPush();
+    }
+    // Every juice batch is a staple today, so seed them rather than make Jack
+    // tap five rows. Unmarking still sticks — the seed runs once.
+    function seedStaples() {
+        if (localStorage.getItem(STAPLES_KEY)) return;
+        const map = {};
+        (opsData.prep || []).forEach(t => {
+            if (t.linkedSection && /juice batch/i.test(t.linkedSection)) map[stapleKey(t)] = 1;
+        });
+        try { localStorage.setItem(STAPLES_KEY, JSON.stringify(map)); } catch {}
+    }
+
+    // A task's group is its linked section. Hand-typed batches have no link and
+    // land in a plain BATCHES bucket so nothing goes missing.
+    const prepGroupOf = (t) => {
+        if (t.kind === 'mise') return 'MISE';
+        if (t.linkedSection) return String(t.linkedSection).toUpperCase().trim();
+        return 'BATCHES';
+    };
+    // MISE last, unlinked BATCHES just before it, real sections alphabetical.
+    const prepGroupRank = (g) => (g === 'MISE' ? 2 : g === 'BATCHES' ? 1 : 0);
+    // Under a "SPIRIT BATCH" header, "Blueberry Dream — Spirit Batch" says it twice.
+    const prepRowLabel = (t) => {
+        if (!t.linkedSection) return t.text;
+        const suffix = ` — ${t.linkedSection}`;
+        const txt = String(t.text || '');
+        return txt.toLowerCase().endsWith(suffix.toLowerCase())
+            ? txt.slice(0, txt.length - suffix.length) : txt;
+    };
+    const COLLAPSE_MIN = 5;    // sections shorter than this never hide anything
+    const COLLAPSE_KEEP = 4;   // ...and the first few always stay visible
+    const openPrepGroups = new Set();
+
     function loadOps() {
         try {
             const raw = localStorage.getItem(OPS_KEY);
@@ -4168,59 +4220,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return `<div class="ops-count ${cls}"><div class="num">${due === 0 ? 'TODAY' : due + 'd'}</div><div class="lbl">${due === 0 ? 'DUE' : 'DUE ' + dueDate}</div></div>`;
         }
 
-        // --- PREP SECTION GROUPING & STAPLES ---
-    const STAPLES_KEY = 'codex_staples_v1';
-    const readStaples = () => {
-        try { return JSON.parse(localStorage.getItem(STAPLES_KEY) || '{}') || {}; } catch { return {}; }
-    };
-    const isStaple = (t) => {
-        const k = stapleKey(t);
-        return !!(k && readStaples()[k]);
-    };
-    const stapleKey = (t) => (t.linkedSpec && t.linkedSection)
-        ? `${t.linkedSpec} — ${t.linkedSection}`.toLowerCase().trim()
-        : String(t.text || '').toLowerCase().trim();
-    function toggleStaple(t) {
-        const k = stapleKey(t);
-        if (!k) return;
-        const map = readStaples();
-        if (map[k]) delete map[k]; else map[k] = 1;
-        try { localStorage.setItem(STAPLES_KEY, JSON.stringify(map)); } catch {}
-        if (typeof scheduleSettingsPush === 'function') scheduleSettingsPush();
-    }
-    // Every juice batch is a staple today, so seed them rather than make Jack
-    // tap five rows. Unmarking still sticks — the seed runs once.
-    function seedStaples() {
-        if (localStorage.getItem(STAPLES_KEY)) return;
-        const map = {};
-        (opsData.prep || []).forEach(t => {
-            if (t.linkedSection && /juice batch/i.test(t.linkedSection)) map[stapleKey(t)] = 1;
-        });
-        try { localStorage.setItem(STAPLES_KEY, JSON.stringify(map)); } catch {}
-    }
-
-    // A task's group is its linked section. Hand-typed batches have no link and
-    // land in a plain BATCHES bucket so nothing goes missing.
-    const prepGroupOf = (t) => {
-        if (t.kind === 'mise') return 'MISE';
-        if (t.linkedSection) return String(t.linkedSection).toUpperCase().trim();
-        return 'BATCHES';
-    };
-    // MISE last, unlinked BATCHES just before it, real sections alphabetical.
-    const prepGroupRank = (g) => (g === 'MISE' ? 2 : g === 'BATCHES' ? 1 : 0);
-    // Under a "SPIRIT BATCH" header, "Blueberry Dream — Spirit Batch" says it twice.
-    const prepRowLabel = (t) => {
-        if (!t.linkedSection) return t.text;
-        const suffix = ` — ${t.linkedSection}`;
-        const txt = String(t.text || '');
-        return txt.toLowerCase().endsWith(suffix.toLowerCase())
-            ? txt.slice(0, txt.length - suffix.length) : txt;
-    };
-    const COLLAPSE_MIN = 5;    // sections shorter than this never hide anything
-    const COLLAPSE_KEEP = 4;   // ...and the first few always stay visible
-    const openPrepGroups = new Set();
-
-    let lastPrepGroup = null;  // section header tracker for the PREP loop
+        let lastPrepGroup = null;  // section header tracker for the PREP loop
 
         // PREP section headers double as drop targets so you can drag a task
         // into a section even when it's empty.
