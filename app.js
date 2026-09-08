@@ -5013,14 +5013,6 @@ document.addEventListener('DOMContentLoaded', () => {
             container.appendChild(row);
         });
 
-        // Ensure both PREP headers exist even when a section is empty (drop targets)
-        if (isPrep) {
-            ['BATCHES', 'MISE'].forEach(label => {
-                const present = [...container.querySelectorAll('.ops-prep-section')]
-                    .some(h => h.innerText === label);
-                if (!present) container.appendChild(makePrepHeader(label));
-            });
-        }
     }
 
     loadOps();
