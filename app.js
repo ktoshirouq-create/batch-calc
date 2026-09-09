@@ -461,6 +461,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Safe to call before OPS has initialised — it simply does nothing then.
     function repaintBatchCards() {
         try {
+            if (typeof seedStaples === 'function') seedStaples();
             if (typeof window.renderOpsList === 'function') window.renderOpsList();
         } catch (e) { console.error('Batch card repaint failed:', e); }
     }
@@ -3573,19 +3574,49 @@ document.addEventListener('DOMContentLoaded', () => {
         const k = stapleKey(t);
         if (!k) return;
         const map = readStaples();
-        if (map[k]) delete map[k]; else map[k] = 1;
+        if (map[k]) delete map[k];
+        else map[k] = (t.linkedSpec && t.linkedSection) ? `${t.linkedSpec} — ${t.linkedSection}` : String(t.text || '');
         try { localStorage.setItem(STAPLES_KEY, JSON.stringify(map)); } catch {}
         if (typeof scheduleSettingsPush === 'function') scheduleSettingsPush();
     }
     // Every juice batch is a staple today, so seed them rather than make Jack
     // tap five rows. Unmarking still sticks — the seed runs once.
+    // The staple's display name, so a staple with no task on the board can still
+    // be rendered and added. Legacy entries stored 1 — fall back to the key.
+    const stapleName = (key, val) => (typeof val === 'string' && val)
+        ? val
+        : key.replace(/(^|[\s—])([a-z])/g, (m, p, c) => p + c.toUpperCase());
+    const splitStaple = (name) => {
+        const i = name.lastIndexOf(' — ');
+        return i < 0 ? { spec: name, section: '' } : { spec: name.slice(0, i), section: name.slice(i + 3) };
+    };
+    // Seeded from the CODEX, not the board: a juice batch nobody added tonight is
+    // exactly the one that must not go missing. An empty map counts as unseeded —
+    // the first version stored {} before the vault had loaded, which then blocked
+    // every retry with no way to clear it from inside the app.
     function seedStaples() {
-        if (localStorage.getItem(STAPLES_KEY)) return;
+        if (Object.keys(readStaples()).length) return;
         const map = {};
-        (opsData.prep || []).forEach(t => {
-            if (t.linkedSection && /juice batch/i.test(t.linkedSection)) map[stapleKey(t)] = 1;
+        Object.keys(recipeVault || {}).forEach(full => {
+            const { section } = splitStaple(full);
+            if (section && /juice batch/i.test(section)) map[full.toLowerCase().trim()] = full;
         });
+        if (!Object.keys(map).length) return;   // vault not here yet — retry later
         try { localStorage.setItem(STAPLES_KEY, JSON.stringify(map)); } catch {}
+    }
+    // Staples with no task on the board tonight, as ghost rows.
+    function ghostStaples() {
+        const have = new Set((opsData.prep || []).map(t => stapleKey(t)));
+        const out = [];
+        const map = readStaples();
+        Object.keys(map).forEach(k => {
+            if (have.has(k)) return;
+            const name = stapleName(k, map[k]);
+            const { spec, section } = splitStaple(name);
+            if (!section) return;
+            out.push({ __ghost: true, text: name, linkedSpec: spec, linkedSection: section, kind: 'batch' });
+        });
+        return out;
     }
 
     // A task's group is its linked section. Hand-typed batches have no link and
@@ -4001,7 +4032,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             // PREP: grouped — BATCHES first, then MISE; within each group completed sinks, uncompleted keep drag order
             const groupRank = (t) => (t.kind === 'mise' ? 1 : 0);
-            sortedTasks = [...tasks].map((t, i) => ({...t, originalIndex: i}))
+            sortedTasks = [...tasks, ...ghostStaples()].map((t, i) => ({...t, originalIndex: i}))
                                       .sort((a, b) => {
                                           if (groupRank(a) !== groupRank(b)) return groupRank(a) - groupRank(b);
                                           // Within batches, keep each linked section contiguous.
@@ -4011,6 +4042,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                               if (ra !== rb) return ra - rb;
                                               return ga.localeCompare(gb);
                                           }
+                                          if (!!a.__ghost !== !!b.__ghost) return a.__ghost ? 1 : -1;
                                           if (a.completed !== b.completed) return a.completed ? 1 : -1;
                                           // Urgent beats everything else in the group
                                           if (!!a.urgent !== !!b.urgent) return a.urgent ? -1 : 1;
@@ -4273,13 +4305,28 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isPrep) {
                 const grp = prepGroupOf(taskObj);
                 if (grp !== lastPrepGroup) {
-                    const members = sortedTasks.filter(t => prepGroupOf(t) === grp);
+                    const members = sortedTasks.filter(t => prepGroupOf(t) === grp && !t.__ghost);
                     container.appendChild(makePrepHeader(grp, members));
                     lastPrepGroup = grp;
                 }
                 // Long sections hide their non-staples, but never anything you
                 // are actually working on.
                 if (prepGroupHidden(taskObj, sortedTasks)) return;
+            }
+
+            if (taskObj.__ghost) {
+                const g = document.createElement('div');
+                g.className = 'ops-row ops-row-ghost sec-' + prepGroupOf(taskObj).toLowerCase().replace(/[^a-z]+/g, '-');
+                g.innerHTML = `<div class="ops-row-main"><div class="ops-checkbox ghost-plus">＋</div>`
+                            + `<span class="ops-text" style="flex:1;">${prepRowLabel(taskObj)}</span>`
+                            + `<span class="ghost-tag">STAPLE</span></div>`;
+                g.addEventListener('click', () => {
+                    triggerHaptic('light');
+                    commitPrepTask({ text: taskObj.text, linkedSpec: taskObj.linkedSpec,
+                                     linkedSection: taskObj.linkedSection, qty: 1 });
+                });
+                container.appendChild(g);
+                return;
             }
 
             const subCount = (taskObj.subtasks || []).length;
