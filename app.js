@@ -4334,7 +4334,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const row = document.createElement('div');
             const counted = have !== null;
             const stocked = counted && have >= g.parBusy;
-            row.className = 'ops-row ops-row-staple sec-' + prepGroupOf(taskObj).toLowerCase().replace(/[^a-z]+/g, '-')
+            row.className = 'ops-row ops-staple-card sec-' + prepGroupOf(taskObj).toLowerCase().replace(/[^a-z]+/g, '-')
                           + (counted ? ' counted' : '') + (stocked ? ' stocked' : '')
                           + (openStaples.has(g.gkey) ? ' open' : '');
 
@@ -4392,6 +4392,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!n) return;
                 triggerHaptic('heavy');
                 openStaples.delete(g.gkey);
+                const keys = new Set(g.members.map(m => m.key));
+                const existing = (opsData.prep || []).find(t => keys.has(stapleKey(t)));
+                if (existing) {   // bump, never duplicate
+                    existing.qty = n;
+                    saveOps();
+                    renderOpsList();
+                    return;
+                }
                 commitPrepTask({ text: g.members[0].name, linkedSpec: g.members[0].spec,
                                  linkedSection: g.section, qty: n });
             };
@@ -4508,7 +4516,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isPeriodic || isRestock) rowClasses += ' ops-cycling';
             if (isLinked) rowClasses += ' ops-row-linked';
             if (isPrep) rowClasses += ' sec-' + prepGroupOf(taskObj).toLowerCase().replace(/[^a-z]+/g, '-');
-            if (isPrep && isStaple(taskObj)) rowClasses += ' ops-row-staple';
             if (taskObj.urgent && !taskObj.completed) rowClasses += ' ops-row-urgent';
             row.className = rowClasses;
             if (taskObj.taskId) row.setAttribute('data-task-id', taskObj.taskId);
