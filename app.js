@@ -3626,8 +3626,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (t.linkedSection) return String(t.linkedSection).toUpperCase().trim();
         return 'BATCHES';
     };
-    // MISE last, unlinked BATCHES just before it, real sections alphabetical.
-    const prepGroupRank = (g) => (g === 'MISE' ? 2 : g === 'BATCHES' ? 1 : 0);
+    // Spirit batch first — it is the bulk of the night. Then the other linked
+    // sections alphabetically, then hand-typed batches, then MISE.
+    const prepGroupRank = (g) => (g === 'MISE' ? 3 : g === 'BATCHES' ? 2 : g === 'SPIRIT BATCH' ? 0 : 1);
     // Under a "SPIRIT BATCH" header, "Blueberry Dream — Spirit Batch" says it twice.
     const prepRowLabel = (t) => {
         if (!t.linkedSection) return t.text;
@@ -4588,6 +4589,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 // no auto-scroll on touch — this moves the row with your finger,
                 // parts the list to show where it lands, and scrolls near edges.
                 let gripPending = false, dragging = false, grabDY = 0, lastY = 0;
+                let holdOK = false, holdTimer = null;   // drag must be held before it arms
+                const HOLD_MS = 220;
                 let gap = null, autoScroll = null, sx = 0, sy = 0, rafId = null;
                 const scroller = document.getElementById('scroll-area') || document.scrollingElement;
 
@@ -4698,8 +4701,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const onMove = (e) => {
                     if (dragging) { e.preventDefault(); move(e.clientY); return; }
                     if (!gripPending) return;
-                    // Past the slop radius this is a drag, not a tap on the ⋯.
                     if (Math.hypot(e.clientX - sx, e.clientY - sy) >= 8) {
+                        // Moved before the hold completed — treat it as a slip or
+                        // a scroll and give up on the drag entirely.
+                        if (!holdOK) { gripPending = false; clearHold(); return; }
                         gripPending = false;
                         e.preventDefault();
                         blockNextClick();
@@ -4715,8 +4720,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.removeEventListener('pointerup', onUp);
                     document.removeEventListener('pointercancel', onCancel);
                 };
-                const onUp = () => { gripPending = false; if (dragging) finish(true); detach(); };
-                const onCancel = () => { gripPending = false; if (dragging) finish(false); detach(); };
+                const clearHold = () => {
+                    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+                    holdOK = false;
+                    row.classList.remove('drag-armed');
+                };
+                const onUp = () => { gripPending = false; clearHold(); if (dragging) finish(true); detach(); };
+                const onCancel = () => { gripPending = false; clearHold(); if (dragging) finish(false); detach(); };
 
                 // The ⋯ button is the drag grip. touch-action must be committed
                 // BEFORE the gesture starts — applying it inside begin() was
@@ -4744,6 +4754,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         // No preventDefault here — that would kill the tap.
                         sx = e.clientX; sy = e.clientY;
                         gripPending = true;
+                        clearHold();
+                        holdTimer = setTimeout(() => {
+                            holdOK = true;
+                            row.classList.add('drag-armed');   // tells you it is ready
+                            triggerHaptic('medium');
+                        }, HOLD_MS);
                         document.addEventListener('pointermove', onMove, { passive: false });
                         document.addEventListener('pointerup', onUp);
                         document.addEventListener('pointercancel', onCancel);
