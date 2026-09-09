@@ -3559,64 +3559,120 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- PREP SECTION GROUPING & STAPLES ---
+    // A staple is a batch that must never run out. It carries a par (how many you
+    // keep) and a busy par, and several specs can share one physical batch via a
+    // group label — Chili Martini and Passion Martini are one jug of juice.
     const STAPLES_KEY = 'codex_staples_v1';
+    const COUNTS_KEY  = 'codex_staple_count_v1';   // tonight's fridge count, per device
     const readStaples = () => {
         try { return JSON.parse(localStorage.getItem(STAPLES_KEY) || '{}') || {}; } catch { return {}; }
     };
-    const isStaple = (t) => {
-        const k = stapleKey(t);
-        return !!(k && readStaples()[k]);
+    const writeStaples = (map) => {
+        try { localStorage.setItem(STAPLES_KEY, JSON.stringify(map)); } catch {}
+        if (typeof scheduleSettingsPush === 'function') scheduleSettingsPush();
     };
     const stapleKey = (t) => (t.linkedSpec && t.linkedSection)
         ? `${t.linkedSpec} — ${t.linkedSection}`.toLowerCase().trim()
         : String(t.text || '').toLowerCase().trim();
+    const isStaple = (t) => {
+        const k = stapleKey(t);
+        return !!(k && readStaples()[k]);
+    };
+    // Entries have been a 1, then a display string, now an object. Read them all.
+    const normStaple = (key, val) => {
+        const base = { name: '', group: '', size: '', par: 2, parBusy: 3 };
+        if (val && typeof val === 'object') return { ...base, ...val, name: val.name || titleKey(key) };
+        if (typeof val === 'string' && val) return { ...base, name: val };
+        return { ...base, name: titleKey(key) };
+    };
+    const titleKey = (key) => key.replace(/(^|[\s—])([a-z])/g, (m, p, c) => p + c.toUpperCase());
+    const splitStaple = (name) => {
+        const i = name.lastIndexOf(' — ');
+        return i < 0 ? { spec: name, section: '' } : { spec: name.slice(0, i), section: name.slice(i + 3) };
+    };
+    function setStapleField(key, patch) {
+        const map = readStaples();
+        if (!map[key]) return;
+        map[key] = { ...normStaple(key, map[key]), ...patch };
+        writeStaples(map);
+    }
     function toggleStaple(t) {
         const k = stapleKey(t);
         if (!k) return;
         const map = readStaples();
         if (map[k]) delete map[k];
-        else map[k] = (t.linkedSpec && t.linkedSection) ? `${t.linkedSpec} — ${t.linkedSection}` : String(t.text || '');
-        try { localStorage.setItem(STAPLES_KEY, JSON.stringify(map)); } catch {}
-        if (typeof scheduleSettingsPush === 'function') scheduleSettingsPush();
+        else map[k] = { name: (t.linkedSpec && t.linkedSection)
+                            ? `${t.linkedSpec} — ${t.linkedSection}` : String(t.text || ''),
+                        group: '', size: '', par: 2, parBusy: 3 };
+        writeStaples(map);
     }
-    // Every juice batch is a staple today, so seed them rather than make Jack
-    // tap five rows. Unmarking still sticks — the seed runs once.
-    // The staple's display name, so a staple with no task on the board can still
-    // be rendered and added. Legacy entries stored 1 — fall back to the key.
-    const stapleName = (key, val) => (typeof val === 'string' && val)
-        ? val
-        : key.replace(/(^|[\s—])([a-z])/g, (m, p, c) => p + c.toUpperCase());
-    const splitStaple = (name) => {
-        const i = name.lastIndexOf(' — ');
-        return i < 0 ? { spec: name, section: '' } : { spec: name.slice(0, i), section: name.slice(i + 3) };
-    };
     // Seeded from the CODEX, not the board: a juice batch nobody added tonight is
     // exactly the one that must not go missing. An empty map counts as unseeded —
-    // the first version stored {} before the vault had loaded, which then blocked
+    // an early version stored {} before the vault had loaded, which then blocked
     // every retry with no way to clear it from inside the app.
     function seedStaples() {
         if (Object.keys(readStaples()).length) return;
         const map = {};
         Object.keys(recipeVault || {}).forEach(full => {
             const { section } = splitStaple(full);
-            if (section && /juice batch/i.test(section)) map[full.toLowerCase().trim()] = full;
+            if (section && /juice batch/i.test(section)) {
+                map[full.toLowerCase().trim()] = { name: full, group: '', size: '', par: 2, parBusy: 3 };
+            }
         });
         if (!Object.keys(map).length) return;   // vault not here yet — retry later
-        try { localStorage.setItem(STAPLES_KEY, JSON.stringify(map)); } catch {}
+        writeStaples(map);
     }
-    // Staples with no task on the board tonight, as ghost rows.
+
+    // Tonight's counts expire at the day rollover, or Sunday still shows Friday.
+    const dayKey = () => {
+        const d = new Date();
+        return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+    };
+    const readCounts = () => {
+        try {
+            const c = JSON.parse(localStorage.getItem(COUNTS_KEY) || '{}') || {};
+            return c.day === dayKey() ? (c.counts || {}) : {};
+        } catch { return {}; }
+    };
+    function setStapleCount(gkey, n) {
+        const counts = readCounts();
+        counts[gkey] = n;
+        try { localStorage.setItem(COUNTS_KEY, JSON.stringify({ day: dayKey(), counts })); } catch {}
+    }
+
+    // Staples merged by group label — one row per physical batch.
+    function stapleGroups() {
+        const map = readStaples();
+        const out = new Map();
+        Object.keys(map).forEach(k => {
+            const st = normStaple(k, map[k]);
+            const { spec, section } = splitStaple(st.name);
+            if (!section) return;
+            const gkey = (st.group || st.name).toLowerCase().trim();
+            if (!out.has(gkey)) {
+                out.set(gkey, { gkey, label: st.group || spec, section,
+                                size: st.size, par: st.par, parBusy: st.parBusy, members: [] });
+            }
+            const g = out.get(gkey);
+            g.members.push({ key: k, name: st.name, spec, section });
+            // Grouped members should agree; take the largest par stated by any.
+            g.par = Math.max(g.par, st.par || 0);
+            g.parBusy = Math.max(g.parBusy, st.parBusy || 0);
+            if (!g.size && st.size) g.size = st.size;
+        });
+        return [...out.values()];
+    }
+
+    // Groups with nothing on the board tonight, as ghost rows.
     function ghostStaples() {
         const have = new Set((opsData.prep || []).map(t => stapleKey(t)));
-        const out = [];
-        const map = readStaples();
-        Object.keys(map).forEach(k => {
-            if (have.has(k)) return;
-            const name = stapleName(k, map[k]);
-            const { spec, section } = splitStaple(name);
-            if (!section) return;
-            out.push({ __ghost: true, text: name, linkedSpec: spec, linkedSection: section, kind: 'batch' });
-        });
-        return out;
+        const counts = readCounts();
+        return stapleGroups()
+            .filter(g => !g.members.some(m => have.has(m.key)))
+            .map(g => ({ __ghost: true, __group: g,
+                         __count: (g.gkey in counts) ? counts[g.gkey] : null,
+                         text: g.members[0].name, linkedSpec: g.members[0].spec,
+                         linkedSection: g.section, kind: 'batch' }));
     }
 
     // A task's group is its linked section. Hand-typed batches have no link and
@@ -3640,6 +3696,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const COLLAPSE_MIN = 5;    // sections shorter than this never hide anything
     const COLLAPSE_KEEP = 4;   // ...and the first few always stay visible
     const openPrepGroups = new Set();
+    const openStaples = new Set();
 
     function loadOps() {
         try {
@@ -4270,6 +4327,127 @@ document.addEventListener('DOMContentLoaded', () => {
             const pos = members.findIndex(x => x.taskId === t.taskId && x.text === t.text);
             return pos >= COLLAPSE_KEEP;
         }
+        function buildStapleRow(taskObj) {
+            const g = taskObj.__group;
+            const have = taskObj.__count;
+            const sizeTxt = g.size ? ` \u00d7 ${g.size}` : '';
+            const row = document.createElement('div');
+            const counted = have !== null;
+            const stocked = counted && have >= g.parBusy;
+            row.className = 'ops-row ops-row-staple sec-' + prepGroupOf(taskObj).toLowerCase().replace(/[^a-z]+/g, '-')
+                          + (counted ? ' counted' : '') + (stocked ? ' stocked' : '')
+                          + (openStaples.has(g.gkey) ? ' open' : '');
+
+            const head = document.createElement('div');
+            head.className = 'staple-head';
+            head.innerHTML = `<span class="staple-name">${g.label}</span>`
+                + (stocked
+                    ? `<span class="staple-par ok">STOCKED ${have}/${g.parBusy}</span>`
+                    : `<span class="staple-par">${g.par}${sizeTxt} \u00b7 BUSY ${g.parBusy}</span>`)
+                + `<button class="row-more staple-more" aria-label="Staple actions">\u22ef</button>`;
+            row.appendChild(head);
+
+            if (g.members.length > 1) {
+                const serves = document.createElement('div');
+                serves.className = 'staple-serves';
+                serves.textContent = 'serves ' + g.members.map(m => m.spec).join(' \u00b7 ');
+                row.appendChild(serves);
+            }
+
+            head.querySelector('.staple-name').addEventListener('click', () => {
+                triggerHaptic('light');
+                if (openStaples.has(g.gkey)) openStaples.delete(g.gkey); else openStaples.add(g.gkey);
+                renderOpsList();
+            });
+            head.querySelector('.staple-more').addEventListener('click', (e) => {
+                e.stopPropagation();
+                openStapleActions(g);
+            });
+
+            if (!openStaples.has(g.gkey)) return row;
+
+            const body = document.createElement('div');
+            body.className = 'staple-body';
+            // Chips run to the BUSY par: after a heavy Saturday you can genuinely
+            // have more than the normal par sitting there.
+            let chips = '';
+            for (let i = 0; i <= g.parBusy; i++) {
+                chips += `<button class="staple-chip${have === i ? ' on' : ''}" data-n="${i}">${i}</button>`;
+            }
+            const shortNormal = counted ? Math.max(0, g.par - have) : null;
+            const shortBusy   = counted ? Math.max(0, g.parBusy - have) : null;
+            body.innerHTML = `<div class="staple-lbl">HAVE IN FRIDGE</div><div class="staple-chips">${chips}</div>`
+                + (counted ? `<div class="staple-acts">
+                       <button class="staple-go${shortNormal ? '' : ' flat'}" ${shortNormal ? '' : 'disabled'}>${shortNormal ? 'MAKE ' + shortNormal : 'AT PAR'}</button>
+                       <button class="staple-go busy${shortBusy ? '' : ' flat'}" ${shortBusy ? '' : 'disabled'}>${shortBusy ? 'MAKE ' + shortBusy + ' \u00b7 BUSY' : 'AT BUSY PAR'}</button>
+                   </div>` : '');
+            row.appendChild(body);
+
+            body.querySelectorAll('.staple-chip').forEach(c => c.addEventListener('click', () => {
+                triggerHaptic('light');
+                setStapleCount(g.gkey, parseInt(c.getAttribute('data-n')));
+                renderOpsList();
+            }));
+            const make = (n) => {
+                if (!n) return;
+                triggerHaptic('heavy');
+                openStaples.delete(g.gkey);
+                commitPrepTask({ text: g.members[0].name, linkedSpec: g.members[0].spec,
+                                 linkedSection: g.section, qty: n });
+            };
+            const btns = body.querySelectorAll('.staple-go');
+            if (btns[0]) btns[0].addEventListener('click', () => make(shortNormal));
+            if (btns[1]) btns[1].addEventListener('click', () => make(shortBusy));
+            return row;
+        }
+
+        function openStapleActions(g) {
+            triggerHaptic('medium');
+            const others = stapleGroups().filter(x => x.gkey !== g.gkey);
+            openSelectModal('STAPLE', [
+                { label: 'Set par', value: 'par' },
+                { label: 'Set bottle size', value: 'size' },
+                { label: 'Group with another batch', value: 'group' },
+                { label: 'Unmark staple', value: 'unmark' }
+            ], (val) => {
+                if (val === 'par') {
+                    openNumberModal('NORMAL PAR', g.par, 'bottles', (n) => {
+                        g.members.forEach(m => setStapleField(m.key, { par: n }));
+                        openNumberModal('BUSY PAR', Math.max(g.parBusy, n), 'bottles', (b) => {
+                            g.members.forEach(m => setStapleField(m.key, { parBusy: Math.max(b, n) }));
+                            renderOpsList();
+                        });
+                    });
+                } else if (val === 'size') {
+                    openSelectModal('BOTTLE SIZE',
+                        [{ label: '1L', value: '1L' }, { label: '700ml', value: '700ml' }, { label: '500ml', value: '500ml' }],
+                        (sz) => { g.members.forEach(m => setStapleField(m.key, { size: sz })); renderOpsList(); },
+                        { placeholder: 'Other size…', onSubmit: (txt) => {
+                            g.members.forEach(m => setStapleField(m.key, { size: txt })); renderOpsList(); } });
+                } else if (val === 'group') {
+                    if (!others.length) return openAlertModal({ title: 'NOTHING TO GROUP', message: 'There is only one staple batch.' });
+                    openSelectModal('SAME BATCH AS…', others.map(o => ({ label: o.label, value: o.gkey })), (gk) => {
+                        const target = others.find(o => o.gkey === gk);
+                        // One shared label across both sets of members is what makes
+                        // them a single row. No ids to go stale.
+                        openSelectModal('BATCH NAME', [
+                            { label: g.label, value: g.label }, { label: target.label, value: target.label }
+                        ], (label) => {
+                            [...g.members, ...target.members].forEach(m => setStapleField(m.key, { group: label }));
+                            renderOpsList();
+                        }, { placeholder: 'Or type a name…', onSubmit: (txt) => {
+                            [...g.members, ...target.members].forEach(m => setStapleField(m.key, { group: txt }));
+                            renderOpsList(); } });
+                    });
+                } else if (val === 'unmark') {
+                    const map = readStaples();
+                    g.members.forEach(m => delete map[m.key]);
+                    writeStaples(map);
+                    renderOpsList();
+                }
+            });
+        }
+
         function makePrepHeader(label, members) {
             const header = document.createElement('div');
             header.className = 'ops-prep-section grp-' + label.toLowerCase().replace(/[^a-z]+/g, '-');
@@ -4316,17 +4494,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (taskObj.__ghost) {
-                const g = document.createElement('div');
-                g.className = 'ops-row ops-row-ghost sec-' + prepGroupOf(taskObj).toLowerCase().replace(/[^a-z]+/g, '-');
-                g.innerHTML = `<div class="ops-row-main"><div class="ops-checkbox ghost-plus">＋</div>`
-                            + `<span class="ops-text" style="flex:1;">${prepRowLabel(taskObj)}</span>`
-                            + `<span class="ghost-tag">STAPLE</span></div>`;
-                g.addEventListener('click', () => {
-                    triggerHaptic('light');
-                    commitPrepTask({ text: taskObj.text, linkedSpec: taskObj.linkedSpec,
-                                     linkedSection: taskObj.linkedSection, qty: 1 });
-                });
-                container.appendChild(g);
+                container.appendChild(buildStapleRow(taskObj));
                 return;
             }
 
